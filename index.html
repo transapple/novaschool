@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Brightpath School Manager</title>
+<meta name="description" content="Brightpath School Manager">
+<meta name="theme-color" content="#16274A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Brightpath">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
+<link rel="apple-touch-icon" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
+<style>
+  :root{
+    --navy:#16274A;
+    --navy-2:#1E3563;
+    --teal:#2E9E7C;
+    --teal-dark:#227A61;
+    --teal-tint:#E4F5EE;
+    --amber:#E2A33D;
+    --amber-dark:#A06A13;
+    --amber-tint:#FDF1DE;
+    --red:#D6564F;
+    --red-tint:#FDECEC;
+    --sky:#3E8EDE;
+    --sky-tint:#E7F1FC;
+    --purple:#7C6FE0;
+    --purple-tint:#EFEDFC;
+    --indigo:#5B5FCF;
+    --indigo-tint:#ECEDFA;
+    --slate:#6B7688;
+    --slate-tint:#EEF1F5;
+    --bg:#EEF2F9;
+    --card:#FFFFFF;
+    --card-alt:#F7F9FD;
+    --ink:#1D2433;
+    --ink-soft:#5B647A;
+    --line:#E4E8EF;
+    --radius:14px;
+  }
+  @keyframes fadeSlideDown{0%{opacity:0;transform:translateY(-8px);}100%{opacity:1;transform:translateY(0);}}
+  @keyframes popScale{0%{opacity:0;transform:scale(.85);}100%{opacity:1;transform:scale(1);}}
+  @keyframes slideInLeft{0%{opacity:0;transform:translateX(-14px);}100%{opacity:1;transform:translateX(0);}}
+  @keyframes wiggleIn{0%{opacity:0;transform:rotate(-4deg) translateY(-6px);}100%{opacity:1;transform:rotate(0) translateY(0);}}
+  @keyframes riseIn{0%{opacity:0;transform:translateY(10px) scale(.96);}100%{opacity:1;transform:translateY(0) scale(1);}}
+  @keyframes sheetUp{0%{opacity:0;transform:translateY(24px);}100%{opacity:1;transform:translateY(0);}}
+  .pageTitleAnim{display:inline-block;}
+  .action-sheet-overlay{position:fixed;inset:0;background:rgba(22,39,74,.35);z-index:80;display:flex;align-items:flex-end;justify-content:center;}
+  .action-sheet{background:#fff;width:100%;max-width:420px;border-radius:18px 18px 0 0;padding:10px 14px calc(14px + env(safe-area-inset-bottom));animation:sheetUp .18s ease;}
+  @media(min-width:860px){.action-sheet-overlay{align-items:center;}.action-sheet{border-radius:16px;}}
+  .action-sheet .as-handle{width:36px;height:4px;background:var(--line);border-radius:99px;margin:2px auto 10px;}
+  .action-sheet button{width:100%;text-align:left;padding:13px 14px;border-radius:10px;border:none;background:none;font-size:15px;font-weight:600;display:flex;align-items:center;gap:10px;color:var(--ink);}
+  .action-sheet button:hover{background:var(--card-alt);}
+  .action-sheet button.as-danger{color:var(--red);}
+  .action-sheet button.as-cancel{color:var(--ink-soft);margin-top:4px;border-top:1px solid var(--line);border-radius:0;}
+  .view-row{display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+  .view-row:last-child{border-bottom:none;}
+  .view-row .vlabel{color:var(--ink-soft);font-weight:600;}
+  .view-row .vvalue{color:var(--ink);font-weight:700;text-align:right;}
+  .list-row{cursor:pointer;-webkit-user-select:none;user-select:none;}
+  .list-row:active{background:var(--card-alt);}
+  .trash-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  *{box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;}
+  body{margin:0;position:fixed;inset:0;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;}
+  h1,h2,h3{font-weight:700;letter-spacing:-0.02em;margin:0;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-thumb{background:#c9d0dc;border-radius:10px;}
+
+  /* ---------- LOGIN ---------- */
+  @keyframes gradientFlow{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 35%,var(--sky) 65%,var(--navy) 100%);background-size:300% 300%;animation:gradientFlow 14s ease infinite;padding:20px;}
+  .login-card{background:var(--card);border-radius:20px;padding:36px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(10,20,50,.35);}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
+  .brand-badge{width:42px;height:42px;border-radius:12px;background:var(--teal);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;}
+  .brand-name{font-size:19px;font-weight:800;color:var(--navy);}
+  .brand-sub{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;transition:border-color .15s;}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal);background:#fff;}
+  .btn{border:none;border-radius:10px;padding:12px 18px;font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s, transform .1s;}
+  .btn:active{transform:scale(.98);}
+  .btn-primary{background:var(--teal);color:#fff;width:100%;}
+  .btn-primary:hover{background:var(--teal-dark);}
+  .btn-ghost{background:transparent;color:var(--navy);border:1.5px solid var(--line);}
+  .btn-danger{background:#fde8e7;color:var(--red);}
+  .btn-sm{padding:8px 12px;font-size:13px;}
+  .link-btn{background:none;border:none;color:var(--teal-dark);font-weight:600;font-size:13.5px;padding:0;}
+  .err{background:#fdecec;color:var(--red);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
+  .msg-ok{background:#e9f7f1;color:var(--teal-dark);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
+  .tiny-note{font-size:11.5px;color:var(--ink-soft);margin-top:16px;line-height:1.5;text-align:center;}
+
+  /* ---------- SHELL ---------- */
+  .shell{display:flex;height:100vh;height:100dvh;overflow:hidden;}
+  .sidebar{width:230px;background:linear-gradient(200deg,var(--navy) 0%,var(--navy-2) 45%,#274b8a 100%);background-size:250% 250%;animation:gradientFlow 18s ease infinite;color:#fff;flex-direction:column;padding:22px 14px;position:fixed;top:0;bottom:0;left:0;display:none;z-index:40;}
+  .sidebar .brand-name{color:#fff;}
+  .sidebar .brand-sub{color:#9fb0d6;}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:10px;color:#c7d3ee;font-size:14px;font-weight:600;margin-bottom:3px;transition:background .2s ease,color .2s ease,box-shadow .2s ease;}
+  .nav-item svg{opacity:.9;flex-shrink:0;}
+  .nav-item.active{background:var(--teal);color:#fff;box-shadow:0 4px 12px rgba(46,158,124,.35);}
+  .nav-item:not(.active):hover{background:rgba(255,255,255,.08);color:#fff;}
+  .main{flex:1;margin-left:0;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+  .topbar{background:var(--card);border-bottom:1px solid var(--line);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:20;box-shadow:0 1px 0 rgba(22,39,74,.03);}
+  .topbar h1{font-size:19px;color:var(--navy);}
+  .topbar .who{font-size:12.5px;color:var(--ink-soft);}
+  .content{padding:16px;padding-bottom:98px;max-width:1100px;margin:0 auto;width:100%;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+
+  .bottomnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;z-index:30;padding:6px 4px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -2px 10px rgba(22,39,74,.05);}
+  .bn-item{flex:1 0 auto;min-width:64px;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;color:var(--ink-soft);font-size:10.5px;font-weight:600;border-radius:10px;transition:background .25s ease,color .25s ease,transform .25s ease;}
+  .bn-item.active{color:var(--teal-dark);background:var(--teal-tint);transform:translateY(-2px);}
+  .bn-item svg{flex-shrink:0;transition:transform .25s ease;}
+  .bn-item.active svg{transform:scale(1.08);}
+
+  @media(min-width:860px){
+    .sidebar{display:flex;}
+    .main{margin-left:230px;}
+    .bottomnav{display:none;}
+    .content{padding-bottom:16px;}
+  }
+
+  /* ---------- COMPONENTS ---------- */
+  .card{background:var(--card);border-radius:var(--radius);border:1px solid var(--line);padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(22,39,74,.05);}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .section-head h2{font-size:18px;color:var(--navy);}
+  .pill-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
+  .pill{padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--card);border:1.5px solid var(--line);color:var(--ink-soft);}
+  .pill.active{background:var(--teal);color:#fff;border-color:var(--teal);box-shadow:0 3px 10px rgba(46,158,124,.3);}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px;}
+  .stat{background:var(--card);border-radius:var(--radius);border:1px solid var(--line);padding:16px;border-left:4px solid var(--teal);box-shadow:0 1px 3px rgba(22,39,74,.05);}
+  .stat:nth-child(4n+2){border-left-color:var(--sky);}
+  .stat:nth-child(4n+3){border-left-color:var(--amber);}
+  .stat:nth-child(4n+4){border-left-color:var(--purple);}
+  .stat .num{font-size:24px;font-weight:800;color:var(--navy);}
+  .stat .lbl{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+  .list-row{display:flex;align-items:center;gap:12px;padding:12px 6px;border-bottom:1px solid var(--line);}
+  .list-row:last-child{border-bottom:none;}
+  .avatar{width:40px;height:40px;border-radius:10px;background:var(--sky-tint);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);font-size:14px;flex-shrink:0;}
+  .list-main{flex:1;min-width:0;}
+  .list-title{font-weight:700;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .list-sub{font-size:12.5px;color:var(--ink-soft);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
+  .badge-green{background:#e5f6ee;color:var(--teal-dark);}
+  .badge-amber{background:#fdf1de;color:#a06a13;}
+  .badge-red{background:#fdecec;color:var(--red);}
+  .badge-grey{background:#eef0f4;color:var(--ink-soft);}
+  .icon-btn{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .search-bar{display:flex;gap:8px;margin-bottom:14px;}
+  .search-bar input{flex:1;}
+  .fab{position:fixed;right:18px;bottom:96px;width:54px;height:54px;border-radius:16px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(46,158,124,.45);border:none;z-index:25;}
+  @media(min-width:860px){.fab{bottom:28px;}}
+  .empty{text-align:center;padding:40px 16px;color:var(--ink-soft);}
+  .empty svg{margin-bottom:10px;opacity:.5;}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(15,22,40,.5);display:flex;align-items:flex-end;justify-content:center;z-index:100;}
+  @media(min-width:640px){.overlay{align-items:center;}}
+  .modal{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:22px;max-height:88vh;overflow-y:auto;}
+  @media(min-width:640px){.modal{border-radius:18px;}}
+  .modal h3{font-size:17px;color:var(--navy);margin-bottom:16px;}
+  .modal-close{float:right;background:none;border:none;font-size:20px;color:var(--ink-soft);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .form-actions{display:flex;gap:10px;margin-top:6px;}
+  .form-actions .btn{flex:1;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:9px 8px;border-bottom:2px solid var(--line);}
+  td{padding:9px 8px;border-bottom:1px solid var(--line);}
+  .table-wrap{overflow-x:auto;}
+  /* Excel-style colored columns for the fee payment history table */
+  .fee-history-table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:640px;}
+  .fee-history-table thead th{color:#fff;font-weight:800;font-size:11px;border-bottom:none;padding:12px 16px;white-space:nowrap;}
+  .fee-history-table thead th:first-child{border-radius:10px 0 0 0;}
+  .fee-history-table thead th:last-child{border-radius:0 10px 0 0;}
+  .fee-history-table tbody td{padding:13px 16px;font-weight:600;border-bottom:1px solid var(--card);vertical-align:middle;}
+  .fee-history-table tbody tr:last-child td{border-bottom:none;}
+  .fee-history-table th,.fee-history-table td{border-right:3px solid var(--card);}
+  .fee-history-table th:last-child,.fee-history-table td:last-child{border-right:none;}
+  .fee-history-table .col-date-h,.fee-history-table .col-date-d{width:16%;white-space:nowrap;}
+  .fee-history-table .col-student-h,.fee-history-table .col-student-d{width:32%;}
+  .fee-history-table .col-student-d{line-height:1.4;overflow-wrap:break-word;}
+  .fee-history-table .col-term-h,.fee-history-table .col-term-d{width:18%;overflow-wrap:break-word;}
+  .fee-history-table .col-amount-h,.fee-history-table .col-amount-d{width:18%;white-space:nowrap;}
+  .fee-history-table .col-method-h,.fee-history-table .col-method-d{width:16%;white-space:nowrap;}
+  .col-date-h{background:var(--sky);}
+  .col-date-d{background:var(--sky-tint);color:#1D5A96;}
+  .col-student-h{background:var(--indigo);}
+  .col-student-d{background:var(--indigo-tint);color:#3E4199;}
+  .col-term-h{background:var(--purple);}
+  .col-term-d{background:var(--purple-tint);color:#5B4FC4;}
+  .col-amount-h{background:var(--teal);}
+  .col-amount-d{background:var(--teal-tint);color:var(--teal-dark);font-weight:800;}
+  .col-method-h{background:var(--amber);}
+  .col-method-d{background:var(--amber-tint);color:var(--amber-dark);}
+  .att-btns{display:flex;gap:5px;flex-wrap:wrap;}
+  .att-btn{padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:700;border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);}
+  .att-btn.p.on{background:#e5f6ee;color:var(--teal-dark);border-color:var(--teal);}
+
+  /* ---- Masthead (mobile branding strip; sidebar handles this on desktop) ---- */
+  .masthead{display:flex;align-items:center;gap:10px;padding:9px 18px;background:linear-gradient(200deg,var(--navy) 0%,var(--navy-2) 45%,#274b8a 100%);background-size:250% 250%;animation:gradientFlow 18s ease infinite;color:#fff;flex-shrink:0;position:relative;overflow:hidden;}
+  .masthead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--amber),var(--sky));opacity:.85;}
+  .masthead-logo{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-weight:800;font-size:12px;}
+  .masthead-logo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .masthead-text{min-width:0;line-height:1.28;}
+  .masthead-name{font-weight:800;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .masthead-motto{font-size:11px;color:#c9d4ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic;animation:fadeSlideDown .5s ease;}
+  @media(min-width:860px){.masthead{display:none;}}
+
+  /* ---- Settings page ---- */
+  .settings-card-head{display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+  .settings-card-head .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .settings-card-head h3{font-size:15.5px;}
+  .settings-card-head p{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .logo-upload{width:84px;height:84px;border-radius:16px;background:var(--sky-tint);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;flex-shrink:0;overflow:hidden;font-weight:800;font-size:24px;color:var(--navy);border:2px dashed var(--line);transition:border-color .15s;}
+  .logo-upload:hover{border-color:var(--teal);}
+  .logo-upload img{width:100%;height:100%;object-fit:cover;}
+  .logo-upload .cam{position:absolute;right:0;bottom:0;left:0;background:rgba(22,39,74,.72);color:#fff;font-size:10px;font-weight:700;text-align:center;padding:4px 0;letter-spacing:.2px;}
+  .swatch-row{display:flex;gap:10px;flex-wrap:wrap;}
+  .swatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;display:flex;align-items:center;justify-content:center;transition:transform .12s ease;box-shadow:0 1px 3px rgba(22,39,74,.15);}
+  .swatch:hover{transform:scale(1.08);}
+  .swatch.on{border-color:var(--navy);}
+  .swatch svg{opacity:0;width:15px;height:15px;stroke:#fff;}
+  .swatch.on svg{opacity:1;}
+  .header-preview{border-radius:14px;overflow:hidden;border:1px solid var(--line);}
+  .header-preview .hp-inner{display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(200deg,var(--navy) 0%,var(--navy-2) 45%,#274b8a 100%);color:#fff;}
+  .header-preview .hp-logo{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;overflow:hidden;flex-shrink:0;}
+  .header-preview .hp-logo img{width:100%;height:100%;object-fit:cover;}
+  .header-preview .hp-name{font-weight:800;font-size:14px;}
+  .header-preview .hp-motto{font-size:11.5px;color:#c9d4ea;font-style:italic;margin-top:1px;}
+  .about-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .about-row:last-child{border-bottom:none;}
+  .about-row .lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);font-weight:700;min-width:92px;flex-shrink:0;padding-top:1px;}
+  .about-row .val{font-size:13.5px;color:var(--ink);line-height:1.55;white-space:pre-wrap;}
+  .att-btn.a.on{background:#fdecec;color:var(--red);border-color:var(--red);}
+  .att-btn.l.on{background:#fdf1de;color:#a06a13;border-color:var(--amber);}
+  .att-btn.e.on{background:#eef0f4;color:var(--ink-soft);border-color:#b7bfcf;}
+  .center-loading{display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--ink-soft);font-size:13.5px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
+
+let DEV_MODE = true;   // ← set to false to require real login before launch
+let auth = null;       // { access_token, user }
+let profile = null;    // { id, full_name, role }
+let cache = {};        // simple in-memory cache per tab
+let tab = "dashboard";
+let loading = false;
+
+/* ---------------- ICONS (inline svg, feather-style) ---------------- */
+const ic = {
+  home:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>`,
+  student:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 4 2 10l10 6 10-6z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>`,
+  teacher:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  attendance:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>`,
+  fees:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 6V4h12v2"/></svg>`,
+  exam:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>`,
+  setup:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.63.24 1.51.7 1.51 1z"/></svg>`,
+  users:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  plus:`<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`,
+  logout:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>`,
+  search:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>`,
+  edit:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>`,
+  trash:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>`,
+  empty:`<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z" opacity="0"/><path d="M4 19h16M6 19V9l6-4 6 4v10"/></svg>`,
+  sliders:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+  camera:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+  compass:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+  target:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  mail:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>`,
+  back:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`,
+  chevronRight:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`
+};
+
+/* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
+let schoolSettings = null;
+const BRAND_PRESETS = {
+  teal:   { base:"#2E9E7C", dark:"#227A61", tint:"#E4F5EE", label:"Emerald" },
+  sky:    { base:"#3E8EDE", dark:"#2A6BB0", tint:"#E7F1FC", label:"Sky Blue" },
+  purple: { base:"#7C6FE0", dark:"#5B4FC4", tint:"#EFEDFC", label:"Violet" },
+  amber:  { base:"#E2A33D", dark:"#A06A13", tint:"#FDF1DE", label:"Amber" },
+  red:    { base:"#D6564F", dark:"#B23F39", tint:"#FDECEC", label:"Crimson" },
+  indigo: { base:"#5B5FCF", dark:"#43469E", tint:"#ECEDFA", label:"Indigo" },
+};
+const CURRENCY_OPTIONS = ["₦","$","£","€","KSh","UGX","TSh","R","GH₵"];
+const SCHOOL_SETTINGS_SQL = `create table if not exists school_settings (
+  id int primary key default 1,
+  school_name text,
+  motto text,
+  mission text,
+  vision text,
+  logo_url text,
+  phone text,
+  email text,
+  address text,
+  brand_color text default 'teal',
+  currency_symbol text default '₦',
+  updated_at timestamptz default now()
+);
+insert into school_settings (id) values (1) on conflict (id) do nothing;
+alter table school_settings enable row level security;
+create policy "Anyone can read school settings" on school_settings for select using (true);
+create policy "Admins can update school settings" on school_settings for update using (true);`;
+
+function applyBrandColor(key) {
+  const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
+  const r = document.documentElement.style;
+  r.setProperty("--teal", p.base);
+  r.setProperty("--teal-dark", p.dark);
+  r.setProperty("--teal-tint", p.tint);
+}
+async function loadSchoolSettings() {
+  try {
+    const rows = await dbSelect("school_settings", { id:"eq.1" });
+    schoolSettings = rows[0] || null;
+  } catch (e) { schoolSettings = null; }
+  applyBrandColor(schoolSettings?.brand_color);
+}
+function currency() { return (schoolSettings && schoolSettings.currency_symbol) || "₦"; }
+function mastheadHtml() {
+  const s = schoolSettings || {};
+  const name = s.school_name || "Brightpath";
+  const motto = s.motto || "";
+  const canEdit = profile?.role === "admin";
+  return `<div class="masthead"${canEdit ? ' id="mastheadClickable" style="cursor:pointer;" title="Edit school profile"' : ""}>
+    <div class="masthead-logo">${s.logo_url ? `<img src="${s.logo_url}" alt="${name} logo"/>` : initials(name)}</div>
+    <div class="masthead-text">
+      <div class="masthead-name">${name}</div>
+      ${motto ? `<div class="masthead-motto">${motto}</div>` : ""}
+    </div>
+  </div>`;
+}
+function sidebarBrandHtml() {
+  const s = schoolSettings || {};
+  const name = s.school_name || "Brightpath";
+  const sub = s.motto || "School Manager";
+  return `<div class="brand-badge">${s.logo_url ? `<img src="${s.logo_url}" alt="${name} logo" style="width:100%;height:100%;object-fit:cover;border-radius:12px;"/>` : initials(name)}</div>
+    <div><div class="brand-name">${name}</div><div class="brand-sub">${sub}</div></div>`;
+}
+
+const NAV = [
+  {id:"dashboard", label:"Home", icon:ic.home},
+  {id:"students", label:"Students", icon:ic.student},
+  {id:"teachers", label:"Staff", icon:ic.teacher},
+  {id:"attendance", label:"Attendance", icon:ic.attendance},
+  {id:"fees", label:"Fees", icon:ic.fees},
+  {id:"exams", label:"Exams", icon:ic.exam},
+  {id:"academic", label:"Setup", icon:ic.setup},
+  {id:"users", label:"Users", icon:ic.users},
+  {id:"settings", label:"Settings", icon:ic.sliders},
+  {id:"trash", label:"Trash", icon:ic.trash},
+];
+
+/* ---------------- SUPABASE HELPERS ---------------- */
+async function sb(path, opts = {}) {
+  const headers = Object.assign({
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + (auth ? auth.access_token : SUPABASE_KEY),
+    "Content-Type": "application/json",
+  }, opts.headers || {});
+  let res;
+  try {
+    res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers }));
+  } catch (e) {
+    // The browser throws a bare "Failed to fetch" for any network-level failure
+    // (offline, blocked request, DNS issue, server unreachable, CORS, etc).
+    // Surface something a user can actually act on instead of that raw message.
+    throw new Error("Check your internet connection and try again. If this keeps happening, please contact the developer.");
+  }
+  let data = null;
+  try { data = await res.json(); } catch(e) { data = null; }
+  if (!res.ok) {
+    const msg = (data && (data.error_description || data.msg || data.message)) || "Request failed";
+    throw new Error(msg);
+  }
+  return data;
+}
+const qs = (obj) => Object.entries(obj).filter(([,v])=>v!==undefined && v!==null && v!=="").map(([k,v])=>`${k}=${v}`).join("&");
+
+async function dbSelect(table, params={}) {
+  return sb(`/rest/v1/${table}?${qs(Object.assign({select:"*"}, params))}`);
+}
+async function dbInsert(table, body) {
+  return sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+}
+async function dbUpdate(table, id, body) {
+  return sb(`/rest/v1/${table}?id=eq.${id}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+}
+async function dbUpsert(table, body, onConflict) {
+  return sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(body), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
+}
+async function dbDelete(table, id) {
+  return sb(`/rest/v1/${table}?id=eq.${id}`, { method:"DELETE" });
+}
+async function dbSelectActive(table, params={}) {
+  try { return await dbSelect(table, Object.assign({ deleted_at:"is.null" }, params)); }
+  catch (e) { return await dbSelect(table, params); }
+}
+
+/* ---------------- AUTH ---------------- */
+async function login(email, password) {
+  const data = await sb(`/auth/v1/token?grant_type=password`, { method:"POST", body: JSON.stringify({ email, password }) });
+  auth = { access_token: data.access_token, user: data.user };
+  const rows = await dbSelect("profiles", { id:`eq.${auth.user.id}` });
+  profile = rows[0] || { id: auth.user.id, full_name: email, role: "staff" };
+  tab = "dashboard";
+  render();
+}
+async function signup(email, password, full_name) {
+  await sb(`/auth/v1/signup`, { method:"POST", body: JSON.stringify({ email, password, data: { full_name, role: "staff" } }) });
+}
+function logout() { auth = null; profile = null; cache = {}; render(); }
+
+/* ---------------- APP SHELL ---------------- */
+function el(html) { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstChild; }
+// Browsers silently drop <tr>/<td> tags when parsed as innerHTML of a plain <div> (they're
+// only valid inside a table context), which collapses every column into one first cell.
+// Use this instead of el() whenever building a <tr> to append into a <tbody>.
+function elRow(rowHtml) { const t = document.createElement("table"); t.innerHTML = rowHtml.trim(); return t.querySelector("tr"); }
+function app() { return document.getElementById("app"); }
+function initials(name) { return (name||"?").split(" ").filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(""); }
+function avatarHtml(name, photoUrl, size) {
+  size = size || 40;
+  if (photoUrl) return `<img src="${photoUrl}" alt="${name||''}" style="width:${size}px;height:${size}px;border-radius:10px;object-fit:cover;flex-shrink:0;"/>`;
+  return `<div class="avatar" style="width:${size}px;height:${size}px;">${initials(name)}</div>`;
+}
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("Could not read image file."));
+    r.readAsDataURL(file);
+  });
+}
+
+function render() {
+  if (!auth && !DEV_MODE) { renderLogin(); return; }
+  if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
+  app().innerHTML = `
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">${sidebarBrandHtml()}</div>
+        <div id="sidenav"></div>
+        <div style="margin-top:auto;padding-top:20px;">
+          <div class="nav-item" id="logoutBtnSide" style="cursor:pointer;">${ic.logout} Log out</div>
+        </div>
+      </div>
+      <div class="main">
+        ${mastheadHtml()}
+        <div class="topbar">
+          <h1 id="pageTitle"></h1>
+          <div class="row" style="gap:10px;">
+            ${(DEV_MODE && !auth) ? `<span class="badge badge-amber" id="devBadge" style="cursor:pointer;" title="Click to test the real login screen">DEV MODE — no login</span>` : ""}
+            <div class="who">${profile?.full_name || ""} · <b>${profile?.role || ""}</b></div>
+          </div>
+        </div>
+        <div class="content" id="content"></div>
+      </div>
+      <div class="bottomnav" id="bottomnav"></div>
+    </div>
+  `;
+  document.getElementById("logoutBtnSide").onclick = logout;
+  const mastheadEl = document.getElementById("mastheadClickable");
+  if (mastheadEl) mastheadEl.onclick = () => { tab = "settings"; render(); };
+  const devBadge = document.getElementById("devBadge");
+  if (devBadge) devBadge.onclick = () => { DEV_MODE = false; profile = null; render(); };
+  const sidenav = document.getElementById("sidenav");
+  const bottomnav = document.getElementById("bottomnav");
+  NAV.forEach(n => {
+    const sItem = el(`<div class="nav-item ${tab===n.id?'active':''}" style="cursor:pointer">${n.icon}<span>${n.label}</span></div>`);
+    sItem.onclick = () => { tab = n.id; render(); };
+    sidenav.appendChild(sItem);
+    const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}">${n.icon}<span>${n.label}</span></div>`);
+    bItem.onclick = () => { tab = n.id; render(); };
+    bottomnav.appendChild(bItem);
+  });
+  const activeBn = bottomnav.querySelector(".bn-item.active");
+  if (activeBn) activeBn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+  const pageTitle = document.getElementById("pageTitle");
+  pageTitle.textContent = NAV.find(n=>n.id===tab)?.label || "";
+  pageTitle.style.animation = "none";
+  void pageTitle.offsetWidth;
+  pageTitle.style.animation = `${TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
+  const content = document.getElementById("content");
+  content.innerHTML = `<div class="center-loading">Loading…</div>`;
+  const renderers = { dashboard: renderDashboard, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, users: renderUsers, settings: renderSettings, trash: renderTrash };
+  (renderers[tab] || renderDashboard)(content).catch(errShow(content));
+}
+function errShow(container) {
+  return (e) => {
+    container.innerHTML = `<div class="err" style="display:flex;flex-direction:column;align-items:flex-start;gap:10px;">
+      <div>${e.message}</div>
+      <button class="btn btn-ghost btn-sm" id="retryBtn">Try again</button>
+    </div>`;
+    const retryBtn = container.querySelector("#retryBtn");
+    if (retryBtn) retryBtn.onclick = () => render();
+    console.error(e);
+  };
+}
+
+/* ---------------- LOGIN SCREEN ---------------- */
+function renderLogin() {
+  let mode = "login";
+  function draw() {
+    app().innerHTML = `
+      <div class="login-wrap"><div class="login-card">
+        <div class="brand">${sidebarBrandHtml()}</div>
+        <div id="loginMsg"></div>
+        <div id="loginForm"></div>
+        <div class="tiny-note">${mode==="login" ? `New school account? <span class="link-btn" id="toSignup" style="cursor:pointer">Create one</span>` : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
+        <div class="tiny-note">First user should be promoted to <b>admin</b> from Supabase → Table Editor → profiles.</div>
+      </div></div>
+    `;
+    const formDiv = document.getElementById("loginForm");
+    if (mode === "login") {
+      formDiv.innerHTML = `
+        <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@school.edu" /></div>
+        <div class="field"><label>Password</label><input id="password" type="password" placeholder="••••••••" /></div>
+        <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Log in</button>
+      `;
+      document.getElementById("submitBtn").onclick = async () => {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        const msg = document.getElementById("loginMsg");
+        msg.innerHTML = "";
+        try { await login(email, password); }
+        catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
+      };
+      document.getElementById("toSignup").onclick = () => { mode = "signup"; draw(); };
+    } else {
+      formDiv.innerHTML = `
+        <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
+        <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@school.edu" /></div>
+        <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
+        <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
+      `;
+      document.getElementById("submitBtn").onclick = async () => {
+        const full_name = document.getElementById("fname").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        const msg = document.getElementById("loginMsg");
+        msg.innerHTML = "";
+        try { await signup(email, password, full_name); msg.innerHTML = `<div class="msg-ok">Account created. You can log in now.</div>`; mode="login"; draw(); }
+        catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
+      };
+      document.getElementById("toLogin").onclick = () => { mode = "login"; draw(); };
+    }
+  }
+  draw();
+}
+
+/* ---------------- MODAL HELPER ---------------- */
+function openModal(title, fieldsHtml, onSave, opts={}) {
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${title}</h3>
+    <div id="modalBody">${fieldsHtml}</div>
+    <div id="modalErr"></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+      <button class="btn btn-primary" id="modalSave">${opts.saveLabel || "Save"}</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector("#modalSave").onclick = async () => {
+    const errDiv = overlay.querySelector("#modalErr");
+    errDiv.innerHTML = "";
+    try { await onSave(overlay); close(); }
+    catch (e) { errDiv.innerHTML = `<div class="err">${e.message}</div>`; }
+  };
+  return overlay;
+}
+const val = (overlay, id) => overlay.querySelector("#"+id).value;
+
+/* ---------------- VIEW MODAL (short click) ---------------- */
+function openViewModal(title, rows, onEdit) {
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${title}</h3>
+    <div style="margin-top:12px;">${rows.filter(r=>r[1]!==undefined && r[1]!==null && r[1]!=="").map(([label,value])=>`
+      <div class="view-row"><div class="vlabel">${label}</div><div class="vvalue">${value}</div></div>
+    `).join("")}</div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Close</button>
+      ${onEdit ? `<button class="btn btn-primary" id="modalEditBtn">${ic.edit} Edit</button>` : ""}
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const editBtn = overlay.querySelector("#modalEditBtn");
+  if (editBtn) editBtn.onclick = () => { close(); onEdit(); };
+  return overlay;
+}
+
+/* ---------------- ACTION SHEET (long press) ---------------- */
+function openActionSheet(actions) {
+  const overlay = el(`<div class="action-sheet-overlay"><div class="action-sheet">
+    <div class="as-handle"></div>
+    ${actions.map((a,i)=>`<button class="${a.danger?'as-danger':''}" data-i="${i}">${a.icon||''} ${a.label}</button>`).join("")}
+    <button class="as-cancel" data-cancel="1">Cancel</button>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector("[data-cancel]").onclick = close;
+  actions.forEach((a,i) => {
+    overlay.querySelector(`[data-i="${i}"]`).onclick = () => { close(); a.onClick(); };
+  });
+  return overlay;
+}
+
+/* ---------------- ROW GESTURES: short click = view, long press = edit/delete ---------------- */
+function bindRowGestures(rowEl, { onView, onEdit, onDelete }) {
+  rowEl.oncontextmenu = (e) => e.preventDefault();
+  let timer = null, longFired = false, startX = 0, startY = 0;
+  const LONG_MS = 550, MOVE_TOL = 10;
+  const start = (x,y) => {
+    longFired = false; startX = x; startY = y;
+    timer = setTimeout(() => {
+      longFired = true;
+      const actions = [];
+      if (onEdit) actions.push({ label:"Edit", icon:ic.edit, onClick:onEdit });
+      if (onDelete) actions.push({ label:"Delete", icon:ic.trash, danger:true, onClick:onDelete });
+      if (actions.length) openActionSheet(actions);
+    }, LONG_MS);
+  };
+  const cancel = () => { clearTimeout(timer); };
+  const move = (x,y) => { if (Math.abs(x-startX)>MOVE_TOL || Math.abs(y-startY)>MOVE_TOL) cancel(); };
+  rowEl.addEventListener("pointerdown", (e) => start(e.clientX, e.clientY));
+  rowEl.addEventListener("pointermove", (e) => move(e.clientX, e.clientY));
+  rowEl.addEventListener("pointerup", () => { cancel(); if (!longFired && onView) onView(); });
+  rowEl.addEventListener("pointercancel", cancel);
+  rowEl.addEventListener("pointerleave", cancel);
+}
+
+/* Simple tap-vs-hold gesture: short tap fires onTap, holding fires onHold directly (no action sheet) */
+function bindTapHold(rowEl, { onTap, onHold }) {
+  rowEl.oncontextmenu = (e) => e.preventDefault();
+  let timer = null, longFired = false, startX = 0, startY = 0;
+  const LONG_MS = 550, MOVE_TOL = 10;
+  const start = (x,y) => {
+    longFired = false; startX = x; startY = y;
+    timer = setTimeout(() => { longFired = true; if (onHold) onHold(); }, LONG_MS);
+  };
+  const cancel = () => { clearTimeout(timer); };
+  const move = (x,y) => { if (Math.abs(x-startX)>MOVE_TOL || Math.abs(y-startY)>MOVE_TOL) cancel(); };
+  rowEl.addEventListener("pointerdown", (e) => start(e.clientX, e.clientY));
+  rowEl.addEventListener("pointermove", (e) => move(e.clientX, e.clientY));
+  rowEl.addEventListener("pointerup", () => { cancel(); if (!longFired && onTap) onTap(); });
+  rowEl.addEventListener("pointercancel", cancel);
+  rowEl.addEventListener("pointerleave", cancel);
+}
+
+/* ---------------- SOFT DELETE / TRASH ---------------- */
+const TRASH_TABLES = [
+  { table:"students", label:"Students", nameField:"full_name", icon:ic.student },
+  { table:"teachers", label:"Staff", nameField:"full_name", icon:ic.teacher },
+  { table:"classes", label:"Classes", nameField:"name", icon:ic.setup },
+  { table:"subjects", label:"Subjects", nameField:"name", icon:ic.setup },
+  { table:"terms", label:"Terms", nameField:"name", icon:ic.setup },
+  { table:"exams", label:"Exams", nameField:"name", icon:ic.exam },
+  { table:"exam_types", label:"Exam types", nameField:"name", icon:ic.exam },
+  { table:"fee_structures", label:"Fee items", nameField:"item_name", icon:ic.fees },
+];
+async function softDelete(table, id) {
+  try { await dbUpdate(table, id, { deleted_at: new Date().toISOString() }); }
+  catch (e) { if (confirm("This item can't be trashed (no trash support on this table yet). Delete permanently instead?")) { await dbDelete(table, id); } else { throw e; } }
+}
+async function restoreRecord(table, id) { await dbUpdate(table, id, { deleted_at: null }); }
+
+/* ---------------- HEADER COLOR + ANIMATION PER TAB ---------------- */
+const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
+const TAB_ANIM = { dashboard:"riseIn", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
+
+/* ---------------- DASHBOARD ---------------- */
+async function renderDashboard(container) {
+  const [students, teachers, classes] = await Promise.all([
+    dbSelectActive("students", { status:"eq.active", select:"id" }),
+    dbSelectActive("teachers", { status:"eq.active", select:"id" }),
+    dbSelectActive("classes", { select:"id" }),
+  ]);
+  const today = new Date().toISOString().slice(0,10);
+  let attToday = [];
+  try { attToday = await dbSelect("attendance", { date:`eq.${today}`, select:"status" }); } catch(e){}
+  const present = attToday.filter(a=>a.status==="present").length;
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${students.length}</div><div class="lbl">Total students</div></div>
+      <div class="stat"><div class="num">${teachers.length}</div><div class="lbl">Active staff</div></div>
+      <div class="stat" id="presentTodayStat" style="cursor:pointer;"><div class="num">${present}</div><div class="lbl">Total present today</div></div>
+    </div>
+    <div class="card" id="panelAttendanceByClass"><div class="center-loading">Loading…</div></div>
+    <div class="card" id="panelActivity"><div class="center-loading">Loading…</div></div>
+    <div class="card" id="panelUpcoming"><div class="center-loading">Loading…</div></div>
+  `;
+  document.getElementById("presentTodayStat").onclick = safe(() => showPresentTodayBreakdown(today));
+  renderAttendanceByClass(document.getElementById("panelAttendanceByClass"), classes);
+  renderExamActivity(document.getElementById("panelActivity"));
+  renderUpcomingWeek(document.getElementById("panelUpcoming"));
+}
+
+/* ---- Dashboard stat: Total present today (click to see present/absent + gender breakdown) ---- */
+async function showPresentTodayBreakdown(date) {
+  let attRows = [];
+  try { attRows = await dbSelect("attendance", { date:`eq.${date}`, select:"status,students(gender)" }); }
+  catch(e) { attRows = []; }
+  const isGender = (a, g) => a.students && a.students.gender === g;
+  const present = attRows.filter(a=>a.status==="present");
+  const absent = attRows.filter(a=>a.status==="absent");
+  openViewModal(`Attendance — ${date}`, [
+    ["Total students present", present.length],
+    ["Total boys present", present.filter(a=>isGender(a,"Male")).length],
+    ["Total girls present", present.filter(a=>isGender(a,"Female")).length],
+    ["Total students absent", absent.length],
+    ["Total boys absent", absent.filter(a=>isGender(a,"Male")).length],
+    ["Total girls absent", absent.filter(a=>isGender(a,"Female")).length],
+  ]);
+}
+
+/* ---- Dashboard panel: Attendance by class today ---- */
+async function renderAttendanceByClass(body, classes) {
+  body.innerHTML = `<h3 style="color:var(--amber-dark);margin-bottom:14px;">Attendance by Class Today</h3><div class="center-loading">Loading…</div>`;
+  if (!classes.length) { body.innerHTML = `<h3 style="color:var(--amber-dark);margin-bottom:14px;">Attendance by Class Today</h3>${emptyState("Create classes first in Setup.")}`; return; }
+  const today = new Date().toISOString().slice(0,10);
+  const [classList, students, attToday] = await Promise.all([
+    dbSelectActive("classes", { order:"name.asc" }),
+    dbSelectActive("students", { status:"eq.active", select:"id,class_id" }),
+    dbSelect("attendance", { date:`eq.${today}`, select:"class_id,status" }).catch(()=>[]),
+  ]);
+  const rowsHtml = classList.map(c => {
+    const total = students.filter(s=>s.class_id===c.id).length;
+    const present = attToday.filter(a=>a.class_id===c.id && a.status==="present").length;
+    const pct = total ? Math.round((present/total)*100) : 0;
+    const color = pct>=75 ? 'var(--teal)' : pct>=40 ? 'var(--amber)' : 'var(--red)';
+    return `<div style="margin-bottom:12px;">
+      <div class="row" style="margin-bottom:5px;font-size:13px;">
+        <div style="font-weight:700;color:var(--ink);">${c.name}${c.section?(' '+c.section):''}</div>
+        <div style="color:var(--ink-soft);font-weight:600;">${present}/${total} · ${pct}%</div>
+      </div>
+      <div style="background:var(--card-alt);border-radius:999px;height:9px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:999px;"></div>
+      </div>
+    </div>`;
+  }).join("");
+  body.innerHTML = `<h3 style="color:var(--amber-dark);margin-bottom:14px;">Attendance by Class Today</h3>${rowsHtml}`;
+}
+
+/* ---- Dashboard panel: Recent Activity (exam) ---- */
+async function renderExamActivity(body) {
+  body.innerHTML = `<h3 style="color:var(--indigo);margin-bottom:14px;">Recent Activity</h3><div class="center-loading">Loading…</div>`;
+  let exams = [];
+  try { exams = await dbSelect("exams", { select:"*,classes(name,section),terms(name)", order:"created_at.desc", limit:5 }); }
+  catch(e) { exams = await dbSelect("exams", { select:"*,classes(name,section),terms(name)", order:"exam_date.desc", limit:5 }); }
+  if (!exams.length) { body.innerHTML = `<h3 style="color:var(--indigo);margin-bottom:14px;">Recent Activity</h3>${emptyState("No exam activity yet.")}`; return; }
+  body.innerHTML = `<h3 style="color:var(--indigo);margin-bottom:14px;">Recent Activity</h3>
+    ${exams.map(x=>`<div class="list-row">
+      <div class="avatar">${ic.exam}</div>
+      <div class="list-main"><div class="list-title">${x.name}</div>
+      <div class="list-sub">${x.classes?.name||''} ${x.classes?.section||''} ${x.terms?.name?('· '+x.terms.name):''} ${x.exam_date?('· '+x.exam_date):''}</div></div>
+    </div>`).join("")}
+  `;
+}
+
+/* ---- Dashboard panel: Upcoming this week ---- */
+async function renderUpcomingWeek(body) {
+  body.innerHTML = `<h3 style="color:var(--purple);margin-bottom:14px;">Upcoming This Week</h3><div class="center-loading">Loading…</div>`;
+  const now = new Date(); const in7 = new Date(now.getTime()+7*86400000);
+  const todayStr = now.toISOString().slice(0,10), in7Str = in7.toISOString().slice(0,10);
+  let exams = [];
+  try { exams = await dbSelect("exams", { select:"*,classes(name,section)", exam_date:`gte.${todayStr}`, order:"exam_date.asc" }); } catch(e) { exams = []; }
+  const upcoming = exams.filter(x => x.exam_date && x.exam_date <= in7Str);
+  if (!upcoming.length) { body.innerHTML = `<h3 style="color:var(--purple);margin-bottom:14px;">Upcoming This Week</h3>${emptyState("Nothing scheduled in the next 7 days.")}`; return; }
+  body.innerHTML = `<h3 style="color:var(--purple);margin-bottom:14px;">Upcoming This Week</h3>
+    ${upcoming.map(x=>{
+      const days = Math.round((new Date(x.exam_date) - new Date(todayStr))/86400000);
+      const when = days<=0 ? 'Today' : days===1 ? 'Tomorrow' : `in ${days} days`;
+      return `<div class="list-row">
+        <div class="avatar">${ic.exam}</div>
+        <div class="list-main"><div class="list-title">${x.name}</div>
+        <div class="list-sub">${x.classes?.name||''} ${x.classes?.section||''} · ${x.exam_date}</div></div>
+        <span class="badge badge-amber">${when}</span>
+      </div>`;
+    }).join("")}
+  `;
+}
+
+/* ---------------- ACADEMIC SETUP ---------------- */
+async function renderAcademic(container, sub="terms") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pillDefs = [["terms","Terms"],["classes","Classes"],["subjects","Subjects"],["examtypes","Exam Types"]];
+  const pills = document.getElementById("pills");
+  pillDefs.forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderAcademic(container, id);
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (sub==="terms") return renderTerms(body);
+  if (sub==="classes") return renderClasses(body);
+  if (sub==="subjects") return renderSubjects(body);
+  if (sub==="examtypes") return renderExamTypes(body);
+}
+
+async function renderExamTypes(body) {
+  const examTypes = await dbSelectActive("exam_types", { order:"name.asc" });
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exam Types</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam type</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = examTypes.length ? "" : emptyState("No exam types yet. Add types like Assessment, Mid-Term, or End of Term with their maximum score.");
+  examTypes.forEach(t => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(t.name)}</div>
+      <div class="list-main"><div class="list-title">${t.name}</div>
+      <div class="list-sub">Max score: ${t.max_score}</div></div></div>`);
+    const view = () => openViewModal(t.name, [["Maximum score", t.max_score]], () => openExamTypeModal(body, t));
+    const edit = () => openExamTypeModal(body, t);
+    const del = () => { if (confirm(`Move "${t.name}" to trash?`)) safe(async()=>{ await softDelete("exam_types", t.id); renderExamTypes(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openExamTypeModal(body, null);
+}
+function openExamTypeModal(body, t) {
+  const isEdit = !!t;
+  openModal(isEdit ? "Edit exam type" : "New exam type", `
+    <div class="field"><label>Exam type name</label><input id="f_name" placeholder="Mid-Term Exam" value="${t?.name||''}"/></div>
+    <div class="field"><label>Maximum score</label><input id="f_max" type="number" min="1" step="1" placeholder="100" value="${t?.max_score??100}"/></div>
+  `, async (ov) => {
+    const payload = { name: val(ov,"f_name"), max_score: Number(val(ov,"f_max")) || 100 };
+    if (isEdit) await dbUpdate("exam_types", t.id, payload); else await dbInsert("exam_types", payload);
+    renderExamTypes(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+async function renderTerms(body) {
+  const terms = await dbSelectActive("terms", { order:"start_date.desc" });
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--sky);">Terms</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add term</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = terms.length ? "" : emptyState("No terms yet.");
+  terms.forEach(t => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(t.name)}</div>
+      <div class="list-main"><div class="list-title">${t.name} ${t.is_current?'<span class="badge badge-green">Current</span>':''}</div>
+      <div class="list-sub">${t.start_date||""} → ${t.end_date||""}</div></div></div>`);
+    const view = () => openViewModal(t.name, [["Start date", t.start_date], ["End date", t.end_date], ["Current term", t.is_current?"Yes":"No"]], () => openTermModal(body, t));
+    const edit = () => openTermModal(body, t);
+    const del = () => { if (confirm(`Move "${t.name}" to trash?`)) safe(async()=>{ await softDelete("terms", t.id); renderTerms(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openTermModal(body, null);
+}
+function openTermModal(body, t) {
+  const isEdit = !!t;
+  openModal(isEdit ? "Edit term" : "New term", `
+    <div class="field"><label>Term name (e.g. First Term)</label><input id="f_name" value="${t?.name||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Start date</label><input id="f_start" type="date" value="${t?.start_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="date" value="${t?.end_date||''}"/></div>
+    </div>
+    <div class="field"><label><input id="f_current" type="checkbox" style="width:auto;margin-right:6px;" ${t?.is_current?'checked':''}/>Set as current term</label></div>
+  `, async (ov) => {
+    const payload = { name: val(ov,"f_name"), start_date: val(ov,"f_start"), end_date: val(ov,"f_end"), is_current: ov.querySelector("#f_current").checked };
+    if (isEdit) await dbUpdate("terms", t.id, payload); else await dbInsert("terms", payload);
+    renderTerms(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+async function renderClasses(body) {
+  const [classes, teachers, allStudents, allClassSubjects] = await Promise.all([
+    dbSelectActive("classes", { select:"*,teachers(full_name)", order:"name.asc" }),
+    dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" }),
+    dbSelectActive("students", { status:"eq.active", select:"id,class_id" }),
+    dbSelect("class_subjects", { select:"class_id,subjects(name)" }).catch(()=>[]),
+  ]);
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--purple);">Classes</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add class</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = classes.length ? "" : emptyState("No classes yet.");
+  classes.forEach(c => {
+    const studentCount = allStudents.filter(s=>s.class_id===c.id).length;
+    const subjectNames = allClassSubjects.filter(cs=>cs.class_id===c.id).map(cs=>cs.subjects?.name).filter(Boolean);
+    const row = el(`<div class="list-row"><div class="avatar">${initials(c.name)}</div>
+      <div class="list-main"><div class="list-title">${c.name}${c.section?(' '+c.section):''}</div>
+      <div class="list-sub">Class teacher: ${c.teachers?.full_name || "Not assigned"} · ${studentCount} student${studentCount===1?'':'s'}</div></div></div>`);
+    const view = () => openViewModal(`${c.name}${c.section?(' '+c.section):''}`, [
+      ["Stream", c.section || "—"],
+      ["Class teacher", c.teachers?.full_name || "Not assigned"],
+      ["Students enrolled", studentCount],
+      ["Subjects linked", subjectNames.join(", ") || "None — link in Subjects"],
+    ], () => openClassModal(body, teachers, c));
+    const edit = () => openClassModal(body, teachers, c);
+    const del = () => { if (confirm(`Move "${c.name}" to trash?`)) safe(async()=>{ await softDelete("classes", c.id); renderClasses(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openClassModal(body, teachers, null);
+}
+function openClassModal(body, teachers, c) {
+  const isEdit = !!c;
+  openModal(isEdit ? "Edit class" : "New class", `
+    <div class="grid2">
+      <div class="field"><label>Class name</label><input id="f_name" placeholder="Grade 5" value="${c?.name||''}"/></div>
+      <div class="field"><label>Stream</label><input id="f_section" placeholder="East" value="${c?.section||''}"/></div>
+    </div>
+    <div class="field"><label>Class teacher</label><select id="f_teacher"><option value="">— None —</option>${teachers.map(t=>`<option value="${t.id}" ${c?.class_teacher_id===t.id?'selected':''}>${t.full_name}</option>`).join("")}</select></div>
+  `, async (ov) => {
+    const payload = { name: val(ov,"f_name"), section: val(ov,"f_section"), class_teacher_id: val(ov,"f_teacher") || null };
+    if (isEdit) await dbUpdate("classes", c.id, payload); else await dbInsert("classes", payload);
+    renderClasses(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+async function renderSubjects(body) {
+  const [subjects, classes] = await Promise.all([
+    dbSelectActive("subjects", { order:"name.asc" }),
+    dbSelectActive("classes", { order:"name.asc" }),
+  ]);
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Subjects</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add subject</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = subjects.length ? "" : emptyState("No subjects yet.");
+  for (const s of subjects) {
+    let links = [];
+    try { links = await dbSelect("class_subjects", { select:"class_id,classes(name,section)", subject_id:`eq.${s.id}` }); } catch(e) { links = []; }
+    const linkNames = links.map(l => l.classes ? (l.classes.name+(l.classes.section?(' '+l.classes.section):'')) : '').filter(Boolean);
+    const row = el(`<div class="list-row"><div class="avatar">${initials(s.name)}</div>
+      <div class="list-main"><div class="list-title">${s.name}</div><div class="list-sub">${s.code||""} ${linkNames.length?('· '+linkNames.length+' class'+(linkNames.length>1?'es':'')+' linked'):'· Not linked to any class'}</div></div></div>`);
+    const view = () => openViewModal(s.name, [["Code", s.code], ["Linked classes", linkNames.join(", ") || "None"]], () => openSubjectModal(body, classes, s, links.map(l=>l.class_id)));
+    const edit = () => openSubjectModal(body, classes, s, links.map(l=>l.class_id));
+    const del = () => { if (confirm(`Move "${s.name}" to trash?`)) safe(async()=>{ await softDelete("subjects", s.id); renderSubjects(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  }
+  document.getElementById("addBtn").onclick = () => openSubjectModal(body, classes, null, []);
+}
+function openSubjectModal(body, classes, s, linkedClassIds) {
+  const isEdit = !!s;
+  openModal(isEdit ? "Edit subject" : "New subject", `
+    <div class="field"><label>Subject name</label><input id="f_name" placeholder="Mathematics" value="${s?.name||''}"/></div>
+    <div class="field"><label>Code</label><input id="f_code" placeholder="MTH" value="${s?.code||''}"/></div>
+    <div class="field"><label>Linked classes</label>
+      <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:8px;">
+        ${classes.length ? classes.map(c=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13.5px;">
+            <input type="checkbox" class="f_classlink" value="${c.id}" style="width:auto;" ${linkedClassIds.includes(c.id)?'checked':''}/>
+            ${c.name}${c.section?(' '+c.section):''}
+          </label>
+        `).join("") : `<div style="color:var(--ink-soft);font-size:13px;padding:4px;">Create a class first in Setup.</div>`}
+      </div>
+    </div>
+  `, async (ov) => {
+    const payload = { name: val(ov,"f_name"), code: val(ov,"f_code") };
+    let subjectId = s?.id;
+    if (isEdit) await dbUpdate("subjects", subjectId, payload);
+    else { const created = await dbInsert("subjects", payload); subjectId = created[0].id; }
+    const selectedIds = [...ov.querySelectorAll(".f_classlink:checked")].map(cb=>cb.value);
+    const toAdd = selectedIds.filter(id => !linkedClassIds.includes(id));
+    const toRemove = linkedClassIds.filter(id => !selectedIds.includes(id));
+    if (toAdd.length) await dbInsert("class_subjects", toAdd.map(class_id => ({ class_id, subject_id: subjectId })));
+    for (const class_id of toRemove) { await sb(`/rest/v1/class_subjects?class_id=eq.${class_id}&subject_id=eq.${subjectId}`, { method:"DELETE" }); }
+    renderSubjects(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+function emptyState(text) { return `<div class="empty">${ic.empty}<div>${text}</div></div>`; }
+
+/* ---------------- STUDENTS ---------------- */
+async function renderStudents(container, opts={}) {
+  const search = opts.search || "";
+  const classFilter = opts.classFilter || "";
+  const [classes] = await Promise.all([ dbSelectActive("classes", { order:"name.asc" }) ]);
+  let params = { select:"*,classes(name,section)", order:"full_name.asc" };
+  if (search) params.full_name = `ilike.*${encodeURIComponent(search)}*`;
+  if (classFilter) params.class_id = `eq.${classFilter}`;
+  const students = await dbSelectActive("students", params);
+  container.innerHTML = `
+    <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
+    <div class="search-bar">
+      <input id="searchInput" placeholder="Search student name…" value="${search}"/>
+      <select id="classFilterSel"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}" ${classFilter===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
+    </div>
+    <div class="card" id="list"></div>
+  `;
+  document.getElementById("searchInput").oninput = debounce((e)=>renderStudents(container,{search:e.target.value,classFilter}),350);
+  document.getElementById("classFilterSel").onchange = (e)=>renderStudents(container,{search,classFilter:e.target.value});
+  const list = document.getElementById("list");
+  list.innerHTML = students.length ? "" : emptyState("No students found.");
+  students.forEach(s => {
+    const row = el(`<div class="list-row">
+      ${avatarHtml(s.full_name, s.photo_url)}
+      <div class="list-main"><div class="list-title">${s.full_name}</div>
+      <div class="list-sub">#${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
+      <span class="badge ${s.status==='active'?'badge-green':'badge-grey'}">${s.status}</span>
+    </div>`);
+    const view = () => openViewModal(s.full_name, [
+      ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
+      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
+      ["Gender", s.gender], ["Date of birth", s.dob],
+      ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
+      ["Medical information", s.medical_info],
+      ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
+      ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
+      ["Status", s.status],
+    ], () => openStudentModal(container, classes, s));
+    const edit = () => openStudentModal(container, classes, s);
+    const del = () => { if (confirm(`Move ${s.full_name} to trash?`)) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter}); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  addFab(container, () => openStudentModal(container, classes, null));
+}
+function openStudentModal(container, classes, s) {
+  const isEdit = !!s;
+  openModal(isEdit ? "Edit student" : "Register student", `
+    <div class="field" style="text-align:center;">
+      <label>Photo</label>
+      <div id="photoPreviewWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml(s?.full_name, s?.photo_url, 72)}</div>
+      <input id="f_photo" type="file" accept="image/*"/>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Admission no.</label><input id="f_adm" value="${s?.admission_no||''}"/></div>
+      <div class="field"><label>Full name</label><input id="f_name" value="${s?.full_name||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="date" value="${s?.dob||''}"/></div>
+      <div class="field"><label>Gender</label><select id="f_gender">
+        <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
+    </div>
+    <div class="field"><label>Class</label><select id="f_class"><option value="">— Unassigned —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
+    <div class="grid2">
+      <div class="field"><label>Name</label><input id="f_gname" value="${s?.guardian_name||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_grel" placeholder="Mother, Father, Guardian…" value="${s?.guardian_relationship||''}"/></div>
+    </div>
+    <div class="field"><label>Phone number</label><input id="f_gphone" value="${s?.guardian_phone||''}"/></div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Medical information</div>
+    <div class="field"><label>Allergies, conditions, medication, etc.</label><textarea id="f_medical" rows="2">${s?.medical_info||''}</textarea></div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
+    <div class="grid2">
+      <div class="field"><label>Village</label><input id="f_village" value="${s?.village||''}"/></div>
+      <div class="field"><label>Subcounty</label><input id="f_subcounty" value="${s?.subcounty||''}"/></div>
+    </div>
+    <div class="field"><label>District</label><input id="f_district" value="${s?.district||''}"/></div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Emergency contact</div>
+    <div class="grid2">
+      <div class="field"><label>Name</label><input id="f_ename" value="${s?.emergency_name||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_erel" value="${s?.emergency_relationship||''}"/></div>
+    </div>
+    <div class="field"><label>Phone number</label><input id="f_ephone" value="${s?.emergency_phone||''}"/></div>
+
+    <div class="field"><label>Status</label><select id="f_status">
+      ${["active","inactive","graduated","transferred"].map(v=>`<option value="${v}" ${s?.status===v?'selected':''}>${v}</option>`).join("")}</select></div>
+  `, async (ov) => {
+    const photoFile = ov.querySelector("#f_photo").files[0];
+    const photo_url = photoFile ? await fileToDataURL(photoFile) : (s?.photo_url || null);
+    const payload = {
+      admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), dob: val(ov,"f_dob")||null,
+      gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
+      guardian_name: val(ov,"f_gname"), guardian_relationship: val(ov,"f_grel"), guardian_phone: val(ov,"f_gphone"),
+      medical_info: val(ov,"f_medical"),
+      village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
+      emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
+      status: val(ov,"f_status"), photo_url,
+    };
+    if (isEdit) await dbUpdate("students", s.id, payload); else await dbInsert("students", payload);
+    renderStudents(container);
+  }, { saveLabel: isEdit ? "Save changes" : "Register" });
+  const photoInput = document.getElementById("f_photo");
+  photoInput.onchange = async () => {
+    const dataUrl = await fileToDataURL(photoInput.files[0]);
+    if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(s?.full_name, dataUrl, 72);
+  };
+}
+
+/* ---------------- TEACHERS ---------------- */
+async function renderTeachers(container, opts={}) {
+  const search = opts.search || "";
+  let params = { order:"full_name.asc" };
+  if (search) params.full_name = `ilike.*${encodeURIComponent(search)}*`;
+  const teachers = await dbSelectActive("teachers", params);
+  container.innerHTML = `
+    <h3 style="color:var(--purple);margin-bottom:12px;">Staff</h3>
+    <div class="search-bar"><input id="searchInput" placeholder="Search staff name…" value="${search}"/></div>
+    <div class="card" id="list"></div>
+  `;
+  document.getElementById("searchInput").oninput = debounce((e)=>renderTeachers(container,{search:e.target.value}),350);
+  const list = document.getElementById("list");
+  list.innerHTML = teachers.length ? "" : emptyState("No staff yet.");
+  const allClasses = await dbSelectActive("classes", { order:"name.asc" }).catch(()=>[]);
+  teachers.forEach(t => {
+    const classesTaught = allClasses.filter(c=>c.class_teacher_id===t.id);
+    const classNames = classesTaught.map(c=>c.name+(c.section?(' '+c.section):'')).join(", ");
+    const row = el(`<div class="list-row">
+      ${avatarHtml(t.full_name, t.photo_url)}
+      <div class="list-main"><div class="list-title">${t.full_name}</div>
+      <div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· #'+t.staff_no):''}</div></div>
+      <span class="badge ${t.status==='active'?'badge-green':'badge-grey'}">${t.status}</span>
+    </div>`);
+    const view = () => openViewModal(t.full_name, [
+      ["Photo", t.photo_url ? `<img src="${t.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
+      ["Staff no.", t.staff_no], ["Phone", t.phone], ["Gender", t.gender],
+      ["Specialty", t.specialty], ["Qualification", t.qualification],
+      ["Village", t.village], ["Subcounty", t.subcounty], ["District", t.district],
+      ["Emergency contact", t.emergency_name], ["Emergency relationship", t.emergency_relationship], ["Emergency phone", t.emergency_phone],
+      ["Class teacher of", classNames || "Not assigned to a class"],
+      ["Status", t.status],
+    ], () => openTeacherModal(container, t));
+    const edit = () => openTeacherModal(container, t);
+    const del = () => { if (confirm(`Move ${t.full_name} to trash?`)) safe(async()=>{ await softDelete("teachers", t.id); renderTeachers(container,{search}); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  addFab(container, () => openTeacherModal(container, null));
+}
+function openTeacherModal(container, t) {
+  const isEdit = !!t;
+  openModal(isEdit ? "Edit staff" : "Add staff", `
+    <div class="field" style="text-align:center;">
+      <label>Photo</label>
+      <div id="photoPreviewWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml(t?.full_name, t?.photo_url, 72)}</div>
+      <input id="f_photo" type="file" accept="image/*"/>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Staff no.</label><input id="f_staffno" value="${t?.staff_no||''}"/></div>
+      <div class="field"><label>Full name</label><input id="f_name" value="${t?.full_name||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Phone</label><input id="f_phone" value="${t?.phone||''}"/></div>
+      <div class="field"><label>Gender</label><select id="f_gender"><option ${t?.gender==='Male'?'selected':''}>Male</option><option ${t?.gender==='Female'?'selected':''}>Female</option></select></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Specialty / subject</label><input id="f_spec" value="${t?.specialty||''}"/></div>
+      <div class="field"><label>Qualification</label><input id="f_qual" value="${t?.qualification||''}"/></div>
+    </div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
+    <div class="grid2">
+      <div class="field"><label>Village</label><input id="f_village" value="${t?.village||''}"/></div>
+      <div class="field"><label>Subcounty</label><input id="f_subcounty" value="${t?.subcounty||''}"/></div>
+    </div>
+    <div class="field"><label>District</label><input id="f_district" value="${t?.district||''}"/></div>
+
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Emergency contact</div>
+    <div class="grid2">
+      <div class="field"><label>Name</label><input id="f_ename" value="${t?.emergency_name||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_erel" value="${t?.emergency_relationship||''}"/></div>
+    </div>
+    <div class="field"><label>Phone number</label><input id="f_ephone" value="${t?.emergency_phone||''}"/></div>
+
+    <div class="field"><label>Status</label><select id="f_status"><option value="active" ${t?.status==='active'?'selected':''}>active</option><option value="inactive" ${t?.status==='inactive'?'selected':''}>inactive</option></select></div>
+  `, async (ov) => {
+    const photoFile = ov.querySelector("#f_photo").files[0];
+    const photo_url = photoFile ? await fileToDataURL(photoFile) : (t?.photo_url || null);
+    const payload = {
+      staff_no: val(ov,"f_staffno"), full_name: val(ov,"f_name"), phone: val(ov,"f_phone"),
+      gender: val(ov,"f_gender"), specialty: val(ov,"f_spec"), qualification: val(ov,"f_qual"),
+      village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
+      emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
+      status: val(ov,"f_status"), photo_url,
+    };
+    if (isEdit) await dbUpdate("teachers", t.id, payload); else await dbInsert("teachers", payload);
+    renderTeachers(container);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+  const photoInput = document.getElementById("f_photo");
+  photoInput.onchange = async () => {
+    const dataUrl = await fileToDataURL(photoInput.files[0]);
+    if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(t?.full_name, dataUrl, 72);
+  };
+}
+
+/* ---------------- ATTENDANCE ---------------- */
+async function renderAttendance(container, opts={}) {
+  const sub = opts.sub || "students";
+  container.innerHTML = `<h3 style="color:var(--amber-dark);margin-bottom:12px;">Attendance</h3><div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pills = document.getElementById("pills");
+  [["students","Students"],["staff","Staff"]].forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderAttendance(container, { sub:id });
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (sub === "staff") return renderStaffAttendance(body, opts);
+  return renderStudentAttendance(body, opts);
+}
+
+/* ---- Student attendance: class list only, tap a class to mark it ---- */
+async function renderStudentAttendance(body, opts={}) {
+  const date = opts.date || new Date().toISOString().slice(0,10);
+  const classes = await dbSelectActive("classes", { order:"name.asc" });
+  body.innerHTML = `
+    <div class="card">
+      <div class="field"><label>Date</label><input id="attDate" type="date" value="${date}"/></div>
+    </div>
+    <div class="card" id="classListCard"><div class="center-loading">Loading…</div></div>
+  `;
+  document.getElementById("attDate").onchange = (e) => renderStudentAttendance(body, { date: e.target.value });
+  const listCard = document.getElementById("classListCard");
+  if (!classes.length) { listCard.innerHTML = emptyState("Create classes first in Setup."); return; }
+  const [studentRows, takenToday] = await Promise.all([
+    dbSelectActive("students", { status:"eq.active", select:"id,class_id" }),
+    dbSelect("attendance", { date:`eq.${date}`, select:"class_id" }).catch(()=>[]),
+  ]);
+  const takenSet = new Set(takenToday.map(a=>a.class_id));
+  listCard.innerHTML = "";
+  classes.forEach(c => {
+    const total = studentRows.filter(s=>s.class_id===c.id).length;
+    const taken = takenSet.has(c.id);
+    const row = el(`<div class="list-row" style="cursor:${taken?'pointer':'default'};">
+      <div class="avatar">${initials(c.name)}</div>
+      <div class="list-main">
+        <div class="list-title">${c.name}${c.section?(' '+c.section):''}</div>
+        <div class="list-sub">${total} student${total===1?'':'s'}</div>
+        ${taken ? '' : `<button class="btn btn-primary btn-sm attClassBtn" style="margin-top:6px;padding:6px 10px;font-size:12.5px;">Take attendance</button>`}
+      </div>
+      ${taken ? `<span class="badge badge-green">Taken ✓</span>` : ``}
+    </div>`);
+    if (taken) {
+      bindTapHold(row, {
+        onTap: () => openClassAttendanceViewModal(c, date, () => openClassAttendanceModal(c, date, () => renderStudentAttendance(body, { date }))),
+        onHold: () => openClassAttendanceModal(c, date, () => renderStudentAttendance(body, { date })),
+      });
+    } else {
+      row.querySelector(".attClassBtn").onclick = (e) => { e.stopPropagation(); openClassAttendanceModal(c, date, () => renderStudentAttendance(body, { date })); };
+    }
+    listCard.appendChild(row);
+  });
+}
+
+/* ---- Read-only view: who's present/absent in a class, with an edit shortcut ---- */
+async function openClassAttendanceViewModal(cls, date, onEdit) {
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${cls.name}${cls.section?(' '+cls.section):''} <span style="font-weight:500;font-size:12.5px;color:var(--ink-soft);">— ${date}</span></h3>
+    <div id="attViewBody" style="margin-top:10px;"><div class="center-loading">Loading…</div></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Close</button>
+      <button class="btn btn-primary" id="editAttBtn">${ic.edit} Edit</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector("#editAttBtn").onclick = () => { close(); onEdit(); };
+
+  const bodyEl = overlay.querySelector("#attViewBody");
+  const [students, existing] = await Promise.all([
+    dbSelectActive("students", { class_id:`eq.${cls.id}`, status:"eq.active", order:"full_name.asc" }),
+    dbSelect("attendance", { class_id:`eq.${cls.id}`, date:`eq.${date}` }).catch(()=>[]),
+  ]);
+  const marks = {}; existing.forEach(a => marks[a.student_id]=a.status);
+  const presentCount = students.filter(s=>marks[s.id]==='present').length;
+  const absentCount = students.filter(s=>marks[s.id]==='absent').length;
+  bodyEl.innerHTML = (students.length ? `
+    <div class="row" style="margin-bottom:10px;font-size:13px;font-weight:700;">
+      <div style="color:var(--teal-dark);">${presentCount} present</div><div style="color:var(--red);">${absentCount} absent</div>
+    </div>` : "") +
+    (students.length ? students.map(s=>`
+      <div class="view-row"><div class="vlabel">${s.full_name}</div><div class="vvalue">
+        ${marks[s.id]==='present' ? `<span class="badge badge-green">Present</span>` : marks[s.id]==='absent' ? `<span class="badge badge-red">Absent</span>` : `<span class="badge badge-grey">Not marked</span>`}
+      </div></div>
+    `).join("") : emptyState("No active students in this class."));
+}
+
+/* ---- Modal: mark present/absent for every student in one class ---- */
+async function openClassAttendanceModal(cls, date, onSaved) {
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${cls.name}${cls.section?(' '+cls.section):''} <span style="font-weight:500;font-size:12.5px;color:var(--ink-soft);">— ${date}</span></h3>
+    <div id="attModalBody" style="margin-top:10px;"><div class="center-loading">Loading…</div></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Close</button>
+      <button class="btn btn-primary" id="saveAttBtn">Save attendance</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const bodyEl = overlay.querySelector("#attModalBody");
+  const [students, existing] = await Promise.all([
+    dbSelectActive("students", { class_id:`eq.${cls.id}`, status:"eq.active", order:"full_name.asc" }),
+    dbSelect("attendance", { class_id:`eq.${cls.id}`, date:`eq.${date}` }).catch(()=>[]),
+  ]);
+  const marks = {}; existing.forEach(a => marks[a.student_id]=a.status);
+  bodyEl.innerHTML = students.length ? "" : emptyState("No active students in this class.");
+  const state = {};
+  students.forEach(s => {
+    state[s.id] = marks[s.id] || null;
+    const row = el(`<div class="list-row" style="cursor:default;">
+      ${avatarHtml(s.full_name, s.photo_url)}
+      <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">#${s.admission_no}</div></div>
+      <div class="att-btns" data-sid="${s.id}">
+        <button class="att-btn p ${state[s.id]==='present'?'on':''}" data-v="present">Present</button>
+        <button class="att-btn a ${state[s.id]==='absent'?'on':''}" data-v="absent">Absent</button>
+      </div>
+    </div>`);
+    row.querySelectorAll(".att-btn").forEach(btn => {
+      btn.onclick = () => {
+        state[s.id] = btn.dataset.v;
+        row.querySelectorAll(".att-btn").forEach(b=>b.classList.remove("on"));
+        btn.classList.add("on");
+      };
+    });
+    bodyEl.appendChild(row);
+  });
+  overlay.querySelector("#saveAttBtn").onclick = async (e) => {
+    if (!students.length) { close(); return; }
+    e.target.textContent = "Saving…"; e.target.disabled = true;
+    try {
+      const records = Object.entries(state).filter(([,v])=>v).map(([student_id,status])=>({ student_id, class_id: cls.id, date, status, marked_by: profile.id }));
+      if (records.length) await dbUpsert("attendance", records, "student_id,date");
+      toast("Attendance saved.", false);
+      close();
+      onSaved && onSaved();
+    } catch(err) { toast(err.message); e.target.textContent = "Save attendance"; e.target.disabled=false; }
+  };
+}
+
+/* ---- Staff attendance: single list of active staff for the selected date ---- */
+async function renderStaffAttendance(body, opts={}) {
+  const date = opts.date || new Date().toISOString().slice(0,10);
+  const teachers = await dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" });
+  body.innerHTML = `
+    <div class="card">
+      <div class="field"><label>Date</label><input id="attDate" type="date" value="${date}"/></div>
+    </div>
+    <div class="card" id="staffAttCard"><div class="center-loading">Loading…</div></div>
+    <button class="btn btn-primary" id="saveStaffAttBtn" style="width:100%;">Save attendance</button>
+  `;
+  document.getElementById("attDate").onchange = (e) => renderStaffAttendance(body, { date: e.target.value });
+  const card = document.getElementById("staffAttCard");
+  const saveBtn = document.getElementById("saveStaffAttBtn");
+  if (!teachers.length) { card.innerHTML = emptyState("No active staff yet."); saveBtn.style.display = "none"; return; }
+  let existing = [];
+  try { existing = await dbSelect("staff_attendance", { date:`eq.${date}` }); } catch(e) { existing = []; }
+  const marks = {}; existing.forEach(a => marks[a.teacher_id]=a.status);
+  card.innerHTML = "";
+  const state = {};
+  teachers.forEach(t => {
+    state[t.id] = marks[t.id] || null;
+    const row = el(`<div class="list-row" style="cursor:default;">
+      ${avatarHtml(t.full_name, t.photo_url)}
+      <div class="list-main"><div class="list-title">${t.full_name}</div><div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· #'+t.staff_no):''}</div></div>
+      <div class="att-btns" data-tid="${t.id}">
+        <button class="att-btn p ${state[t.id]==='present'?'on':''}" data-v="present">Present</button>
+        <button class="att-btn a ${state[t.id]==='absent'?'on':''}" data-v="absent">Absent</button>
+      </div>
+    </div>`);
+    row.querySelectorAll(".att-btn").forEach(btn => {
+      btn.onclick = () => {
+        state[t.id] = btn.dataset.v;
+        row.querySelectorAll(".att-btn").forEach(b=>b.classList.remove("on"));
+        btn.classList.add("on");
+      };
+    });
+    card.appendChild(row);
+  });
+  saveBtn.onclick = async (e) => {
+    e.target.textContent = "Saving…"; e.target.disabled = true;
+    try {
+      const records = Object.entries(state).filter(([,v])=>v).map(([teacher_id,status])=>({ teacher_id, date, status, marked_by: profile.id }));
+      if (records.length) await dbUpsert("staff_attendance", records, "teacher_id,date");
+      e.target.textContent = "Saved ✓";
+      setTimeout(()=>{ e.target.textContent = "Save attendance"; e.target.disabled=false; }, 1400);
+    } catch(err) { toast(err.message); e.target.textContent = "Save attendance"; e.target.disabled=false; }
+  };
+}
+
+/* ---------------- FEES ---------------- */
+async function renderFees(container, sub="payments") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pills = document.getElementById("pills");
+  [["payments","Record payment"],["history","Payment history"],["structure","Fee structure"]].forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderFees(container, id);
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (sub==="structure") return renderFeeStructure(body);
+  if (sub==="payments") return renderFeePayment(body);
+  if (sub==="history") return renderFeeHistory(body);
+}
+async function renderFeeStructure(body) {
+  const [classes, terms, items] = await Promise.all([
+    dbSelectActive("classes", { order:"name.asc" }),
+    dbSelectActive("terms", { order:"start_date.desc" }),
+    dbSelectActive("fee_structures", { select:"class_id,amount" }),
+  ]);
+  if (!classes.length) { body.innerHTML = emptyState("Create a class first in Setup, then come back to set up fees."); return; }
+  const byClass = {};
+  items.forEach(i => {
+    const k = i.class_id;
+    if (!byClass[k]) byClass[k] = { count:0, total:0 };
+    byClass[k].count++;
+    byClass[k].total += Number(i.amount);
+  });
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--red);">Fee Structure</h3></div><div style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;">Select a class to view or set up its fee items.</div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  classes.forEach(c => {
+    const stat = byClass[c.id] || { count:0, total:0 };
+    const row = el(`<div class="list-row"><div class="avatar">${ic.fees}</div>
+      <div class="list-main"><div class="list-title">${c.name}${c.section?(' '+c.section):''}</div>
+      <div class="list-sub">${stat.count} fee item${stat.count===1?'':'s'}${stat.count?` · ${currency()}${stat.total.toLocaleString()}`:''}</div></div>
+      <div style="color:var(--ink-soft);display:flex;align-items:center;">${ic.chevronRight}</div></div>`);
+    row.onclick = () => renderFeeStructureClass(body, c, terms);
+    list.appendChild(row);
+  });
+}
+async function renderFeeStructureClass(body, cls, terms) {
+  const items = await dbSelectActive("fee_structures", { select:"*,terms(name)", class_id:`eq.${cls.id}`, order:"created_at.desc" });
+  const total = items.reduce((a,b)=>a+Number(b.amount), 0);
+  body.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to classes</button>
+    <div class="section-head">
+      <h3 style="color:var(--red);">${cls.name}${cls.section?(' '+cls.section):''} — Fee Items</h3>
+      <button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add fee item</button>
+    </div>
+    <div class="card" id="list"></div>
+    ${items.length ? `<div class="card row" style="font-weight:700;"><div style="color:var(--navy);">Total for this class</div><div style="color:var(--red);font-size:16px;">${currency()}${total.toLocaleString()}</div></div>` : ''}
+  `;
+  document.getElementById("backBtn").onclick = () => renderFeeStructure(body);
+  const list = document.getElementById("list");
+  list.innerHTML = items.length ? "" : emptyState("No fee items for this class yet.");
+  const refresh = () => renderFeeStructureClass(body, cls, terms);
+  items.forEach(f => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.fees}</div>
+      <div class="list-main"><div class="list-title">${f.item_name} — ${currency()}${Number(f.amount).toLocaleString()}</div>
+      <div class="list-sub">${f.terms?.name||''}</div></div></div>`);
+    const view = () => openViewModal(f.item_name, [["Amount", currency()+Number(f.amount).toLocaleString()], ["Term", f.terms?.name]], () => openFeeItemModal(body, cls, terms, f, refresh));
+    const edit = () => openFeeItemModal(body, cls, terms, f, refresh);
+    const del = () => { if (confirm(`Move "${f.item_name}" to trash?`)) safe(async()=>{ await softDelete("fee_structures", f.id); refresh(); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => {
+    if (!terms.length) return alert("Create terms first in Setup.");
+    openFeeItemModal(body, cls, terms, null, refresh);
+  };
+}
+function openFeeItemModal(body, cls, terms, f, onDone) {
+  const isEdit = !!f;
+  const done = onDone || (() => {});
+  const classLabel = `<div class="field"><label>Class</label><div style="padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;background:var(--card-alt);font-weight:700;color:var(--navy);">${cls.name}${cls.section?(' '+cls.section):''}</div></div>`;
+
+  // Editing an existing single fee item — keep this a focused one-item form.
+  if (isEdit) {
+    openModal("Edit fee item", `
+      ${classLabel}
+      <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${f.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
+      <div class="grid2">
+        <div class="field"><label>Item name</label><input id="f_item" placeholder="Tuition" value="${f.item_name||''}"/></div>
+        <div class="field"><label>Amount</label><input id="f_amount" type="number" placeholder="50000" value="${f.amount||''}"/></div>
+      </div>
+    `, async (ov)=>{
+      const payload = { class_id: cls.id, term_id: val(ov,"f_term"), item_name: val(ov,"f_item"), amount: Number(val(ov,"f_amount")) };
+      await dbUpdate("fee_structures", f.id, payload);
+      done();
+    }, { saveLabel: "Save changes" });
+    return;
+  }
+
+  // Adding new fee items — allow multiple item rows (Tuition, Uniform, Development fund, etc.)
+  // with rows that can be added or cleared, and a running total shown at the bottom.
+  let rowCount = 0;
+  const makeRowHtml = () => {
+    rowCount++;
+    return `<div class="feeItemRow" data-row="${rowCount}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;">
+      <div class="field" style="flex:1.5;margin-bottom:0;">${rowCount===1?'<label>Item name</label>':''}<input class="fi-name" placeholder="e.g. Tuition, Uniform, Development fund"/></div>
+      <div class="field" style="flex:1;margin-bottom:0;">${rowCount===1?'<label>Amount</label>':''}<input class="fi-amount" type="number" placeholder="0"/></div>
+      <button type="button" class="btn btn-ghost btn-sm fi-remove" title="Remove item" style="padding:10px 12px;flex-shrink:0;">&times;</button>
+    </div>`;
+  };
+  const firstRowHtml = makeRowHtml();
+
+  const overlay = openModal("New fee items", `
+    ${classLabel}
+    <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select></div>
+    <div id="feeItemsWrap">${firstRowHtml}</div>
+    <button type="button" class="link-btn" id="addItemRowBtn">${ic.plus} Add another item</button>
+    <div class="row" style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
+      <div style="font-weight:700;color:var(--navy);">Total</div>
+      <div style="font-weight:800;font-size:17px;color:var(--red);" id="feeItemsTotal">${currency()}0</div>
+    </div>
+  `, async (ov) => {
+    const termId = val(ov,"f_term");
+    const payloads = Array.from(ov.querySelectorAll(".feeItemRow")).map(r => ({
+      class_id: cls.id,
+      term_id: termId,
+      item_name: r.querySelector(".fi-name").value.trim(),
+      amount: Number(r.querySelector(".fi-amount").value),
+    })).filter(p => p.item_name && p.amount > 0);
+    if (!payloads.length) throw new Error("Add at least one fee item with a name and an amount.");
+    await dbInsert("fee_structures", payloads);
+    done();
+  }, { saveLabel: "Add items" });
+
+  const wrap = overlay.querySelector("#feeItemsWrap");
+  const totalEl = overlay.querySelector("#feeItemsTotal");
+  const recalcTotal = () => {
+    const total = Array.from(overlay.querySelectorAll(".fi-amount")).reduce((a,i)=>a+(Number(i.value)||0), 0);
+    totalEl.textContent = currency() + total.toLocaleString();
+  };
+  const bindRow = (rowEl) => {
+    rowEl.querySelector(".fi-amount").addEventListener("input", recalcTotal);
+    rowEl.querySelector(".fi-name").addEventListener("input", recalcTotal);
+    rowEl.querySelector(".fi-remove").onclick = () => {
+      // If it's the only row left, clear it instead of removing it entirely.
+      if (overlay.querySelectorAll(".feeItemRow").length <= 1) {
+        rowEl.querySelector(".fi-name").value = "";
+        rowEl.querySelector(".fi-amount").value = "";
+        recalcTotal();
+        return;
+      }
+      rowEl.remove();
+      recalcTotal();
+    };
+  };
+  wrap.querySelectorAll(".feeItemRow").forEach(bindRow);
+  overlay.querySelector("#addItemRowBtn").onclick = () => {
+    const holder = document.createElement("div");
+    holder.innerHTML = makeRowHtml();
+    const rowEl = holder.firstChild;
+    wrap.appendChild(rowEl);
+    bindRow(rowEl);
+    rowEl.querySelector(".fi-name").focus();
+  };
+}
+async function renderFeePayment(body) {
+  const [students, terms, classes] = await Promise.all([
+    dbSelect("students", { status:"eq.active", select:"id,full_name,admission_no,class_id", order:"full_name.asc" }),
+    dbSelect("terms", { order:"start_date.desc" }),
+    dbSelectActive("classes", { order:"name.asc" }),
+  ]);
+  if (!students.length || !terms.length) {
+    body.innerHTML = emptyState(!students.length ? "Register an active student first." : "Create a term first in Setup.");
+    return;
+  }
+  const studentOptionsHtml = (list) => `<option value="">— Select student —</option>` + list.map(s=>`<option value="${s.id}" data-class="${s.class_id||''}">${s.full_name} (#${s.admission_no})</option>`).join("");
+  body.innerHTML = `
+    <div class="card">
+      <div class="field"><label>Filter by class</label><select id="f_classFilter"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}">${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+      <div class="field"><label>Student</label><select id="f_student">${studentOptionsHtml(students)}</select></div>
+      <div class="field"><label>Term</label><select id="f_term"><option value="">— Select term —</option>${terms.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select></div>
+      <div id="balanceInfo" style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;"></div>
+      <div class="grid2">
+        <div class="field"><label>Amount paid</label><input id="f_amount" type="number" placeholder="20000"/></div>
+        <div class="field"><label>Method</label><select id="f_method">
+          <option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="card">Card</option><option value="mobile_money">Mobile money</option><option value="other">Other</option>
+        </select></div>
+      </div>
+      <div class="field"><label>Note (optional)</label><input id="f_note"/></div>
+      <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
+      <div id="payMsg"></div>
+    </div>`;
+  const classFilterSel = document.getElementById("f_classFilter");
+  const studentSel = document.getElementById("f_student");
+  const termSel = document.getElementById("f_term");
+  const balanceEl = document.getElementById("balanceInfo");
+  classFilterSel.onchange = () => {
+    const cid = classFilterSel.value;
+    const filtered = cid ? students.filter(s => s.class_id === cid) : students;
+    studentSel.innerHTML = studentOptionsHtml(filtered);
+    balanceEl.innerHTML = "";
+  };
+  async function refreshBalance() {
+    const sid = studentSel.value;
+    const tid = termSel.value;
+    if (!sid || !tid) { balanceEl.innerHTML = ""; return; }
+    const classId = studentSel.selectedOptions[0].dataset.class;
+    const [structure, payments] = await Promise.all([
+      dbSelect("fee_structures", { class_id:`eq.${classId}`, term_id:`eq.${tid}` }),
+      dbSelect("fee_payments", { student_id:`eq.${sid}`, term_id:`eq.${tid}` }),
+    ]);
+    const total = structure.reduce((a,b)=>a+Number(b.amount),0);
+    const paid = payments.reduce((a,b)=>a+Number(b.amount_paid),0);
+    balanceEl.innerHTML = `Term fee: <b>${currency()}${total.toLocaleString()}</b> · Paid so far: <b>${currency()}${paid.toLocaleString()}</b> · Balance: <b style="color:${total-paid>0?'var(--red)':'var(--teal-dark)'}">${currency()}${(total-paid).toLocaleString()}</b>`;
+  }
+  studentSel.onchange = refreshBalance;
+  termSel.onchange = refreshBalance;
+  document.getElementById("payBtn").onclick = async (e) => {
+    const msg = document.getElementById("payMsg"); msg.innerHTML = "";
+    const sid = studentSel.value, tid = termSel.value, amt = Number(document.getElementById("f_amount").value);
+    if (!sid) { msg.innerHTML = `<div class="err">Please select a student.</div>`; return; }
+    if (!tid) { msg.innerHTML = `<div class="err">Please select a term.</div>`; return; }
+    if (!amt || amt <= 0) { msg.innerHTML = `<div class="err">Enter a valid amount.</div>`; return; }
+    try {
+      await dbInsert("fee_payments", {
+        student_id: sid,
+        term_id: tid,
+        amount_paid: amt,
+        method: document.getElementById("f_method").value,
+        note: document.getElementById("f_note").value,
+        received_by: profile.id,
+      });
+      msg.innerHTML = `<div class="msg-ok">Payment recorded.</div>`;
+      document.getElementById("f_amount").value = "";
+      document.getElementById("f_note").value = "";
+      refreshBalance();
+    } catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
+  };
+}
+function methodLabel(m) {
+  const map = { cash:"Cash", bank_transfer:"Bank transfer", card:"Card", mobile_money:"Mobile money", other:"Other" };
+  return map[m] || (m ? (m.charAt(0).toUpperCase()+m.slice(1).replace(/_/g," ")) : "");
+}
+function formatDate(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString(undefined, { day:"numeric", month:"short", year:"numeric" });
+}
+async function renderFeeHistory(body) {
+  const payments = await dbSelect("fee_payments", { select:"*,students(full_name,admission_no),terms(name)", order:"payment_date.desc", limit:"100" });
+  if (!payments.length) { body.innerHTML = emptyState("No payments recorded yet."); return; }
+  const total = payments.reduce((a,b)=>a+Number(b.amount_paid), 0);
+  body.innerHTML = `
+    <div class="card table-wrap">
+      <table class="fee-history-table">
+        <thead><tr>
+          <th class="col-date-h">Date</th>
+          <th class="col-student-h">Student</th>
+          <th class="col-term-h">Term</th>
+          <th class="col-amount-h">Amount</th>
+          <th class="col-method-h">Method</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="card row" style="font-weight:700;">
+      <div style="color:var(--navy);">Total collected (last ${payments.length})</div>
+      <div style="color:var(--teal-dark);font-size:16px;">${currency()}${total.toLocaleString()}</div>
+    </div>`;
+  const tb = document.getElementById("tb");
+  payments.forEach(p => {
+    const studentName = p.students?.full_name || "—";
+    const admissionNo = p.students?.admission_no ? ` <span style="opacity:.6;font-weight:600;">#${p.students.admission_no}</span>` : "";
+    const termName = p.terms?.name || "—";
+    const amountText = `${currency()}${Number(p.amount_paid || 0).toLocaleString()}`;
+    const methodText = methodLabel(p.method) || "—";
+    tb.appendChild(elRow(`<tr>
+      <td class="col-date-d">${formatDate(p.payment_date)}</td>
+      <td class="col-student-d">${studentName}${admissionNo}</td>
+      <td class="col-term-d">${termName}</td>
+      <td class="col-amount-d">${amountText}</td>
+      <td class="col-method-d">${methodText}</td>
+    </tr>`));
+  });
+}
+
+/* ---------------- EXAMS ---------------- */
+async function renderExams(container, sub="exams") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pills = document.getElementById("pills");
+  [["exams","Exams"],["enter","Enter results"],["report","Report card"]].forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderExams(container, id);
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (sub==="exams") return renderExamList(body);
+  if (sub==="enter") return renderEnterResults(body);
+  if (sub==="report") return renderReportCard(body);
+}
+async function renderExamList(body) {
+  const [exams, terms, classes, examTypes] = await Promise.all([
+    dbSelectActive("exams", { select:"*,terms(name),classes(name,section),exam_types(name,max_score)", order:"exam_date.desc" }),
+    dbSelectActive("terms", { order:"start_date.desc" }),
+    dbSelectActive("classes", { order:"name.asc" }),
+    dbSelectActive("exam_types", { order:"name.asc" }),
+  ]);
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exams</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = exams.length ? "" : emptyState("No exams created yet.");
+  exams.forEach(x => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.exam}</div>
+      <div class="list-main"><div class="list-title">${x.name} ${x.exam_types?.name?`<span class="badge badge-grey">${x.exam_types.name}</span>`:''}</div>
+      <div class="list-sub">${x.classes?.name||''} ${x.classes?.section||''} · ${x.terms?.name||''} ${x.exam_date?('· '+x.exam_date):''}</div></div></div>`);
+    const view = () => openViewModal(x.name, [["Class", (x.classes?.name||'')+' '+(x.classes?.section||'')], ["Term", x.terms?.name], ["Exam type", x.exam_types?.name || "—"], ["Maximum score", x.exam_types?.max_score ?? "—"], ["Date", x.exam_date]], () => openExamModal(body, classes, terms, examTypes, x));
+    const edit = () => openExamModal(body, classes, terms, examTypes, x);
+    const del = () => { if (confirm(`Move "${x.name}" to trash?`)) safe(async()=>{ await softDelete("exams", x.id); renderExamList(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => {
+    if (!terms.length || !classes.length) return alert("Create classes and terms first in Setup.");
+    if (!examTypes.length) return alert("Create an exam type first in Setup (e.g. Assessment, Mid-Term) with its maximum score.");
+    openExamModal(body, classes, terms, examTypes, null);
+  };
+}
+function openExamModal(body, classes, terms, examTypes, x) {
+  const isEdit = !!x;
+  openModal(isEdit ? "Edit exam" : "New exam", `
+    <div class="field"><label>Exam name</label><input id="f_name" placeholder="Mid-Term Test" value="${x?.name||''}"/></div>
+    <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name} (max ${t.max_score})</option>`).join("")}</select></div>
+    <div class="field"><label>Class</label><select id="f_class">${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+    <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${x?.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
+    <div class="field"><label>Date</label><input id="f_date" type="date" value="${x?.exam_date||''}"/></div>
+  `, async (ov)=>{
+    const payload = { name: val(ov,"f_name"), exam_type_id: val(ov,"f_examtype")||null, class_id: val(ov,"f_class"), term_id: val(ov,"f_term"), exam_date: val(ov,"f_date")||null };
+    if (isEdit) await dbUpdate("exams", x.id, payload); else await dbInsert("exams", payload);
+    renderExamList(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+async function renderEnterResults(body) {
+  const exams = await dbSelect("exams", { select:"*,classes(name,section),exam_types(name,max_score)", order:"exam_date.desc" });
+  if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
+  body.innerHTML = `<div class="card"><div class="field"><label>Select exam</label><select id="selExam">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}" data-max="${x.exam_types?.max_score||100}">${x.name}${x.exam_types?.name?(' — '+x.exam_types.name):''} — ${x.classes?.name||''}</option>`).join("")}</select></div>
+    <div class="field"><label>Subject</label><select id="selSubject"></select></div></div>
+    <div id="resultsArea"><div class="center-loading">Choose an exam and subject</div></div>`;
+  const selExam = document.getElementById("selExam");
+  const selSubject = document.getElementById("selSubject");
+  async function loadSubjects() {
+    if (!selExam.value) return;
+    const classId = selExam.selectedOptions[0].dataset.class;
+    const cs = await dbSelect("class_subjects", { select:"subjects(id,name)", class_id:`eq.${classId}` });
+    selSubject.innerHTML = cs.map(c=>`<option value="${c.subjects.id}">${c.subjects.name}</option>`).join("") || `<option value="">No subjects linked — add in Setup</option>`;
+    loadGrid();
+  }
+  async function loadGrid() {
+    const examId = selExam.value, subjectId = selSubject.value;
+    const area = document.getElementById("resultsArea");
+    if (!examId || !subjectId) { area.innerHTML = emptyState("Link subjects to this class in Setup first."); return; }
+    const classId = selExam.selectedOptions[0].dataset.class;
+    const maxScore = Number(selExam.selectedOptions[0].dataset.max) || 100;
+    const [students, results] = await Promise.all([
+      dbSelect("students", { class_id:`eq.${classId}`, status:"eq.active", order:"full_name.asc" }),
+      dbSelect("exam_results", { exam_id:`eq.${examId}`, subject_id:`eq.${subjectId}` }),
+    ]);
+    const marksMap = {}; results.forEach(r=>marksMap[r.student_id]=r.marks_obtained);
+    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th></tr></thead><tbody id="gridBody"></tbody></table></div>
+      <button class="btn btn-primary" id="saveResultsBtn" style="width:100%;">Save results</button><div id="resMsg"></div>`;
+    const gb = document.getElementById("gridBody");
+    students.forEach(s => {
+      gb.appendChild(elRow(`<tr><td>${s.full_name}</td><td><input type="number" max="${maxScore}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" value="${marksMap[s.id]??''}"/></td><td>${maxScore}</td></tr>`));
+    });
+    document.getElementById("saveResultsBtn").onclick = async (e) => {
+      const msg = document.getElementById("resMsg");
+      const inputs = [...gb.querySelectorAll("input")].filter(i=>i.value !== "");
+      const records = inputs.map(i => ({ exam_id: examId, student_id: i.dataset.sid, subject_id: subjectId, marks_obtained: Number(i.value), max_marks: maxScore }));
+      try { if (records.length) await dbUpsert("exam_results", records, "exam_id,student_id,subject_id"); msg.innerHTML = `<div class="msg-ok">Results saved.</div>`; }
+      catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
+    };
+  }
+  selExam.onchange = loadSubjects;
+  selSubject.onchange = loadGrid;
+  if (exams.length) loadSubjects();
+}
+function gradeFor(pct) {
+  if (pct>=80) return "A"; if (pct>=70) return "B"; if (pct>=60) return "C"; if (pct>=50) return "D"; if (pct>=40) return "E"; return "F";
+}
+async function renderReportCard(body) {
+  const exams = await dbSelect("exams", { select:"*,classes(name,section)", order:"exam_date.desc" });
+  if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
+  body.innerHTML = `<div class="card"><div class="field"><label>Exam</label><select id="selExam2">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}">${x.name} — ${x.classes?.name||''}</option>`).join("")}</select></div>
+    <div class="field"><label>Student</label><select id="selStudent2"></select></div></div>
+    <div id="cardArea"></div>`;
+  const selExam2 = document.getElementById("selExam2");
+  const selStudent2 = document.getElementById("selStudent2");
+  async function loadStudents() {
+    if (!selExam2.value) return;
+    const classId = selExam2.selectedOptions[0].dataset.class;
+    const students = await dbSelect("students", { class_id:`eq.${classId}`, status:"eq.active", order:"full_name.asc" });
+    selStudent2.innerHTML = students.map(s=>`<option value="${s.id}">${s.full_name}</option>`).join("");
+    buildCard();
+  }
+  async function buildCard() {
+    const examId = selExam2.value, studentId = selStudent2.value;
+    const area = document.getElementById("cardArea");
+    if (!examId || !studentId) { area.innerHTML=""; return; }
+    const results = await dbSelect("exam_results", { select:"*,subjects(name)", exam_id:`eq.${examId}`, student_id:`eq.${studentId}` });
+    const student = (await dbSelect("students", { id:`eq.${studentId}` }))[0];
+    const exam = exams.find(x=>x.id===examId);
+    const total = results.reduce((a,r)=>a+Number(r.marks_obtained||0),0);
+    const maxTotal = results.reduce((a,r)=>a+Number(r.max_marks||0),0);
+    const avg = maxTotal ? (total/maxTotal*100) : 0;
+    area.innerHTML = `
+      <div class="card" id="printArea">
+        <div style="text-align:center;margin-bottom:14px;">
+          <h3 style="color:var(--navy);">Brightpath School</h3>
+          <div style="font-size:13px;color:var(--ink-soft);">${exam?.name || ''} — Report Card</div>
+        </div>
+        <div class="row" style="margin-bottom:10px;font-size:13.5px;">
+          <div><b>${student?.full_name}</b><br/><span style="color:var(--ink-soft);">Adm. No: ${student?.admission_no}</span></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th></tr></thead><tbody>
+          ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained}</td><td>${r.max_marks}</td><td>${gradeFor((r.marks_obtained/r.max_marks)*100)}</td></tr>`).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
+        </tbody></table></div>
+        <div class="row" style="margin-top:12px;font-weight:700;">
+          <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeFor(avg)}</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="printBtn" style="width:100%;margin-top:10px;">Print report card</button>
+    `;
+    document.getElementById("printBtn").onclick = () => window.print();
+  }
+  selExam2.onchange = loadStudents;
+  selStudent2.onchange = buildCard;
+  if (exams.length) loadStudents();
+}
+
+/* ---------------- USERS & ROLES ---------------- */
+async function renderUsers(container) {
+  if (profile.role !== "admin") {
+    container.innerHTML = `<div class="card">Only admins can manage users and roles. Ask your school admin to update your role in the profiles table if this is incorrect.</div>`;
+    return;
+  }
+  const profiles = await dbSelect("profiles", { order:"full_name.asc" });
+  container.innerHTML = `<div class="section-head"><h3 style="color:var(--navy-2);">Users &amp; Roles</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Invite user</button></div><div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  profiles.forEach(p => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(p.full_name)}</div>
+      <div class="list-main"><div class="list-title">${p.full_name}</div><div class="list-sub">${p.phone||''}</div></div>
+      <select class="roleSel" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);">
+        ${["admin","teacher","accountant","staff"].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${r}</option>`).join("")}
+      </select>
+    </div>`);
+    row.querySelector(".roleSel").onchange = safe(async (e) => { await dbUpdate("profiles", p.id, { role: e.target.value }); toast(`${p.full_name}'s role updated.`, false); });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => {
+    openModal("Invite a user", `
+      <div class="field"><label>Full name</label><input id="f_name"/></div>
+      <div class="field"><label>Email</label><input id="f_email" type="email"/></div>
+      <div class="field"><label>Temporary password</label><input id="f_pw" type="password" placeholder="At least 6 characters"/></div>
+      <div class="tiny-note" style="text-align:left;">They'll be created with the "staff" role — change it from the list after they sign up.</div>
+    `, async (ov) => {
+      await signup(val(ov,"f_email"), val(ov,"f_pw"), val(ov,"f_name"));
+      renderUsers(container);
+    }, { saveLabel: "Create" });
+  };
+}
+
+/* ---------------- SCHOOL SETTINGS ---------------- */
+async function renderSettings(container) {
+  const isAdmin = profile?.role === "admin";
+  let row = null, missingTable = false;
+  try {
+    const rows = await dbSelect("school_settings", { id:"eq.1" });
+    row = rows[0] || null;
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    container.innerHTML = `
+      <div class="card">
+        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>School Settings needs a small table in your database before it can save anything.</p></div></div>
+        <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${SCHOOL_SETTINGS_SQL}</pre>
+        <button class="btn btn-primary" id="retrySettingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
+      </div>`;
+    document.getElementById("retrySettingsBtn").onclick = () => renderSettings(container);
+    return;
+  }
+
+  const s = row || {};
+  if (!isAdmin) { renderSettingsReadOnly(container, s); return; }
+
+  const colorKey = s.brand_color && BRAND_PRESETS[s.brand_color] ? s.brand_color : "teal";
+  let logoDataUrl = s.logo_url || null;
+  let selectedColor = colorKey;
+
+  container.innerHTML = `
+    <h3 style="color:var(--navy);margin-bottom:4px;">School Settings</h3>
+    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Your school's identity — shown across the whole app, including the header everyone sees.</p>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.setup}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
+      <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
+        <div class="logo-upload" id="logoUpload" title="Tap to change logo">
+          ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Brightpath")}</span>`}
+          <div class="cam">${ic.camera} Change</div>
+        </div>
+        <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
+        <div style="flex:1;min-width:180px;">
+          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="Brightpath Academy" value="${s.school_name||''}"/></div>
+          <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="Excellence in every child" maxlength="60" value="${s.motto||''}"/></div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
+      <div class="header-preview"><div class="hp-inner" id="hpInner">
+        <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"Brightpath")}</div>
+        <div><div class="hp-name" id="hpName">${s.school_name||"Brightpath"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
+      </div></div>
+    </div>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.target}</div><div><h3 style="color:var(--navy);">Mission &amp; vision</h3><p>What your school stands for — visible to staff on this page.</p></div></div>
+      <div class="field"><label>${ic.target} &nbsp;Mission</label><textarea id="f_mission" rows="3" placeholder="What we do, every day, for our students…">${s.mission||''}</textarea></div>
+      <div class="field" style="margin-bottom:0;"><label>${ic.compass} &nbsp;Vision</label><textarea id="f_vision" rows="3" placeholder="Where we're headed as a school…">${s.vision||''}</textarea></div>
+    </div>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.mail}</div><div><h3 style="color:var(--navy);">Contact details</h3><p>Shown to staff and on printed report cards.</p></div></div>
+      <div class="grid2">
+        <div class="field"><label>Phone</label><input id="f_phone" placeholder="+256 700 000 000" value="${s.phone||''}"/></div>
+        <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="info@school.edu" value="${s.email||''}"/></div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="P.O. Box 1, Kampala">${s.address||''}</textarea></div>
+    </div>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Preferences</h3><p>Fine-tune how the app looks and formats money.</p></div></div>
+      <div class="field"><label>Accent color</label>
+        <div class="swatch-row" id="swatchRow">
+          ${Object.entries(BRAND_PRESETS).map(([key,p])=>`<div class="swatch ${key===selectedColor?'on':''}" data-key="${key}" title="${p.label}" style="background:${p.base};">${ic.check}</div>`).join("")}
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Currency symbol</label>
+        <select id="f_currency">${CURRENCY_OPTIONS.map(c=>`<option value="${c}" ${((s.currency_symbol||'₦')===c)?'selected':''}>${c}</option>`).join("")}</select>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="saveSettingsBtn" style="width:100%;">Save changes</button>
+    <div id="settingsMsg" style="margin-top:10px;"></div>
+  `;
+
+  function updatePreview() {
+    const name = val(container,"f_sname") || "Brightpath";
+    const motto = val(container,"f_motto");
+    document.getElementById("hpName").textContent = name;
+    const hpLogo = document.getElementById("hpLogo");
+    hpLogo.innerHTML = logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(name);
+    const hpMotto = document.getElementById("hpMotto");
+    if (motto) { hpMotto.style.display = ""; hpMotto.textContent = motto; } else { hpMotto.style.display = "none"; }
+    const logoPreview = document.getElementById("logoPreviewImg");
+    if (logoDataUrl) { logoPreview.outerHTML = `<img id="logoPreviewImg" src="${logoDataUrl}"/>`; }
+    else { logoPreview.outerHTML = `<span id="logoPreviewImg">${initials(name)}</span>`; }
+  }
+  container.querySelector("#f_sname").oninput = updatePreview;
+  container.querySelector("#f_motto").oninput = updatePreview;
+  container.querySelector("#logoUpload").onclick = () => document.getElementById("logoFile").click();
+  document.getElementById("logoFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    logoDataUrl = await fileToDataURL(file);
+    updatePreview();
+  };
+  container.querySelectorAll(".swatch").forEach(sw => {
+    sw.onclick = () => {
+      selectedColor = sw.dataset.key;
+      container.querySelectorAll(".swatch").forEach(x=>x.classList.remove("on"));
+      sw.classList.add("on");
+    };
+  });
+
+  document.getElementById("saveSettingsBtn").onclick = async (e) => {
+    const msg = document.getElementById("settingsMsg");
+    e.target.textContent = "Saving…"; e.target.disabled = true;
+    try {
+      const payload = {
+        id: 1,
+        school_name: val(container,"f_sname") || null,
+        motto: val(container,"f_motto") || null,
+        mission: val(container,"f_mission") || null,
+        vision: val(container,"f_vision") || null,
+        logo_url: logoDataUrl,
+        phone: val(container,"f_phone") || null,
+        email: val(container,"f_email") || null,
+        address: val(container,"f_address") || null,
+        brand_color: selectedColor,
+        currency_symbol: val(container,"f_currency") || "₦",
+      };
+      await dbUpsert("school_settings", payload, "id");
+      await loadSchoolSettings();
+      msg.innerHTML = `<div class="msg-ok">Saved — your school's branding is now live everywhere.</div>`;
+      toast("School settings saved.", false);
+      e.target.textContent = "Save changes"; e.target.disabled = false;
+      render();
+    } catch (err) {
+      msg.innerHTML = `<div class="err">${err.message}</div>`;
+      e.target.textContent = "Save changes"; e.target.disabled = false;
+    }
+  };
+}
+function renderSettingsReadOnly(container, s) {
+  const hasAny = s.school_name || s.motto || s.mission || s.vision || s.phone || s.email || s.address;
+  container.innerHTML = `
+    <h3 style="color:var(--navy);margin-bottom:4px;">About ${s.school_name || "this school"}</h3>
+    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Only admins can edit school settings.</p>
+    ${!hasAny ? `<div class="card">${emptyState("Your school hasn't set up its profile yet. Ask an admin to fill it in from Settings.")}</div>` : `
+    <div class="card">
+      <div class="row" style="align-items:center;gap:14px;margin-bottom:6px;">
+        <div class="logo-upload" style="cursor:default;border-style:solid;">${s.logo_url ? `<img src="${s.logo_url}"/>` : `<span>${initials(s.school_name||"?")}</span>`}</div>
+        <div><div style="font-weight:800;font-size:17px;color:var(--navy);">${s.school_name||''}</div>${s.motto ? `<div style="font-size:13px;color:var(--ink-soft);font-style:italic;margin-top:2px;">${s.motto}</div>` : ''}</div>
+      </div>
+    </div>
+    ${(s.mission || s.vision) ? `<div class="card">
+      ${s.mission ? `<div class="about-row"><div class="lbl">${ic.target} Mission</div><div class="val">${s.mission}</div></div>` : ''}
+      ${s.vision ? `<div class="about-row"><div class="lbl">${ic.compass} Vision</div><div class="val">${s.vision}</div></div>` : ''}
+    </div>` : ''}
+    ${(s.phone || s.email || s.address) ? `<div class="card">
+      ${s.phone ? `<div class="about-row"><div class="lbl">Phone</div><div class="val">${s.phone}</div></div>` : ''}
+      ${s.email ? `<div class="about-row"><div class="lbl">Email</div><div class="val">${s.email}</div></div>` : ''}
+      ${s.address ? `<div class="about-row"><div class="lbl">Address</div><div class="val">${s.address}</div></div>` : ''}
+    </div>` : ''}
+    `}
+  `;
+}
+
+/* ---------------- TRASH ---------------- */
+async function renderTrash(container) {
+  container.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Trash</h3><div class="section-head"><div style="font-size:13px;color:var(--ink-soft);">Items stay here until restored or permanently deleted.</div><button class="btn btn-ghost btn-sm" id="emptyBtn">${ic.trash} Empty trash</button></div><div id="trashList"><div class="center-loading">Loading…</div></div>`;
+  const listEl = document.getElementById("trashList");
+  let allTrashed = [];
+  await Promise.all(TRASH_TABLES.map(async (t) => {
+    try {
+      const rows = await dbSelect(t.table, { deleted_at:"not.is.null", order:"deleted_at.desc" });
+      rows.forEach(r => allTrashed.push({ ...t, row:r }));
+    } catch(e) { /* table has no deleted_at column yet — skip quietly */ }
+  }));
+  allTrashed.sort((a,b) => new Date(b.row.deleted_at) - new Date(a.row.deleted_at));
+  if (!allTrashed.length) { listEl.innerHTML = emptyState("Trash is empty."); document.getElementById("emptyBtn").style.display="none"; return; }
+  listEl.innerHTML = `<div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  allTrashed.forEach(item => {
+    const name = item.row[item.nameField] || "Untitled";
+    const row = el(`<div class="list-row"><div class="avatar">${item.icon}</div>
+      <div class="list-main"><div class="list-title">${name}</div>
+      <div class="list-sub">${item.label} · deleted ${new Date(item.row.deleted_at).toLocaleDateString()}</div></div></div>`);
+    row.onclick = () => openActionSheet([
+      { label:"Restore", icon:ic.edit, onClick: safe(async()=>{ await restoreRecord(item.table, item.row.id); toast(`${name} restored.`, false); renderTrash(container); }) },
+      { label:"Delete permanently", icon:ic.trash, danger:true, onClick: () => { if (confirm(`Permanently delete "${name}"? This cannot be undone.`)) safe(async()=>{ await dbDelete(item.table, item.row.id); renderTrash(container); })(); } },
+    ]);
+    list.appendChild(row);
+  });
+  document.getElementById("emptyBtn").onclick = () => {
+    if (!confirm(`Permanently delete all ${allTrashed.length} item(s) in trash? This cannot be undone.`)) return;
+    safe(async () => {
+      for (const item of allTrashed) { await dbDelete(item.table, item.row.id); }
+      toast("Trash emptied.", false);
+      renderTrash(container);
+    })();
+  };
+}
+
+/* ---------------- MISC ---------------- */
+function addFab(container, onClick) {
+  const fab = el(`<button class="fab">${ic.plus}</button>`);
+  fab.onclick = onClick;
+  container.appendChild(fab);
+}
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
+
+/* Small non-blocking toast for background/action errors, so nothing fails silently */
+function toast(msg, isError=true) {
+  const t = el(`<div style="position:fixed;left:50%;bottom:104px;transform:translateX(-50%);background:${isError?'#D6564F':'#2E9E7C'};color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 10px 28px rgba(0,0,0,.25);max-width:90%;text-align:center;">${msg}</div>`);
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, 3000);
+}
+/* Wrap any async action (delete, role change, etc.) so failures show a toast instead of breaking the page */
+function safe(fn) {
+  return async (...args) => {
+    try { await fn(...args); }
+    catch (e) { toast(e.message || "Something went wrong. Please try again."); console.error(e); }
+  };
+}
+window.addEventListener("unhandledrejection", (e) => {
+  toast((e.reason && e.reason.message) || "Something went wrong. Please try again.");
+  console.error(e.reason);
+});
+window.addEventListener("error", (e) => { console.error(e.error || e.message); });
+
+(async function boot() { await loadSchoolSettings(); render(); })();
+
+/* ---------------- PWA INSTALL SUPPORT ----------------
+   Registers a minimal service worker (generated in-memory as a Blob,
+   so no separate .js file is needed) purely so browsers consider this
+   app installable and it can open standalone from the home screen. */
+if ("serviceWorker" in navigator) {
+  const swSource = `
+    const CACHE = "brightpath-cache-v1";
+    self.addEventListener("install", (e) => { self.skipWaiting(); });
+    self.addEventListener("activate", (e) => { self.clients.claim(); });
+    self.addEventListener("fetch", (e) => {
+      e.respondWith(
+        fetch(e.request).catch(() => caches.match(e.request))
+      );
+    });
+  `;
+  const swBlob = new Blob([swSource], { type: "application/javascript" });
+  const swUrl = URL.createObjectURL(swBlob);
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(swUrl).catch((err) => console.warn("SW registration failed:", err));
+  });
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+</script>
+</body>
+</html>
