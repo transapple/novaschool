@@ -66,6 +66,11 @@
   *{box-sizing:border-box;}
   html,body{height:100%;overflow:hidden;overscroll-behavior:none;}
   body{margin:0;position:fixed;inset:0;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;}
+  /* App data is never rendered/visible in a plain browser tab — only once running
+     as the installed, standalone app. #app stays hidden until pwaShowApp() runs. */
+  #app{display:none;}
+  #app.pwa-app-unlocked{display:block;}
+  .pwa-open-note{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:10px;}
   h1,h2,h3{font-weight:700;letter-spacing:-0.02em;margin:0;}
   button{font-family:inherit;cursor:pointer;}
   input,select,textarea{font-family:inherit;}
@@ -344,8 +349,10 @@ window.addEventListener("beforeinstallprompt", (e) => {
 });
 window.addEventListener("appinstalled", () => {
   try { localStorage.setItem("pwaInstalled", "true"); } catch(e) {}
-  closePwaOverlay();
-  toast("App installed! Launch it anytime from your home screen.", false);
+  deferredInstallPrompt = null;
+  // Don't unlock the browser tab — steer the person into the installed app instead.
+  const overlay = document.getElementById("pwaInstallOverlay");
+  if (overlay) renderPwaInstalledSuccess(overlay);
 });
 
 const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
@@ -2923,67 +2930,50 @@ function detectPwaPlatform() {
   return { isStandalone, isIOS, isFirefox };
 }
 
-function pwaAlreadyHandled() {
-  try {
-    // ?installPrompt=1 in the URL always forces the overlay to show,
-    // ignoring any previous "Not now" / "Don't show again" / installed state.
-    // Handy for testing: yoursite.com/?installPrompt=1
-    if (new URLSearchParams(window.location.search).get("installPrompt") === "1") return false;
-    if (localStorage.getItem("pwaInstalled") === "true") return true;
-    const optOutUntil = parseInt(localStorage.getItem("pwaInstallOptOutUntil") || "0", 10);
-    if (Date.now() < optOutUntil) return true;
-    if (sessionStorage.getItem("pwaInstallDismissed") === "1") return true;
-  } catch (e) { /* storage unavailable — just show it */ }
-  return false;
-}
-
-function closePwaOverlay() {
+// Reveal the real app UI. This only ever runs once we're certain we're
+// running as the installed, standalone app — never inside a plain browser tab.
+function pwaShowApp() {
+  const app = document.getElementById("app");
+  if (app) app.classList.add("pwa-app-unlocked");
   const overlay = document.getElementById("pwaInstallOverlay");
   if (overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
   window.__pwaEventArrived = null;
-}
-function dismissPwaOverlay() {
-  try { sessionStorage.setItem("pwaInstallDismissed", "1"); } catch (e) {}
-  closePwaOverlay();
-}
-function optOutPwaOverlay() {
-  try { localStorage.setItem("pwaInstallOptOutUntil", String(Date.now() + PWA_OPTOUT_DAYS * 86400000)); } catch (e) {}
-  closePwaOverlay();
+  try { localStorage.setItem("pwaInstalled", "true"); } catch (e) {}
 }
 
-function pwaOverlayShell(bodyHtml) {
+function pwaWasInstalled() {
+  try { return localStorage.getItem("pwaInstalled") === "true"; } catch (e) { return false; }
+}
+
+// Best-effort attempt to hand off to the already-installed app instead of
+// staying in the browser. On browsers that support manifest "capture_links" /
+// "launch_handler" (declared in manifest.json), re-navigating to the app's
+// own scope gets intercepted and routed into the installed app window.
+function pwaTryOpenInstalledApp() {
+  window.location.href = window.location.origin + window.location.pathname;
+}
+
+function pwaOverlayShell(bodyHtml, opts) {
+  opts = opts || {};
   return `
     <div class="pwa-card">
-      <button type="button" class="pwa-close" id="pwaCloseBtn" aria-label="Close">&times;</button>
       <div class="pwa-icon"><img src="${PWA_ICON_URL}" alt=""/></div>
-      <div class="pwa-title">Install Nova School</div>
-      <div class="pwa-sub">Add Nova School Manager to your home screen for a faster, full-screen experience — no app store required.</div>
+      <div class="pwa-title">${opts.title || "Install Nova School"}</div>
+      <div class="pwa-sub">${opts.sub || "Nova School Manager only runs as an installed app. Install it once to your device to continue — this only takes a moment."}</div>
       <div class="pwa-body">${bodyHtml}</div>
-      <div class="pwa-footer-links">
-        <button type="button" id="pwaNotNow">Not now</button>
-        <button type="button" id="pwaOptOut">Don't show again</button>
-      </div>
     </div>`;
-}
-function pwaWireCommon(overlay) {
-  overlay.querySelector("#pwaCloseBtn").onclick = dismissPwaOverlay;
-  overlay.querySelector("#pwaNotNow").onclick = dismissPwaOverlay;
-  overlay.querySelector("#pwaOptOut").onclick = optOutPwaOverlay;
 }
 
 function renderPwaChecking(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-spinner"></div>
-    <div class="pwa-status">Checking if this browser supports one-tap install…</div>
-    <div class="pwa-actions"><button class="btn btn-ghost" disabled style="opacity:.6;">Preparing installer…</button></div>
+    <div class="pwa-status">Preparing installer…</div>
   `);
-  pwaWireCommon(overlay);
 }
 function renderPwaReady(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-actions"><button class="btn btn-primary" id="pwaInstallBtn">${ic.plus} Install Now</button></div>
+    <div class="pwa-actions"><button class="btn btn-primary" id="pwaInstallBtn">${ic.plus} Download &amp; Install</button></div>
   `);
-  pwaWireCommon(overlay);
   const btn = overlay.querySelector("#pwaInstallBtn");
   btn.onclick = async () => {
     if (!deferredInstallPrompt) { renderPwaFallback(overlay); return; }
@@ -2992,19 +2982,18 @@ function renderPwaReady(overlay) {
     try {
       const choice = await deferredInstallPrompt.userChoice;
       deferredInstallPrompt = null;
-      if (choice.outcome !== "accepted") { btn.disabled = false; btn.innerHTML = `${ic.plus} Install Now`; }
-      // if accepted, the "appinstalled" event closes the overlay for us
-    } catch (e) { btn.disabled = false; btn.innerHTML = `${ic.plus} Install Now`; }
+      if (choice.outcome !== "accepted") { btn.disabled = false; btn.innerHTML = `${ic.plus} Download & Install`; }
+      // if accepted, the "appinstalled" event takes over from here
+    } catch (e) { btn.disabled = false; btn.innerHTML = `${ic.plus} Download & Install`; }
   };
 }
 function renderPwaFallback(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-fallback-box">
       ${ic.setup}
-      <div>Look for the install icon in your address bar, or open your browser's menu and choose <b>"Install Nova School Manager"</b> (or <b>"Add to Home Screen"</b>).</div>
+      <div>Look for the install icon in your address bar, or open your browser's menu and choose <b>"Install Nova School Manager"</b> (or <b>"Add to Home Screen"</b>). The app opens once it's installed.</div>
     </div>
   `);
-  pwaWireCommon(overlay);
 }
 function renderPwaIOS(overlay) {
   const shareIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>`;
@@ -3013,32 +3002,53 @@ function renderPwaIOS(overlay) {
     <div class="pwa-steps">
       <div class="pwa-step"><span class="pwa-step-ic">${shareIcon}</span><span>Tap the <b>Share</b> icon in your browser's toolbar</span></div>
       <div class="pwa-step"><span class="pwa-step-ic">${plusIcon}</span><span>Scroll down and choose <b>Add to Home Screen</b></span></div>
-      <div class="pwa-step"><span class="pwa-step-ic">✓</span><span>Tap <b>Add</b> — Nova School now opens like any other app</span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">✓</span><span>Tap <b>Add</b>, then open Nova School from your Home Screen</span></div>
     </div>
-    <div class="pwa-actions"><button class="btn btn-ghost" id="pwaGotIt">Got it</button></div>
+    <div class="pwa-open-note">This page will stay on the install screen until you open the app from your Home Screen.</div>
   `);
-  pwaWireCommon(overlay);
-  overlay.querySelector("#pwaGotIt").onclick = dismissPwaOverlay;
 }
 function renderPwaFirefox(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-fallback-box">
       ${ic.setup}
-      <div>Firefox doesn't support one-tap install yet. Open the <b>⋮ menu</b> and look for <b>"Install"</b> or <b>"Add to Home Screen"</b> — or open this page in Chrome/Edge for one-tap install.</div>
+      <div>Firefox doesn't support one-tap install yet. Open the <b>⋮ menu</b> and choose <b>"Install"</b> or <b>"Add to Home Screen"</b>, then launch Nova School from there — or open this link in Chrome/Edge for one-tap install.</div>
     </div>
-    <div class="pwa-actions"><button class="btn btn-ghost" id="pwaGotIt">Continue in browser</button></div>
   `);
-  pwaWireCommon(overlay);
-  overlay.querySelector("#pwaGotIt").onclick = dismissPwaOverlay;
+}
+function renderPwaInstalledSuccess(overlay) {
+  overlay.style.display = "flex";
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
+  `, {
+    title: "Installed!",
+    sub: "Nova School Manager is on your device now. Open it from here, or from your home screen any time."
+  });
+  overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
+}
+function renderPwaAlreadyInstalled(overlay) {
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
+  `, {
+    title: "Open the Nova School app",
+    sub: "You've already installed Nova School Manager. This browser tab can't show your data — open the installed app instead."
+  });
+  overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
 }
 
 function initPwaInstallOverlay() {
   const overlay = document.getElementById("pwaInstallOverlay");
   if (!overlay) return;
   const p = detectPwaPlatform();
-  if (p.isStandalone || pwaAlreadyHandled()) return;
+
+  // Only the installed, standalone app is ever allowed to show real data.
+  if (p.isStandalone) { pwaShowApp(); return; }
 
   overlay.style.display = "flex";
+
+  // Previously installed (flag set on a past standalone launch or install
+  // event) but somehow opened via a regular browser link/tab right now —
+  // point them at the real app rather than ever unlocking #app here.
+  if (pwaWasInstalled()) { renderPwaAlreadyInstalled(overlay); return; }
 
   if (p.isIOS) { renderPwaIOS(overlay); return; }
   if (p.isFirefox) { renderPwaFirefox(overlay); return; }
