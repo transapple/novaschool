@@ -358,12 +358,13 @@ window.addEventListener("appinstalled", () => {
 const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
 
-let DEV_MODE = true;   // ← set to false to require real login before launch
+let DEV_MODE = false;  // ← must stay false in production: true lets anyone skip login entirely
 let auth = null;       // { access_token, user }
 let profile = null;    // { id, full_name, role }
 let cache = {};        // simple in-memory cache per tab
 let tab = "dashboard";
 let loading = false;
+let pinLocked = false; // true when a remembered session was restored and is waiting on a PIN unlock
 
 /* ---------------- ICONS (inline svg, feather-style) ---------------- */
 const ic = {
@@ -389,7 +390,9 @@ const ic = {
   mail:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>`,
   back:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`,
   chevronRight:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`,
-  more:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`
+  more:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+  megaphone:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l3.5 5.5V4.5L6 10H4a1 1 0 0 0-1 1z"/><path d="M13 8a4 4 0 0 1 0 8"/><path d="M17 5a8 8 0 0 1 0 14"/></svg>`,
+  keyLock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4"/><path d="M10.5 11.5L20 2M17 5l3 3M14 8l2 2"/></svg>`
 };
 
 /* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
@@ -444,6 +447,22 @@ alter table school_settings add column if not exists teacher_id_digits int defau
 // New "Grade" field added to both the student and staff registration forms.
 const GRADE_FIELD_SQL = `alter table students add column if not exists grade text;
 alter table teachers add column if not exists grade text;`;
+// One-time setup for the Comms page — announcements, reports and notices
+// sent out to parents/staff all live in one small table, distinguished by `type`.
+const COMMUNICATIONS_SQL = `create table if not exists school_communications (
+  id bigint generated always as identity primary key,
+  type text not null check (type in ('announcement','report','notice')),
+  title text not null,
+  message text not null,
+  audience text,
+  created_by text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table school_communications enable row level security;
+create policy "Anyone can read school_communications" on school_communications for select using (true);
+create policy "Authenticated can manage school_communications" on school_communications for all using (true);
+alter publication supabase_realtime add table school_communications;`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -490,7 +509,7 @@ function mastheadHtml() {
   const s = schoolSettings || {};
   const name = s.school_name || "Nova School";
   const motto = s.motto || "";
-  const canEdit = profile?.role === "admin";
+  const canEdit = hasFullAccess(profile);
   return `<div class="masthead"${canEdit ? ' id="mastheadClickable" style="cursor:pointer;" title="Edit school profile"' : ""}>
     <div class="masthead-logo">${s.logo_url ? `<img src="${s.logo_url}" alt="${name} logo"/>` : initials(name)}</div>
     <div class="masthead-text">
@@ -515,7 +534,8 @@ const NAV = [
   {id:"fees", label:"Fees", icon:ic.fees},
   {id:"exams", label:"Exams", icon:ic.exam},
   {id:"academic", label:"Setup", icon:ic.setup},
-  {id:"users", label:"Users", icon:ic.users},
+  {id:"comms", label:"Comms", icon:ic.megaphone},
+  {id:"users", label:"Account", icon:ic.users},
   {id:"settings", label:"Settings", icon:ic.sliders},
   {id:"trash", label:"Trash", icon:ic.trash},
 ];
@@ -524,14 +544,180 @@ const NAV = [
 const NAV_ICON_COLOR = {
   dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)",
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
-  academic:"#0e9488", users:"var(--navy-2)", settings:"#7a4fc4", trash:"var(--slate)",
+  academic:"#0e9488", comms:"#c2410c", users:"var(--navy-2)", settings:"#7a4fc4", trash:"var(--slate)",
 };
+
+/* ---------------- DEPARTMENTS & ACCESS CONTROL ----------------
+   Mirrors the school's org chart. Each department lists the job
+   positions that sit in it, and which app sections (NAV ids) that
+   department is allowed to open. "all" = every section, including
+   Users & Roles, Settings and Trash (full admin-equivalent access). */
+const DEPARTMENTS = {
+  administration: {
+    label: "Administration",
+    positions: ["Director / Managing Director","Head Teacher","Deputy Head Teacher","Secretary","Office Typist"],
+    access: "all",
+  },
+  academic: {
+    label: "Academic",
+    positions: ["Director of Studies (DOS)","Head of Department (HOD)","Teaching Staff"],
+    // Manages exams, subjects, grading, classes/terms setup and report cards.
+    // "users" here just opens their own Account page (see renderUsers) — they
+    // cannot edit department/position/role there, only request a change.
+    access: ["dashboard","students","teachers","attendance","exams","academic","users"],
+  },
+  finance: {
+    label: "Finance",
+    positions: ["Bursar / Accountant"],
+    // Finance can open Students to look someone up (e.g. to confirm a name
+    // against a payment) but has no ability to add, edit or delete — see the
+    // `canManageStudents` check inside renderStudents, which only grants
+    // those buttons to Administration and Academic.
+    access: ["dashboard","students","fees","users"],
+  },
+  parents: {
+    label: "Parents & Community",
+    positions: ["Parent Liaison Officer","Communications Officer","PTA Coordinator"],
+    // Handles outreach to parents/guardians — sending reports, announcements
+    // and general notices. Like Finance, they can look up a student's
+    // record but cannot add, edit or delete it.
+    access: ["dashboard","students","comms","users"],
+  },
+};
+
+// Which NAV section ids a profile may open. Accounts created before this
+// department system existed (no `department` set) fall back to their old
+// legacy `role` so nobody gets silently locked out of everything.
+function deptAccess(p) {
+  if (p?.role === "admin") return "all";
+  const d = DEPARTMENTS[p?.department];
+  if (d) return d.access;
+  if (p?.role === "accountant") return ["dashboard","students","fees"];
+  if (p?.role === "teacher") return ["dashboard","students","teachers","attendance","exams","academic"];
+  return ["dashboard"];
+}
+function hasFullAccess(p) { return deptAccess(p) === "all"; }
+function hasNavAccess(p, navId) {
+  const a = deptAccess(p);
+  return a === "all" || a.includes(navId);
+}
+// One-time setup for username/password/pin login with NO Supabase Auth and NO
+// email involved anywhere — accounts live entirely in the `profiles` table,
+// with passwords hashed by Postgres itself (pgcrypto), checked via the
+// verify_login() function below. Run this once in Supabase → SQL Editor.
+const PROFILES_MIGRATION_SQL = `-- lets Postgres hash/check passwords for us
+create extension if not exists pgcrypto;
+
+-- new columns this account system needs
+alter table profiles add column if not exists username text unique;
+alter table profiles add column if not exists phone text;
+alter table profiles add column if not exists pin text;
+alter table profiles add column if not exists password_hash text;
+alter table profiles add column if not exists photo_url text;
+alter table profiles add column if not exists suspended_at timestamptz;
+alter table profiles add column if not exists deleted_at timestamptz;
+-- profiles.id used to come from auth.users (via a foreign key) — accounts are
+-- created directly here now, so that link has to go, and id needs to generate itself:
+alter table profiles drop constraint if exists profiles_id_fkey;
+alter table profiles alter column id set default gen_random_uuid();
+
+-- Creates a new account. Called from the app's "Create account" screen.
+drop function if exists create_account(text, text, text, text, text, text);
+drop function if exists create_account(text, text, text, text, text, text, text);
+create function create_account(
+  p_full_name text, p_username text, p_department text,
+  p_phone text, p_password text, p_pin text, p_photo_url text default null
+) returns profiles
+language plpgsql security definer as $create_account$
+declare new_row profiles;
+begin
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url)
+  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url)
+  returning * into new_row;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_account$;
+grant execute on function create_account(text,text,text,text,text,text,text) to anon, authenticated;
+
+-- Checks a username + password and returns the profile on success.
+drop function if exists verify_login(text, text);
+create function verify_login(p_username text, p_password text) returns profiles
+language plpgsql security definer as $verify_login$
+declare found_row profiles;
+begin
+  select * into found_row from profiles where username = p_username;
+  if found_row.id is null or found_row.password_hash is null
+     or crypt(p_password, found_row.password_hash) <> found_row.password_hash then
+    raise exception 'Incorrect username or password.';
+  end if;
+  if found_row.deleted_at is not null then
+    raise exception 'This account has been deleted. Contact Administration.';
+  end if;
+  if found_row.suspended_at is not null then
+    raise exception 'This account is suspended. Contact Administration.';
+  end if;
+  found_row.password_hash := null;
+  return found_row;
+end;
+$verify_login$;
+grant execute on function verify_login(text,text) to anon, authenticated;
+
+-- "Forgot password" flow: identity is confirmed with the account's PIN
+-- (no email involved), then the password is reset straight away.
+drop function if exists reset_password(text, text, text);
+create function reset_password(p_username text, p_pin text, p_new_password text) returns void
+language plpgsql security definer as $reset_password$
+declare found_row profiles;
+begin
+  select * into found_row from profiles where username = p_username;
+  if found_row.id is null then
+    raise exception 'No account found with that username.';
+  end if;
+  if found_row.pin is null or found_row.pin = '' or found_row.pin <> p_pin then
+    raise exception 'That PIN does not match our records.';
+  end if;
+  if p_new_password is null or length(p_new_password) < 6 then
+    raise exception 'New password must be at least 6 characters.';
+  end if;
+  update profiles set password_hash = crypt(p_new_password, gen_salt('bf')) where id = found_row.id;
+end;
+$reset_password$;
+grant execute on function reset_password(text,text,text) to anon, authenticated;`;
+
+// One-time setup for the "Request a detail change" flow on the Account page —
+// Academic, Finance and Parents department accounts can't edit their own department,
+// position or role there, so they submit a request here instead, which shows
+// up for Administration to action on the same page.
+const ACCOUNT_REQUESTS_SQL = `create table if not exists account_change_requests (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references profiles(id) on delete cascade,
+  full_name text,
+  department text,
+  message text not null,
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz
+);
+alter table account_change_requests enable row level security;
+create policy "Anyone can read account change requests" on account_change_requests for select using (true);
+create policy "Anyone can create account change requests" on account_change_requests for insert with check (true);
+create policy "Anyone can update account change requests" on account_change_requests for update using (true);
+alter publication supabase_realtime add table account_change_requests;`;
 
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
+  // Accounts no longer go through Supabase Auth at all (see AUTH section below), so
+  // every request — logged in or not — just uses the project's anon key.
   const headers = Object.assign({
     "apikey": SUPABASE_KEY,
-    "Authorization": "Bearer " + (auth ? auth.access_token : SUPABASE_KEY),
+    "Authorization": "Bearer " + SUPABASE_KEY,
     "Content-Type": "application/json",
   }, opts.headers || {});
   let res;
@@ -573,19 +759,73 @@ async function dbSelectActive(table, params={}) {
   catch (e) { return await dbSelect(table, params); }
 }
 
-/* ---------------- AUTH ---------------- */
-async function login(email, password) {
-  const data = await sb(`/auth/v1/token?grant_type=password`, { method:"POST", body: JSON.stringify({ email, password }) });
-  auth = { access_token: data.access_token, user: data.user };
-  const rows = await dbSelect("profiles", { id:`eq.${auth.user.id}` });
-  profile = rows[0] || { id: auth.user.id, full_name: email, role: "staff" };
+/* ---------------- AUTH ----------------
+   No Supabase Auth, no email, no rate limits — this goes straight against the
+   `profiles` table via two Postgres functions (see PROFILES_MIGRATION_SQL
+   below): create_account() and verify_login(). Passwords are hashed with
+   pgcrypto inside those functions; the plain password only ever leaves the
+   browser over HTTPS to be checked/hashed, and is never stored or returned. */
+const REMEMBER_KEY = "novaRememberedUsername";
+function rememberSession(username) {
+  try { localStorage.setItem(REMEMBER_KEY, username); } catch (e) {}
+}
+function clearRememberedSession() {
+  try { localStorage.removeItem(REMEMBER_KEY); } catch (e) {}
+}
+function getRememberedSession() {
+  try { return localStorage.getItem(REMEMBER_KEY) || null; } catch (e) { return null; }
+}
+function scrubProfile(row) {
+  if (!row) return row;
+  const { password_hash, ...rest } = row;
+  return rest;
+}
+async function login(username, password, remember) {
+  const rows = await sb(`/rest/v1/rpc/verify_login`, { method:"POST", body: JSON.stringify({ p_username: username, p_password: password }) });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row || !row.id) throw new Error("Incorrect username or password.");
+  profile = scrubProfile(row);
+  auth = { user: { id: profile.id } }; // no real token — just marks "signed in" for the UI gate below
+  if (remember) rememberSession(username); else clearRememberedSession();
+  pinLocked = false;
   tab = "dashboard";
   render();
 }
-async function signup(email, password, full_name) {
-  await sb(`/auth/v1/signup`, { method:"POST", body: JSON.stringify({ email, password, data: { full_name, role: "staff" } }) });
+// Silently restores a "remembered" session on app launch by just looking the
+// person back up by username — no password, no PIN, straight into the app,
+// every time. Returns true if someone was found, false otherwise (and clears
+// any stale remembered username so we don't keep trying it).
+async function tryRestoreRememberedSession() {
+  const username = getRememberedSession();
+  if (!username) return false;
+  try {
+    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at" });
+    const row = rows[0];
+    if (!row) { clearRememberedSession(); return false; }
+    if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
+    profile = scrubProfile(row);
+    auth = { user: { id: profile.id } };
+    pinLocked = false;
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
-function logout() { auth = null; profile = null; cache = {}; render(); }
+// Creates a new staff account. Department drives what they can see (see
+// deptAccess/hasNavAccess above) — "Administration" already gets full access on
+// its own, so the legacy `role` column just stays "staff" for everyone.
+async function signup({ full_name, username, department, phone, password, pin, photo_url }) {
+  await sb(`/rest/v1/rpc/create_account`, { method:"POST", body: JSON.stringify({
+    p_full_name: full_name, p_username: username, p_department: department || null,
+    p_phone: phone || null, p_password: password, p_pin: pin || null, p_photo_url: photo_url || null,
+  }) });
+}
+function logout() { auth = null; profile = null; cache = {}; clearRememberedSession(); pinLocked = false; render(); }
+// Confirms identity with the account's PIN (no email anywhere in this app),
+// then sets a new password via the reset_password() Postgres function.
+async function resetPassword({ username, pin, new_password }) {
+  await sb(`/rest/v1/rpc/reset_password`, { method:"POST", body: JSON.stringify({ p_username: username, p_pin: pin, p_new_password: new_password }) });
+}
 
 /* ---------------- APP SHELL ---------------- */
 function el(html) { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstChild; }
@@ -677,6 +917,7 @@ function openCameraCapture(onCapture, onUnavailable) {
 }
 
 function render() {
+  if (pinLocked) { renderPinUnlock(); return; }
   if (!auth && !DEV_MODE) { renderLogin(); return; }
   if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
   app().innerHTML = `
@@ -694,7 +935,7 @@ function render() {
           <h1 id="pageTitle"></h1>
           <div class="row" style="gap:10px;">
             ${(DEV_MODE && !auth) ? `<span class="badge badge-amber" id="devBadge" style="cursor:pointer;" title="Click to test the real login screen">DEV MODE — no login</span>` : ""}
-            <div class="who">${profile?.full_name || ""} · <b>${profile?.role || ""}</b></div>
+            <div class="who">${profile?.full_name || ""} · <b>${DEPARTMENTS[profile?.department]?.label || profile?.role || ""}</b>${profile?.position ? ` · ${profile.position}` : ""}</div>
           </div>
         </div>
         <div class="content" id="content"></div>
@@ -709,14 +950,17 @@ function render() {
   if (devBadge) devBadge.onclick = () => { DEV_MODE = false; profile = null; render(); };
   const sidenav = document.getElementById("sidenav");
   const bottomnav = document.getElementById("bottomnav");
-  NAV.forEach(n => {
+  // Only show sections this profile's department (or legacy role) is allowed to open.
+  const visibleNav = NAV.filter(n => hasNavAccess(profile, n.id));
+  if (!hasNavAccess(profile, tab)) tab = (visibleNav[0] || NAV[0]).id;
+  visibleNav.forEach(n => {
     const sItem = el(`<div class="nav-item ${tab===n.id?'active':''}" style="cursor:pointer">${n.icon}<span>${n.label}</span></div>`);
     sItem.onclick = () => { tab = n.id; render(); };
     sidenav.appendChild(sItem);
   });
-  // The sidebar (desktop) shows every section. The bottom nav (mobile) shows every section too,
-  // as a single horizontally-scrollable row (no "More" overflow menu), each with its own icon tint.
-  NAV.forEach(n => {
+  // The sidebar (desktop) shows every accessible section. The bottom nav (mobile) shows the
+  // same set, as a single horizontally-scrollable row (no "More" overflow menu), each with its own icon tint.
+  visibleNav.forEach(n => {
     const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}">${n.icon}<span>${n.label}</span></div>`);
     if (tab !== n.id) bItem.style.color = NAV_ICON_COLOR[n.id] || "var(--ink-soft)";
     bItem.onclick = () => { tab = n.id; render(); };
@@ -731,7 +975,7 @@ function render() {
   pageTitle.style.animation = `${TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
-  const renderers = { dashboard: renderDashboard, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, users: renderUsers, settings: renderSettings, trash: renderTrash };
+  const renderers = { dashboard: renderDashboard, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, comms: renderComms, users: renderUsers, settings: renderSettings, trash: renderTrash };
   (renderers[tab] || renderDashboard)(content).catch(errShow(content));
 }
 function errShow(container) {
@@ -747,6 +991,10 @@ function errShow(container) {
 }
 
 /* ---------------- LOGIN SCREEN ---------------- */
+function departmentSelectOptions(selected) {
+  return `<option value="" ${!selected?'selected':''}>— Select department —</option>` +
+    Object.entries(DEPARTMENTS).map(([key,d])=>`<option value="${key}" ${selected===key?'selected':''}>${d.label}</option>`).join("");
+}
 function renderLogin() {
   let mode = "login";
   function draw() {
@@ -755,46 +1003,149 @@ function renderLogin() {
         <div class="brand">${sidebarBrandHtml()}</div>
         <div id="loginMsg"></div>
         <div id="loginForm"></div>
-        <div class="tiny-note">${mode==="login" ? `New school account? <span class="link-btn" id="toSignup" style="cursor:pointer">Create one</span>` : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
-        <div class="tiny-note">First user should be promoted to <b>admin</b> from Supabase → Table Editor → profiles.</div>
+        <div class="tiny-note">${mode==="login" ? `New school account? <span class="link-btn" id="toSignup" style="cursor:pointer">Create one</span>` : mode==="forgot" ? "" : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
     if (mode === "login") {
       formDiv.innerHTML = `
-        <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@school.edu" /></div>
+        <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
         <div class="field"><label>Password</label><input id="password" type="password" placeholder="••••••••" /></div>
+        <label class="row" style="gap:8px;align-items:center;font-size:13px;font-weight:600;color:var(--ink-soft);margin:4px 0 2px;">
+          <input id="remember" type="checkbox" style="width:16px;height:16px;" /> Remember me on this device
+        </label>
         <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Log in</button>
+        <div class="tiny-note" style="text-align:right;"><span class="link-btn" id="toForgot" style="cursor:pointer">Forgot password?</span></div>
       `;
       document.getElementById("submitBtn").onclick = async () => {
-        const email = document.getElementById("email").value.trim();
+        const username = document.getElementById("username").value.trim();
         const password = document.getElementById("password").value;
+        const remember = document.getElementById("remember").checked;
         const msg = document.getElementById("loginMsg");
         msg.innerHTML = "";
-        try { await login(email, password); }
+        try { await login(username, password, remember); }
         catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
       };
       document.getElementById("toSignup").onclick = () => { mode = "signup"; draw(); };
-    } else {
+      document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
+    } else if (mode === "forgot") {
       formDiv.innerHTML = `
-        <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
-        <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@school.edu" /></div>
-        <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-        <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
+        <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Reset your password</div>
+        <div class="tiny-note" style="margin-bottom:10px;">Confirm it's you with your username and PIN, then set a new password.</div>
+        <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="jane.okafor" /></div>
+        <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN" /></div>
+        <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="At least 6 characters" /></div>
+        <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="Repeat new password" /></div>
+        <button class="btn btn-primary" id="resetBtn" style="margin-top:6px;">Reset password</button>
+        <div class="tiny-note"><span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
       `;
-      document.getElementById("submitBtn").onclick = async () => {
-        const full_name = document.getElementById("fname").value.trim();
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
+      document.getElementById("resetBtn").onclick = async () => {
+        const username = document.getElementById("f_username").value.trim();
+        const pin = document.getElementById("f_pin").value.trim();
+        const new_password = document.getElementById("f_newpass").value;
+        const confirmPass = document.getElementById("f_newpass2").value;
         const msg = document.getElementById("loginMsg");
         msg.innerHTML = "";
-        try { await signup(email, password, full_name); msg.innerHTML = `<div class="msg-ok">Account created. You can log in now.</div>`; mode="login"; draw(); }
+        try {
+          if (!username || !pin) throw new Error("Enter your username and PIN.");
+          if (new_password.length < 6) throw new Error("New password must be at least 6 characters.");
+          if (new_password !== confirmPass) throw new Error("Passwords don't match.");
+          await resetPassword({ username, pin, new_password });
+          msg.innerHTML = `<div class="msg-ok">Password reset. You can log in now.</div>`; mode="login"; draw();
+        }
+        catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
+      };
+      document.getElementById("toLogin2").onclick = () => { mode = "login"; draw(); };
+    } else {
+      let signupPhotoDataUrl = null;
+      formDiv.innerHTML = `
+        <div class="field" style="text-align:center;">
+          <label>Photo (optional)</label>
+          <div id="signupPhotoWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml("", null, 64)}</div>
+          <div class="row" style="justify-content:center;gap:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" id="signupLiveBtn">Live</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="signupPickBtn">Pick</button>
+          </div>
+          <input id="signupPhotoLive" type="file" accept="image/*" capture="user" style="display:none;"/>
+          <input id="signupPhotoPick" type="file" accept="image/*" style="display:none;"/>
+        </div>
+        <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
+        <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
+        <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select></div>
+        <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+        <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
+        <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+        <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
+      `;
+      const signupLiveInput = document.getElementById("signupPhotoLive");
+      const signupPickInput = document.getElementById("signupPhotoPick");
+      const setSignupPreview = (dataUrl) => { document.getElementById("signupPhotoWrap").innerHTML = avatarHtml("", dataUrl, 64); };
+      document.getElementById("signupLiveBtn").onclick = () => {
+        openCameraCapture(
+          (dataUrl) => { signupPhotoDataUrl = dataUrl; signupLiveInput.value = ""; signupPickInput.value = ""; setSignupPreview(dataUrl); },
+          () => { toast("In-page camera isn't available here — opening the picker instead.", false); signupLiveInput.click(); }
+        );
+      };
+      document.getElementById("signupPickBtn").onclick = () => signupPickInput.click();
+      signupLiveInput.onchange = async () => {
+        if (!signupLiveInput.files[0]) return;
+        signupPhotoDataUrl = null; signupPickInput.value = "";
+        const dataUrl = await fileToDataURL(signupLiveInput.files[0]);
+        if (dataUrl) { signupPhotoDataUrl = dataUrl; setSignupPreview(dataUrl); }
+      };
+      signupPickInput.onchange = async () => {
+        if (!signupPickInput.files[0]) return;
+        signupPhotoDataUrl = null; signupLiveInput.value = "";
+        const dataUrl = await fileToDataURL(signupPickInput.files[0]);
+        if (dataUrl) { signupPhotoDataUrl = dataUrl; setSignupPreview(dataUrl); }
+      };
+      document.getElementById("submitBtn").onclick = async () => {
+        const full_name = document.getElementById("fname").value.trim();
+        const username = document.getElementById("username").value.trim();
+        const department = document.getElementById("department").value;
+        const phone = document.getElementById("phone").value.trim();
+        const password = document.getElementById("password").value;
+        const pin = document.getElementById("pin").value.trim();
+        const msg = document.getElementById("loginMsg");
+        msg.innerHTML = "";
+        try {
+          if (!full_name || !username || !password) throw new Error("Full name, username and password are required.");
+          await signup({ full_name, username, department, phone, password, pin, photo_url: signupPhotoDataUrl });
+          msg.innerHTML = `<div class="msg-ok">Account created. You can log in now.</div>`; mode="login"; draw();
+        }
         catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
       };
       document.getElementById("toLogin").onclick = () => { mode = "login"; draw(); };
     }
   }
   draw();
+}
+
+/* ---------------- PIN UNLOCK SCREEN ----------------
+   Shown instead of the login form when a "remembered" session was silently
+   restored on launch — a quick PIN re-confirms it's really this person before
+   handing back full access, without making them type their password again. */
+function renderPinUnlock() {
+  app().innerHTML = `
+    <div class="login-wrap"><div class="login-card">
+      <div class="brand">${sidebarBrandHtml()}</div>
+      <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Welcome back, ${profile?.full_name || ""}</div>
+      <div id="loginMsg"></div>
+      <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••" autofocus /></div>
+      <button class="btn btn-primary" id="unlockBtn" style="margin-top:6px;">Unlock</button>
+      <div class="tiny-note"><span class="link-btn" id="useLoginInstead" style="cursor:pointer">Not you? Log in with password</span></div>
+    </div></div>
+  `;
+  const tryUnlock = () => {
+    const entered = document.getElementById("pinInput").value.trim();
+    const msg = document.getElementById("loginMsg");
+    if (!entered) { msg.innerHTML = `<div class="err">Enter your PIN.</div>`; return; }
+    if (entered === String(profile?.pin || "")) { pinLocked = false; render(); }
+    else msg.innerHTML = `<div class="err">Incorrect PIN.</div>`;
+  };
+  document.getElementById("unlockBtn").onclick = tryUnlock;
+  document.getElementById("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock(); });
+  document.getElementById("useLoginInstead").onclick = () => { auth = null; profile = null; pinLocked = false; clearRememberedSession(); render(); };
 }
 
 /* ---------------- MODAL HELPER ---------------- */
@@ -1007,6 +1358,7 @@ const TRASH_TABLES = [
   { table:"exam_types", label:"Exam types", nameField:"name", icon:ic.exam },
   { table:"grades", label:"Grades", nameField:"grade", icon:ic.exam },
   { table:"fee_structures", label:"Fee items", nameField:"item_name", icon:ic.fees },
+  { table:"school_communications", label:"Comms", nameField:"title", icon:ic.megaphone },
 ];
 async function softDelete(table, id) {
   try { await dbUpdate(table, id, { deleted_at: new Date().toISOString() }); }
@@ -1015,8 +1367,8 @@ async function softDelete(table, id) {
 async function restoreRecord(table, id) { await dbUpdate(table, id, { deleted_at: null }); }
 
 /* ---------------- HEADER COLOR + ANIMATION PER TAB ---------------- */
-const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
-const TAB_ANIM = { dashboard:"riseIn", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
+const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", comms:"#c2410c", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
+const TAB_ANIM = { dashboard:"riseIn", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
 
 /* ---------------- DASHBOARD ---------------- */
 async function renderDashboard(container) {
@@ -1465,6 +1817,10 @@ async function renderStudents(container, opts={}) {
   if (search) params.or = `(full_name.ilike.*${encodeURIComponent(search)}*,admission_no.ilike.*${encodeURIComponent(search)}*)`;
   if (classFilter) params.class_id = `eq.${classFilter}`;
   const students = await dbSelectActive("students", params);
+  // Only Administration (full access) and Academic can register/edit/remove students.
+  // Finance and Parents departments can open this page to look someone up, but get
+  // no plus icon, no edit button and no delete option — view only.
+  const canManageStudents = hasFullAccess(profile) || profile?.department === "academic";
   container.innerHTML = `
     <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
     <div class="search-bar">
@@ -1493,13 +1849,13 @@ async function renderStudents(container, opts={}) {
       ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
       ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
       ["Status", s.status],
-    ], () => openStudentModal(container, classes, s));
-    const edit = () => openStudentModal(container, classes, s);
-    const del = async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter}); })(); };
+    ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null);
+    const edit = canManageStudents ? (() => openStudentModal(container, classes, s)) : null;
+    const del = canManageStudents ? (async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter}); })(); }) : null;
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
-  addFab(container, () => openStudentModal(container, classes, null));
+  if (canManageStudents) addFab(container, () => openStudentModal(container, classes, null));
 }
 function openStudentModal(container, classes, s) {
   const isEdit = !!s;
@@ -2432,6 +2788,79 @@ async function renderResultsOverview(body, filters={}) {
     list.appendChild(row);
   });
 }
+/* ---------------- COMMS: Announcements / Reports / Notices ----------------
+   One page, three pill tabs, one small table (school_communications) told
+   apart by `type`. Administration always has this (via "all" access); the
+   Parents & Community department is the other one that sees it, for sending
+   things out to parents/guardians. */
+const COMMS_TYPES = [
+  ["announcement","Announcements","Send announcement"],
+  ["report","Reports","Send report"],
+  ["notice","Notices","Deliver information"],
+];
+async function renderComms(container, sub="announcement") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pills = document.getElementById("pills");
+  COMMS_TYPES.forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderComms(container, id);
+    pills.appendChild(p);
+  });
+  renderCommsList(document.getElementById("secBody"), container, sub);
+}
+async function renderCommsList(body, container, type) {
+  const meta = COMMS_TYPES.find(t=>t[0]===type) || COMMS_TYPES[0];
+  let items = [];
+  let missingTable = false;
+  try { items = await dbSelectActive("school_communications", { type:`eq.${type}`, order:"created_at.desc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = `<div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Comms needs a small table in your database before you can send anything.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${COMMUNICATIONS_SQL}</pre>
+      <button class="btn btn-primary" id="retryCommsBtn" style="margin-top:12px;">I've run it — Refresh</button>
+    </div>`;
+    document.getElementById("retryCommsBtn").onclick = () => renderCommsList(body, container, type);
+    return;
+  }
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:#c2410c;">${meta[1]}</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} ${meta[2]}</button></div>
+    <div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = items.length ? "" : emptyState(`No ${meta[1].toLowerCase()} sent yet.`);
+  items.forEach(c => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.megaphone}</div>
+      <div class="list-main"><div class="list-title">${c.title}</div>
+      <div class="list-sub">${c.audience || "Everyone"} · ${new Date(c.created_at).toLocaleDateString()}</div></div></div>`);
+    const view = () => openViewModal(c.title, [
+      ["Audience", c.audience || "Everyone"], ["Message", c.message],
+      ["Sent by", c.created_by], ["Sent on", new Date(c.created_at).toLocaleString()],
+    ], () => openCommsModal(body, container, type, c));
+    const edit = () => openCommsModal(body, container, type, c);
+    const del = async () => { if (await customConfirm(`Delete "${c.title}"?`, { danger:true, okLabel:"Delete" })) safe(async()=>{ await softDelete("school_communications", c.id); renderCommsList(body, container, type); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openCommsModal(body, container, type, null);
+}
+function openCommsModal(body, container, type, c) {
+  const isEdit = !!c;
+  const meta = COMMS_TYPES.find(t=>t[0]===type) || COMMS_TYPES[0];
+  const audiences = ["Everyone","All parents","All staff","All students","Specific class"];
+  openModal(isEdit ? `Edit ${meta[1].slice(0,-1).toLowerCase()}` : meta[2], `
+    <div class="field"><label>Title</label><input id="f_title" placeholder="e.g. Term 2 opening date" value="${c?.title||''}"/></div>
+    <div class="field"><label>Audience</label><select id="f_audience">${audiences.map(a=>`<option ${c?.audience===a?'selected':''}>${a}</option>`).join("")}</select></div>
+    <div class="field"><label>Message</label><textarea id="f_message" rows="5" placeholder="Write the full message here…">${c?.message||''}</textarea></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_title","Title"], ["f_message","Message"]]);
+    const payload = { type, title: val(ov,"f_title"), audience: val(ov,"f_audience"), message: val(ov,"f_message"), created_by: profile?.full_name || null };
+    if (isEdit) await dbUpdate("school_communications", c.id, payload); else await dbInsert("school_communications", payload);
+    renderCommsList(body, container, type);
+  }, { saveLabel: isEdit ? "Save changes" : "Send" });
+}
+
 // Admin-defined grade bands (Setup → Grades), cached after first load so report cards
 // and results don't re-fetch on every row. Falls back to a default A–F scale if the
 // admin hasn't set up any grades yet (or the grades table doesn't exist).
@@ -2508,41 +2937,188 @@ async function renderReportCard(body) {
   if (exams.length) loadStudents();
 }
 
-/* ---------------- USERS & ROLES ---------------- */
+/* ---------------- ACCOUNT MANAGEMENT ----------------
+   Renamed from "Users & Roles" — every department can open this page for
+   their own account (view details, log in/out is always unrestricted).
+   Only Administration can edit department/position/role for anyone,
+   including themselves. Academic, Finance and Parents accounts can't change those
+   details directly — they submit a request here, which Administration
+   sees and actions further down this same page. */
 async function renderUsers(container) {
-  if (profile.role !== "admin") {
-    container.innerHTML = `<div class="card">Only admins can manage users and roles. Ask your school admin to update your role in the profiles table if this is incorrect.</div>`;
+  const isAdmin = hasFullAccess(profile);
+  const restrictedDept = profile?.department === "academic" || profile?.department === "finance" || profile?.department === "parents";
+  const deptLabel = DEPARTMENTS[profile?.department]?.label || "";
+
+  const meCard = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-head"><h3 style="color:var(--navy-2);">My Account</h3></div>
+      <div class="list-row" style="flex-wrap:wrap;">
+        ${avatarHtml(profile?.full_name, profile?.photo_url)}
+        <div class="list-main">
+          <div class="list-title">${profile?.full_name || ""}</div>
+          <div class="list-sub">${profile?.phone || ""}${profile?.username ? ` · @${profile.username}` : ""}</div>
+        </div>
+        <div class="list-sub">${deptLabel || "No department"}${profile?.position ? ` · ${profile.position}` : ""}</div>
+      </div>
+      <div class="tiny-note" style="margin-top:10px;">You can log in and log out any time — that's never restricted by department.</div>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn" style="margin-top:8px;">${ic.logout} Log out</button>
+      ${restrictedDept ? `
+        <div class="tiny-note" style="margin-top:8px;">${deptLabel} accounts can't change department, position or role here — send Administration a request instead and they'll update it for you.</div>
+        <button class="btn btn-ghost btn-sm" id="reqBtn" style="margin-top:8px;">${ic.edit} Request a detail change</button>
+      ` : ""}
+    </div>`;
+
+  if (!isAdmin) {
+    container.innerHTML = meCard + `<div id="myReqs"></div>`;
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) logoutBtn.onclick = () => {
+      if (confirm("Log out?")) logout();
+    };
+    const reqBtn = document.getElementById("reqBtn");
+    if (reqBtn) reqBtn.onclick = () => {
+      openModal("Request a detail change", `
+        <div class="tiny-note" style="text-align:left;">Tell Administration what you'd like changed (department, position, phone number, etc) and why — they'll review it and update your account.</div>
+        <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder="e.g. Please move me from Teaching Staff to Head of Department (HOD)"></textarea></div>
+        <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if sending fails)</summary>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ACCOUNT_REQUESTS_SQL}</pre></details>
+      `, async (ov) => {
+        requireFields(ov, [["f_msg","Message"]]);
+        await dbInsert("account_change_requests", { profile_id: profile.id, full_name: profile.full_name, department: profile.department, message: val(ov,"f_msg") });
+        toast("Your request was sent to Administration.", false);
+        renderUsers(container);
+      }, { saveLabel: "Send request" });
+    };
+    const myReqs = document.getElementById("myReqs");
+    try {
+      const reqs = await dbSelect("account_change_requests", { profile_id:`eq.${profile.id}`, order:"created_at.desc", select:"id,message,status,created_at" });
+      myReqs.innerHTML = !reqs.length ? "" : `<div class="section-head"><h3 style="color:var(--navy-2);">Your requests</h3></div><div class="card">` +
+        reqs.map(r => `<div class="list-row"><div class="list-main"><div class="list-title">${r.message}</div><div class="list-sub">${new Date(r.created_at).toLocaleDateString()}</div></div>
+          <span class="badge ${r.status==='pending'?'badge-amber':r.status==='dismissed'?'badge-grey':'badge-green'}">${r.status}</span></div>`).join("") + `</div>`;
+    } catch (e) { /* table not set up yet — quietly skip, the SQL is in the request modal */ }
     return;
   }
-  const profiles = await dbSelect("profiles", { order:"full_name.asc" });
-  container.innerHTML = `<div class="section-head"><h3 style="color:var(--navy-2);">Users &amp; Roles</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Invite user</button></div><div class="card" id="list"></div>`;
+
+  const profiles = await dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at" });
+  container.innerHTML = meCard +
+    `<div class="section-head"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
+    <div class="tiny-note" style="margin-bottom:10px;">Department controls which sections of the app someone can open. Administration gets full access to everything, including this page. New staff create their own login from the sign-in screen's "Create one" link — set their department and position here afterwards. Suspend or delete an account to block its login instantly; both can be reversed any time from this list.</div>
+    <div class="card" id="list"></div>
+    <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
+    <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
+    <div class="card" id="reqList"></div>`;
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) logoutBtn.onclick = () => {
+    if (confirm("Log out?")) logout();
+  };
   const list = document.getElementById("list");
+  const deptOptions = (selected) => `<option value="" ${!selected?'selected':''}>— No department —</option>` +
+    Object.entries(DEPARTMENTS).map(([key,d])=>`<option value="${key}" ${selected===key?'selected':''}>${d.label}</option>`).join("");
+  const posOptions = (deptKey, selected) => {
+    const positions = DEPARTMENTS[deptKey]?.positions || [];
+    if (!positions.length) return `<option value="">—</option>`;
+    return `<option value="" ${!selected?'selected':''}>— Select position —</option>` +
+      positions.map(pos=>`<option value="${pos}" ${selected===pos?'selected':''}>${pos}</option>`).join("");
+  };
   profiles.forEach(p => {
-    const row = el(`<div class="list-row"><div class="avatar">${initials(p.full_name)}</div>
-      <div class="list-main"><div class="list-title">${p.full_name}</div><div class="list-sub">${p.phone||''}</div></div>
-      <select class="roleSel" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);">
-        ${["admin","teacher","accountant","staff"].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${r}</option>`).join("")}
-      </select>
+    const isSelf = p.id === profile.id;
+    const isDeleted = !!p.deleted_at;
+    const isSuspended = !!p.suspended_at;
+    const badges = `${isDeleted ? `<span class="badge badge-grey">Deleted</span>` : isSuspended ? `<span class="badge badge-amber">Suspended</span>` : ""}`;
+    const row = el(`<div class="list-row" style="flex-wrap:wrap;${isDeleted?'opacity:.6;':''}">
+      ${avatarHtml(p.full_name, p.photo_url)}
+      <div class="list-main"><div class="list-title">${p.full_name} ${badges}</div><div class="list-sub">${p.phone||''}${p.username?` · @${p.username}`:''}</div></div>
+      ${isDeleted ? "" : `
+        <select class="deptSel" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);">${deptOptions(p.department)}</select>
+        <select class="posSel" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);">${posOptions(p.department, p.position)}</select>
+        <select class="roleSel" title="Legacy role — Administration department already grants full access on its own" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--line);">
+          ${["admin","teacher","accountant","staff"].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${r}</option>`).join("")}
+        </select>
+      `}
+      <div class="row" style="gap:6px;width:100%;justify-content:flex-end;margin-top:6px;">
+        ${isSelf ? `<span class="tiny-note" style="margin:0;">This is you</span>` : isDeleted ? `
+          <button class="btn btn-ghost btn-sm recoverBtn">${ic.check} Recover account</button>
+        ` : `
+          <button class="btn btn-ghost btn-sm suspendBtn">${isSuspended ? ic.check+' Unsuspend' : ic.keyLock+' Suspend'}</button>
+          <button class="btn btn-ghost btn-sm deleteBtn" style="color:var(--red);">${ic.trash} Delete</button>
+        `}
+      </div>
     </div>`);
-    row.querySelector(".roleSel").onchange = safe(async (e) => { await dbUpdate("profiles", p.id, { role: e.target.value }); toast(`${p.full_name}'s role updated.`, false); });
+    if (!isDeleted) {
+      const deptSel = row.querySelector(".deptSel");
+      const posSel = row.querySelector(".posSel");
+      deptSel.onchange = safe(async (e) => {
+        const newDept = e.target.value || null;
+        posSel.innerHTML = posOptions(newDept, null);
+        await dbUpdate("profiles", p.id, { department: newDept, position: null });
+        toast(`${p.full_name}'s department updated.`, false);
+      });
+      posSel.onchange = safe(async (e) => {
+        await dbUpdate("profiles", p.id, { position: e.target.value || null });
+        toast(`${p.full_name}'s position updated.`, false);
+      });
+      row.querySelector(".roleSel").onchange = safe(async (e) => { await dbUpdate("profiles", p.id, { role: e.target.value }); toast(`${p.full_name}'s role updated.`, false); });
+    }
+    if (!isSelf) {
+      if (isDeleted) {
+        row.querySelector(".recoverBtn").onclick = safe(async () => {
+          if (!(await customConfirm(`Restore ${p.full_name}'s account?`))) return;
+          await dbUpdate("profiles", p.id, { deleted_at: null });
+          toast(`${p.full_name}'s account restored.`, false);
+          renderUsers(container);
+        });
+      } else {
+        row.querySelector(".suspendBtn").onclick = safe(async () => {
+          if (isSuspended) {
+            await dbUpdate("profiles", p.id, { suspended_at: null });
+            toast(`${p.full_name}'s account unsuspended.`, false);
+          } else {
+            if (!(await customConfirm(`Suspend ${p.full_name}? They won't be able to log in until you unsuspend them.`, { danger:true, okLabel:"Suspend" }))) return;
+            await dbUpdate("profiles", p.id, { suspended_at: new Date().toISOString() });
+            toast(`${p.full_name}'s account suspended.`, false);
+          }
+          renderUsers(container);
+        });
+        row.querySelector(".deleteBtn").onclick = safe(async () => {
+          if (!(await customConfirm(`Delete ${p.full_name}'s account? You can recover it later from this page.`, { danger:true, okLabel:"Delete" }))) return;
+          await dbUpdate("profiles", p.id, { deleted_at: new Date().toISOString() });
+          toast(`${p.full_name}'s account deleted.`, false);
+          renderUsers(container);
+        });
+      }
+    }
     list.appendChild(row);
   });
-  document.getElementById("addBtn").onclick = () => {
-    openModal("Invite a user", `
-      <div class="field"><label>Full name</label><input id="f_name"/></div>
-      <div class="field"><label>Email</label><input id="f_email" type="email"/></div>
-      <div class="field"><label>Temporary password</label><input id="f_pw" type="password" placeholder="At least 6 characters"/></div>
-      <div class="tiny-note" style="text-align:left;">They'll be created with the "staff" role — change it from the list after they sign up.</div>
-    `, async (ov) => {
-      await signup(val(ov,"f_email"), val(ov,"f_pw"), val(ov,"f_name"));
+  const reqList = document.getElementById("reqList");
+  try {
+    const reqs = await dbSelect("account_change_requests", { status:"eq.pending", order:"created_at.asc", select:"id,full_name,department,message,created_at" });
+    reqList.innerHTML = !reqs.length ? `<div class="tiny-note">No pending requests.</div>` :
+      reqs.map(r => `<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;">
+        <div class="list-main">
+          <div class="list-title">${r.full_name || "Unknown"} <span class="badge badge-amber">${DEPARTMENTS[r.department]?.label || r.department || "No department"}</span></div>
+          <div class="list-sub">${r.message}</div>
+          <div class="list-sub">${new Date(r.created_at).toLocaleString()}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm dismissBtn" data-id="${r.id}">Dismiss</button>
+        <button class="btn btn-primary btn-sm doneBtn" data-id="${r.id}">${ic.check} Mark done</button>
+      </div>`).join("");
+    reqList.querySelectorAll(".doneBtn").forEach(btn => btn.onclick = safe(async () => {
+      await dbUpdate("account_change_requests", btn.dataset.id, { status:"resolved", resolved_at:new Date().toISOString() });
+      toast("Request marked as done.", false);
       renderUsers(container);
-    }, { saveLabel: "Create" });
-  };
+    }));
+    reqList.querySelectorAll(".dismissBtn").forEach(btn => btn.onclick = safe(async () => {
+      await dbUpdate("account_change_requests", btn.dataset.id, { status:"dismissed", resolved_at:new Date().toISOString() });
+      toast("Request dismissed.", false);
+      renderUsers(container);
+    }));
+  } catch (e) {
+    reqList.innerHTML = `<div class="tiny-note">Request history isn't set up yet — the one-time database setup appears when a request is sent. Run it in Supabase → SQL Editor, then refresh.</div>`;
+  }
 }
 
 /* ---------------- SCHOOL SETTINGS ---------------- */
 async function renderSettings(container) {
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = hasFullAccess(profile);
   let row = null, missingTable = false;
   try {
     const rows = await dbSelect("school_settings", { id:"eq.1" });
@@ -2879,7 +3455,7 @@ function openDateCalendar(inputEl) {
 document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 
-(async function boot() { await loadSchoolSettings(); render(); })();
+(async function boot() { await loadSchoolSettings(); await tryRestoreRememberedSession(); render(); })();
 
 /* ---------------- PWA INSTALL SUPPORT ----------------
    Registers a minimal service worker (generated in-memory as a Blob,
@@ -2961,7 +3537,14 @@ function pwaOverlayShell(bodyHtml, opts) {
       <div class="pwa-title">${opts.title || "Install Nova School"}</div>
       <div class="pwa-sub">${opts.sub || "Nova School Manager only runs as an installed app. Install it once to your device to continue — this only takes a moment."}</div>
       <div class="pwa-body">${bodyHtml}</div>
+      ${DEV_MODE ? `<div class="tiny-note" style="margin-top:14px;"><button type="button" id="pwaDevSkip" class="btn btn-ghost btn-sm">Skip install (dev mode)</button></div>` : ""}
     </div>`;
+}
+function pwaWireDevSkip(overlay) {
+  if (!DEV_MODE) return;
+  overlay.addEventListener("click", (e) => {
+    if (e.target && e.target.id === "pwaDevSkip") pwaShowApp();
+  });
 }
 
 function renderPwaChecking(overlay) {
@@ -3036,30 +3619,11 @@ function renderPwaAlreadyInstalled(overlay) {
 }
 
 function initPwaInstallOverlay() {
-  const overlay = document.getElementById("pwaInstallOverlay");
-  if (!overlay) return;
-  const p = detectPwaPlatform();
-
-  // Only the installed, standalone app is ever allowed to show real data.
-  if (p.isStandalone) { pwaShowApp(); return; }
-
-  overlay.style.display = "flex";
-
-  // Previously installed (flag set on a past standalone launch or install
-  // event) but somehow opened via a regular browser link/tab right now —
-  // point them at the real app rather than ever unlocking #app here.
-  if (pwaWasInstalled()) { renderPwaAlreadyInstalled(overlay); return; }
-
-  if (p.isIOS) { renderPwaIOS(overlay); return; }
-  if (p.isFirefox) { renderPwaFirefox(overlay); return; }
-
-  // Chromium-family: wait briefly for the native install-eligibility event.
-  if (deferredInstallPrompt) { renderPwaReady(overlay); return; }
-  renderPwaChecking(overlay);
-  window.__pwaEventArrived = () => { if (overlay.style.display === "flex") renderPwaReady(overlay); };
-  setTimeout(() => {
-    if (overlay.style.display === "flex" && !deferredInstallPrompt) renderPwaFallback(overlay);
-  }, 2000);
+  // The install-gate is disabled — the app opens directly to the login screen
+  // (or straight into the app, for a remembered session) whether or not it's
+  // installed to the home screen. The functions above are kept in case this
+  // gate is ever turned back on, but nothing calls into them anymore.
+  pwaShowApp();
 }
 
 initPwaInstallOverlay();
