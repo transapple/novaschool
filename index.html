@@ -253,7 +253,7 @@
   .roll-name{font-weight:700;font-size:14.5px;color:var(--ink);white-space:normal;overflow:visible;word-break:break-word;}
   .roll-sub{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
   .roll-row .att-btns{width:100%;}
-  .roll-row .att-btn{flex:1;padding:9px 10px;font-size:12.5px;text-align:center;}
+  .roll-row .att-btn{flex:1;padding:5px 6px;font-size:10px;text-align:center;}
   .att-btn.p.on{background:#e5f6ee;color:var(--teal-dark);border-color:var(--teal);}
 
   /* ---- Masthead (mobile branding strip; sidebar handles this on desktop) ---- */
@@ -512,6 +512,13 @@ const NAV = [
   {id:"settings", label:"Settings", icon:ic.sliders},
   {id:"trash", label:"Trash", icon:ic.trash},
 ];
+// Distinct icon tint per section in the bottom nav (inactive state only — the active
+// tab keeps the standard teal highlight from the .bn-item.active CSS class).
+const NAV_ICON_COLOR = {
+  dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)",
+  attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
+  academic:"#0e9488", users:"var(--navy-2)", settings:"#7a4fc4", trash:"var(--slate)",
+};
 
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
@@ -614,8 +621,9 @@ function openCameraCapture(onCapture, onUnavailable) {
     <div class="modal" style="max-width:420px;">
       <button class="modal-close">&times;</button>
       <h3>Take photo</h3>
-      <div style="border-radius:12px;overflow:hidden;background:#000;margin-top:10px;">
+      <div style="border-radius:12px;overflow:hidden;background:#000;margin-top:10px;position:relative;">
         <video id="camVideo" autoplay playsinline style="width:100%;display:block;max-height:60vh;object-fit:cover;"></video>
+        <button type="button" class="btn btn-ghost btn-sm" id="camSwitch" style="position:absolute;top:8px;right:8px;background:rgba(255,255,255,.9);">${ic.camera} Switch</button>
       </div>
       <div class="form-actions">
         <button class="btn btn-ghost" id="camCancel">Cancel</button>
@@ -625,16 +633,30 @@ function openCameraCapture(onCapture, onUnavailable) {
   </div>`);
   document.body.appendChild(overlay);
   const video = overlay.querySelector("#camVideo");
-  let stream = null, settled = false;
+  let stream = null, settled = false, facing = "user";
   const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); };
   const close = () => { stop(); overlay.remove(); };
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#camCancel").onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   // This call is what triggers the browser/OS's "Allow camera access?" permission prompt.
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-    .then(s => { if (settled) { s.getTracks().forEach(t=>t.stop()); return; } stream = s; video.srcObject = s; })
-    .catch(() => { settled = true; close(); onUnavailable && onUnavailable(); });
+  const startCamera = (mode) => {
+    stop();
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false })
+      .then(s => { if (settled) { s.getTracks().forEach(t=>t.stop()); return; } stream = s; video.srcObject = s; })
+      .catch(() => {
+        // If the requested facing mode isn't available on this device, fall back to whatever camera we can get.
+        if (mode !== "user") return navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then(s => { if (settled) { s.getTracks().forEach(t=>t.stop()); return; } stream = s; video.srcObject = s; })
+          .catch(() => { settled = true; close(); onUnavailable && onUnavailable(); });
+        settled = true; close(); onUnavailable && onUnavailable();
+      });
+  };
+  startCamera(facing);
+  overlay.querySelector("#camSwitch").onclick = () => {
+    facing = facing === "user" ? "environment" : "user";
+    startCamera(facing);
+  };
   overlay.querySelector("#camCapture").onclick = () => {
     if (!stream) return;
     settled = true;
@@ -685,23 +707,14 @@ function render() {
     sItem.onclick = () => { tab = n.id; render(); };
     sidenav.appendChild(sItem);
   });
-  // The sidebar (desktop) shows every section. The bottom nav (mobile) only has room for a
-  // handful of icons, so it shows the most-used sections plus a "More" sheet for the rest —
-  // instead of cramming all of NAV into one long scrolling row.
-  const BOTTOM_PRIMARY_IDS = ["dashboard","students","attendance","fees"];
-  const primaryItems = BOTTOM_PRIMARY_IDS.map(id => NAV.find(n=>n.id===id)).filter(Boolean);
-  const moreItems = NAV.filter(n => !BOTTOM_PRIMARY_IDS.includes(n.id));
-  const isMoreActive = moreItems.some(n => n.id === tab);
-  primaryItems.forEach(n => {
+  // The sidebar (desktop) shows every section. The bottom nav (mobile) shows every section too,
+  // as a single horizontally-scrollable row (no "More" overflow menu), each with its own icon tint.
+  NAV.forEach(n => {
     const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}">${n.icon}<span>${n.label}</span></div>`);
+    if (tab !== n.id) bItem.style.color = NAV_ICON_COLOR[n.id] || "var(--ink-soft)";
     bItem.onclick = () => { tab = n.id; render(); };
     bottomnav.appendChild(bItem);
   });
-  const moreBtn = el(`<div class="bn-item ${isMoreActive?'active':''}">${ic.more}<span>More</span></div>`);
-  moreBtn.onclick = () => openActionSheet(moreItems.map(n => ({
-    label: n.label, icon: n.icon, onClick: () => { tab = n.id; render(); },
-  })));
-  bottomnav.appendChild(moreBtn);
   const activeBn = bottomnav.querySelector(".bn-item.active");
   if (activeBn) activeBn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
   const pageTitle = document.getElementById("pageTitle");
@@ -1002,24 +1015,29 @@ const TAB_ANIM = { dashboard:"riseIn", students:"slideInLeft", teachers:"popScal
 async function renderDashboard(container) {
   const [students, teachers, classes] = await Promise.all([
     dbSelectActive("students", { status:"eq.active", select:"id" }),
-    dbSelectActive("teachers", { status:"eq.active", select:"id" }),
+    dbSelectActive("teachers", { select:"id" }),
     dbSelectActive("classes", { select:"id" }),
   ]);
   const today = new Date().toISOString().slice(0,10);
   let attToday = [];
   try { attToday = await dbSelect("attendance", { date:`eq.${today}`, select:"status" }); } catch(e){}
   const present = attToday.filter(a=>a.status==="present").length;
+  let staffAttToday = [];
+  try { staffAttToday = await dbSelect("staff_attendance", { date:`eq.${today}`, select:"status" }); } catch(e){}
+  const staffPresent = staffAttToday.filter(a=>a.status==="present").length;
   container.innerHTML = `
     <div class="stat-grid">
       <div class="stat"><div class="num">${students.length}</div><div class="lbl">Total students</div></div>
-      <div class="stat"><div class="num">${teachers.length}</div><div class="lbl">Active staff</div></div>
+      <div class="stat"><div class="num">${teachers.length}</div><div class="lbl">Total staff</div></div>
       <div class="stat" id="presentTodayStat" style="cursor:pointer;"><div class="num">${present}</div><div class="lbl">Total present today</div></div>
+      <div class="stat" id="staffPresentTodayStat" style="cursor:pointer;"><div class="num">${staffPresent}</div><div class="lbl">Present staff today</div></div>
     </div>
     <div class="card" id="panelAttendanceByClass"><div class="center-loading">Loading…</div></div>
     <div class="card" id="panelActivity"><div class="center-loading">Loading…</div></div>
     <div class="card" id="panelUpcoming"><div class="center-loading">Loading…</div></div>
   `;
   document.getElementById("presentTodayStat").onclick = safe(() => showPresentTodayBreakdown(today));
+  document.getElementById("staffPresentTodayStat").onclick = safe(() => showStaffPresentTodayBreakdown(today));
   renderAttendanceByClass(document.getElementById("panelAttendanceByClass"), classes);
   renderExamActivity(document.getElementById("panelActivity"));
   renderUpcomingWeek(document.getElementById("panelUpcoming"));
@@ -1040,6 +1058,19 @@ async function showPresentTodayBreakdown(date) {
     ["Total students absent", absent.length],
     ["Total boys absent", absent.filter(a=>isGender(a,"Male")).length],
     ["Total girls absent", absent.filter(a=>isGender(a,"Female")).length],
+  ]);
+}
+
+/* ---- Dashboard stat: Present staff today (click to see present/absent staff) ---- */
+async function showStaffPresentTodayBreakdown(date) {
+  let rows = [];
+  try { rows = await dbSelect("staff_attendance", { date:`eq.${date}`, select:"status" }); }
+  catch(e) { rows = []; }
+  const present = rows.filter(a=>a.status==="present").length;
+  const absent = rows.filter(a=>a.status==="absent").length;
+  openViewModal(`Staff attendance — ${date}`, [
+    ["Staff present", present],
+    ["Staff absent", absent],
   ]);
 }
 
@@ -1424,13 +1455,13 @@ async function renderStudents(container, opts={}) {
   const classFilter = opts.classFilter || "";
   const [classes] = await Promise.all([ dbSelectActive("classes", { order:"name.asc" }) ]);
   let params = { select:"*,classes(name,section)", order:"full_name.asc" };
-  if (search) params.full_name = `ilike.*${encodeURIComponent(search)}*`;
+  if (search) params.or = `(full_name.ilike.*${encodeURIComponent(search)}*,admission_no.ilike.*${encodeURIComponent(search)}*)`;
   if (classFilter) params.class_id = `eq.${classFilter}`;
   const students = await dbSelectActive("students", params);
   container.innerHTML = `
     <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
     <div class="search-bar">
-      <input id="searchInput" placeholder="Search student name…" value="${search}"/>
+      <input id="searchInput" placeholder="Search by name or admission ID…" value="${search}"/>
       <select id="classFilterSel"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}" ${classFilter===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
     </div>
     <div class="card" id="list"></div>
@@ -1448,7 +1479,7 @@ async function renderStudents(container, opts={}) {
     </div>`);
     const view = () => openViewModal(s.full_name, [
       ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'], ["Grade", s.grade],
+      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
       ["Gender", s.gender], ["Date of birth", s.dob],
       ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
       ["Medical information", s.medical_info],
@@ -1487,10 +1518,7 @@ function openStudentModal(container, classes, s) {
       <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>Class</label><select id="f_class" required><option value="">— Select class —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
-      <div class="field"><label>Grade</label><input id="f_grade" required placeholder="e.g. Grade 4" value="${s?.grade||''}"/></div>
-    </div>
+    <div class="field"><label>Class</label><select id="f_class" required><option value="">— Select class —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
     <div class="grid2">
@@ -1520,7 +1548,7 @@ function openStudentModal(container, classes, s) {
       ${["active","inactive","graduated","transferred"].map(v=>`<option value="${v}" ${s?.status===v?'selected':''}>${v}</option>`).join("")}</select></div>
   `, async (ov) => {
     requireFields(ov, [
-      ["f_name","Full name"], ["f_dob","Date of birth"], ["f_class","Class"], ["f_grade","Grade"],
+      ["f_name","Full name"], ["f_dob","Date of birth"], ["f_class","Class"],
       ["f_gname","Parent/guardian name"], ["f_grel","Parent/guardian relationship"], ["f_gphone","Parent/guardian phone"],
       ["f_medical","Medical information"], ["f_village","Village"], ["f_subcounty","Subcounty"], ["f_district","District"],
     ]);
@@ -1529,7 +1557,7 @@ function openStudentModal(container, classes, s) {
     const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (s?.photo_url || null));
     const payload = {
       admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), dob: val(ov,"f_dob")||null,
-      gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null, grade: val(ov,"f_grade"),
+      gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
       guardian_name: val(ov,"f_gname"), guardian_relationship: val(ov,"f_grel"), guardian_phone: val(ov,"f_gphone"),
       medical_info: val(ov,"f_medical"),
       village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
