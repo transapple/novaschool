@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Brightpath School Manager</title>
-<meta name="description" content="Brightpath School Manager">
+<title>Nova School Manager</title>
+<meta name="description" content="Nova School Manager">
 <meta name="theme-color" content="#16274A">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Brightpath">
+<meta name="apple-mobile-web-app-title" content="Nova School">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
 <link rel="apple-touch-icon" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
@@ -84,13 +84,62 @@
   .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
   .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;transition:border-color .15s;}
   .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal);background:#fff;}
+  input[type="time"],input[type="datetime-local"]{ color-scheme: light; }
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+    background-color: var(--teal);
+    border-radius:6px;
+    padding:5px;
+    cursor:pointer;
+    opacity:1;
+    filter: brightness(0) invert(1);
+  }
+
+  /* ---------- CUSTOM DATE PICKER (fully app-styled, replaces native OS date picker
+     so the "Set/Cancel" buttons are ours to colour, not the phone OS's) ---------- */
+  input.datefield{
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%232E9E7C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>');
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    background-size:18px 18px;
+    padding-right:38px;
+    cursor:pointer;
+    caret-color:transparent;
+  }
+  input.datefield::placeholder{color:var(--ink-soft);}
+  .date-cal-popup{
+    position:fixed;z-index:500;background:#fff;border-radius:16px;
+    box-shadow:0 16px 44px rgba(16,30,60,.28);border:1px solid var(--line);
+    padding:14px;width:288px;animation:riseIn .14s ease;
+  }
+  .dc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .dc-title{font-size:14.5px;font-weight:800;color:var(--navy);}
+  .dc-nav{background:var(--teal-tint);color:var(--teal-dark);border:none;width:30px;height:30px;border-radius:9px;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .dc-nav:hover{background:var(--teal);color:#fff;}
+  .dc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+  .dc-dow{margin-bottom:4px;}
+  .dc-dow div{font-size:11px;font-weight:700;color:var(--ink-soft);text-align:center;padding:4px 0;}
+  .dc-cell{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--ink);border-radius:9px;cursor:pointer;}
+  .dc-cell.dc-day:hover{background:var(--teal-tint);}
+  .dc-cell.dc-today{color:var(--teal-dark);box-shadow:inset 0 0 0 1.5px var(--teal);}
+  .dc-cell.dc-selected{background:var(--teal);color:#fff;box-shadow:none;}
+  .dc-cell.dc-empty{cursor:default;}
+  .dc-footer{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);}
+  .dc-link{background:none;border:none;color:var(--teal-dark);font-weight:700;font-size:12.5px;padding:6px 8px;border-radius:8px;}
+  .dc-link:hover{background:var(--teal-tint);}
+  .dc-link.dc-danger{color:var(--red);}
+  .dc-link.dc-danger:hover{background:var(--red-tint);}
   .btn{border:none;border-radius:10px;padding:12px 18px;font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s, transform .1s;}
   .btn:active{transform:scale(.98);}
   .btn-primary{background:var(--teal);color:#fff;width:100%;}
   .btn-primary:hover{background:var(--teal-dark);}
-  .btn-ghost{background:transparent;color:var(--navy);border:1.5px solid var(--line);}
+  .btn-ghost{background:var(--teal-tint);color:var(--teal-dark);border:1.5px solid var(--teal);}
+  .btn-ghost:hover{background:var(--teal);color:#fff;}
   .btn-danger{background:#fde8e7;color:var(--red);}
   .btn-sm{padding:8px 12px;font-size:13px;}
+  .confirm-box{max-width:340px;text-align:center;}
+  .confirm-msg{font-size:14.5px;color:var(--ink);line-height:1.55;margin-bottom:18px;white-space:pre-wrap;}
+  .confirm-box .form-actions{margin-top:0;}
   .link-btn{background:none;border:none;color:var(--teal-dark);font-weight:600;font-size:13.5px;padding:0;}
   .err{background:#fdecec;color:var(--red);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
   .msg-ok{background:#e9f7f1;color:var(--teal-dark);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
@@ -159,10 +208,8 @@
   .empty svg{margin-bottom:10px;opacity:.5;}
 
   /* modal */
-  .overlay{position:fixed;inset:0;background:rgba(15,22,40,.5);display:flex;align-items:flex-end;justify-content:center;z-index:100;}
-  @media(min-width:640px){.overlay{align-items:center;}}
-  .modal{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:22px;max-height:88vh;overflow-y:auto;}
-  @media(min-width:640px){.modal{border-radius:18px;}}
+  .overlay{position:fixed;inset:0;background:rgba(15,22,40,.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px;}
+  .modal{background:#fff;width:100%;max-width:480px;border-radius:18px;padding:22px;max-height:88vh;overflow-y:auto;}
   .modal h3{font-size:17px;color:var(--navy);margin-bottom:16px;}
   .modal-close{float:right;background:none;border:none;font-size:20px;color:var(--ink-soft);}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
@@ -240,12 +287,59 @@
   .att-btn.l.on{background:#fdf1de;color:#a06a13;border-color:var(--amber);}
   .att-btn.e.on{background:#eef0f4;color:var(--ink-soft);border-color:#b7bfcf;}
   .center-loading{display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--ink-soft);font-size:13.5px;}
+
+  /* ---------- PWA INSTALL OVERLAY ---------- */
+  .pwa-install-overlay{
+    position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;
+    padding:20px;background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 35%,var(--sky) 65%,var(--navy) 100%);
+    background-size:300% 300%;animation:gradientFlow 14s ease infinite;
+  }
+  .pwa-card{
+    background:var(--card);border-radius:22px;width:100%;max-width:400px;
+    padding:30px 26px 22px;box-shadow:0 24px 70px rgba(10,20,50,.4);
+    text-align:center;animation:popScale .22s ease;position:relative;
+  }
+  .pwa-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:9px;border:none;background:var(--card-alt);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .pwa-close:hover{background:var(--line);}
+  .pwa-icon{width:64px;height:64px;border-radius:18px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:var(--teal);color:#fff;font-weight:800;font-size:24px;box-shadow:0 10px 24px rgba(46,158,124,.35);overflow:hidden;}
+  .pwa-icon img{width:100%;height:100%;object-fit:cover;}
+  .pwa-title{font-size:18.5px;font-weight:800;color:var(--navy);margin-bottom:6px;}
+  .pwa-sub{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:20px;}
+  .pwa-body{margin-bottom:6px;}
+  .pwa-spinner{width:26px;height:26px;border-radius:50%;border:3px solid var(--teal-tint);border-top-color:var(--teal);margin:6px auto 14px;animation:pwaspin .8s linear infinite;}
+  @keyframes pwaspin{to{transform:rotate(360deg);}}
+  .pwa-status{font-size:13px;color:var(--ink-soft);margin-bottom:16px;}
+  .pwa-steps{text-align:left;background:var(--card-alt);border-radius:14px;padding:14px 16px;margin-bottom:18px;}
+  .pwa-step{display:flex;align-items:flex-start;gap:11px;font-size:13.5px;color:var(--ink);padding:8px 0;}
+  .pwa-step:not(:last-child){border-bottom:1px dashed var(--line);}
+  .pwa-step-ic{width:26px;height:26px;border-radius:8px;background:var(--teal-tint);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .pwa-fallback-box{display:flex;align-items:flex-start;gap:11px;background:var(--sky-tint);color:var(--navy);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.55;text-align:left;margin-bottom:18px;}
+  .pwa-fallback-box svg{flex-shrink:0;margin-top:1px;}
+  .pwa-actions{display:flex;flex-direction:column;gap:8px;}
+  .pwa-footer-links{display:flex;justify-content:center;gap:18px;margin-top:14px;}
+  .pwa-footer-links button{background:none;border:none;color:var(--ink-soft);font-weight:600;font-size:12.5px;padding:4px;}
+  .pwa-footer-links button:hover{color:var(--ink);text-decoration:underline;}
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="pwaInstallOverlay" class="pwa-install-overlay"></div>
 
 <script>
+/* ---------------- PWA INSTALL PROMPT (captured immediately, top of script,
+   so we never miss the event if the browser fires it early) ---------------- */
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  window.__pwaEventArrived && window.__pwaEventArrived();
+});
+window.addEventListener("appinstalled", () => {
+  try { localStorage.setItem("pwaInstalled", "true"); } catch(e) {}
+  closePwaOverlay();
+  toast("App installed! Launch it anytime from your home screen.", false);
+});
+
 const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
 
@@ -279,7 +373,8 @@ const ic = {
   target:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
   mail:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>`,
   back:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`,
-  chevronRight:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`
+  chevronRight:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`,
+  more:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`
 };
 
 /* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
@@ -311,6 +406,26 @@ insert into school_settings (id) values (1) on conflict (id) do nothing;
 alter table school_settings enable row level security;
 create policy "Anyone can read school settings" on school_settings for select using (true);
 create policy "Admins can update school settings" on school_settings for update using (true);`;
+const EXAM_MIGRATION_SQL = `alter table exams add column if not exists exam_end_date date;
+alter table exam_results add column if not exists remarks text;`;
+const GRADES_SETUP_SQL = `create table if not exists grades (
+  id bigint generated always as identity primary key,
+  grade text not null,
+  min_score numeric not null,
+  max_score numeric not null,
+  remark text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table grades enable row level security;
+create policy "Anyone can read grades" on grades for select using (true);
+create policy "Authenticated can manage grades" on grades for all using (true);`;
+const ID_FORMAT_SQL = `alter table school_settings add column if not exists student_id_prefix text;
+alter table school_settings add column if not exists student_id_seq int default 0;
+alter table school_settings add column if not exists student_id_digits int default 3;
+alter table school_settings add column if not exists teacher_id_prefix text;
+alter table school_settings add column if not exists teacher_id_seq int default 0;
+alter table school_settings add column if not exists teacher_id_digits int default 3;`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -327,9 +442,35 @@ async function loadSchoolSettings() {
   applyBrandColor(schoolSettings?.brand_color);
 }
 function currency() { return (schoolSettings && schoolSettings.currency_symbol) || "₦"; }
+// Builds an ID like DFM25000: prefix + gender letter + 2-digit year + zero-padded running number.
+function formatGeneratedId(prefix, seq, digits, gender) {
+  if (!prefix) return "";
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const letter = gender === "Female" ? "F" : "M";
+  return `${prefix}${letter}${yy}${String(Number(seq)||0).padStart(Number(digits)||3,'0')}`;
+}
+// Preview of the next ID for a given entity ("student"/"teacher") and gender, based on the
+// currently saved counter — doesn't consume it.
+function nextIdFor(kind, gender) {
+  const s = schoolSettings || {};
+  const prefix = s[`${kind}_id_prefix`];
+  if (!prefix) return "";
+  return formatGeneratedId(prefix, s[`${kind}_id_seq`] ?? 0, s[`${kind}_id_digits`] ?? 3, gender);
+}
+// Advances the running number after a new registration, so the next generated ID is unique.
+async function advanceIdSeq(kind) {
+  const s = schoolSettings || {};
+  if (!s[`${kind}_id_prefix`]) return;
+  const payload = { id: 1 };
+  payload[`${kind}_id_seq`] = Number(s[`${kind}_id_seq`] ?? 0) + 1;
+  try {
+    await dbUpsert("school_settings", payload, "id");
+    schoolSettings = Object.assign({}, schoolSettings, payload);
+  } catch (e) { /* non-fatal — the record was already saved with its ID */ }
+}
 function mastheadHtml() {
   const s = schoolSettings || {};
-  const name = s.school_name || "Brightpath";
+  const name = s.school_name || "Nova School";
   const motto = s.motto || "";
   const canEdit = profile?.role === "admin";
   return `<div class="masthead"${canEdit ? ' id="mastheadClickable" style="cursor:pointer;" title="Edit school profile"' : ""}>
@@ -342,7 +483,7 @@ function mastheadHtml() {
 }
 function sidebarBrandHtml() {
   const s = schoolSettings || {};
-  const name = s.school_name || "Brightpath";
+  const name = s.school_name || "Nova School";
   const sub = s.motto || "School Manager";
   return `<div class="brand-badge">${s.logo_url ? `<img src="${s.logo_url}" alt="${name} logo" style="width:100%;height:100%;object-fit:cover;border-radius:12px;"/>` : initials(name)}</div>
     <div><div class="brand-name">${name}</div><div class="brand-sub">${sub}</div></div>`;
@@ -481,10 +622,24 @@ function render() {
     const sItem = el(`<div class="nav-item ${tab===n.id?'active':''}" style="cursor:pointer">${n.icon}<span>${n.label}</span></div>`);
     sItem.onclick = () => { tab = n.id; render(); };
     sidenav.appendChild(sItem);
+  });
+  // The sidebar (desktop) shows every section. The bottom nav (mobile) only has room for a
+  // handful of icons, so it shows the most-used sections plus a "More" sheet for the rest —
+  // instead of cramming all of NAV into one long scrolling row.
+  const BOTTOM_PRIMARY_IDS = ["dashboard","students","attendance","fees"];
+  const primaryItems = BOTTOM_PRIMARY_IDS.map(id => NAV.find(n=>n.id===id)).filter(Boolean);
+  const moreItems = NAV.filter(n => !BOTTOM_PRIMARY_IDS.includes(n.id));
+  const isMoreActive = moreItems.some(n => n.id === tab);
+  primaryItems.forEach(n => {
     const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}">${n.icon}<span>${n.label}</span></div>`);
     bItem.onclick = () => { tab = n.id; render(); };
     bottomnav.appendChild(bItem);
   });
+  const moreBtn = el(`<div class="bn-item ${isMoreActive?'active':''}">${ic.more}<span>More</span></div>`);
+  moreBtn.onclick = () => openActionSheet(moreItems.map(n => ({
+    label: n.label, icon: n.icon, onClick: () => { tab = n.id; render(); },
+  })));
+  bottomnav.appendChild(moreBtn);
   const activeBn = bottomnav.querySelector(".bn-item.active");
   if (activeBn) activeBn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
   const pageTitle = document.getElementById("pageTitle");
@@ -561,6 +716,94 @@ function renderLogin() {
 }
 
 /* ---------------- MODAL HELPER ---------------- */
+// Keeps a centered modal fully visible and usable when the on-screen keyboard opens:
+// shrinks/repositions the overlay to the actual visible viewport (so the modal never ends
+// up hidden behind the keyboard), scrolls whichever field the person is typing into into
+// view, and — once there's little content left below that field — scrolls the rest of the
+// way so the tail of the form (including the Save/Cancel buttons) is never left hidden
+// behind the keyboard. Not used for action sheets (the bottom-nav "More" menu, edit/delete
+// sheets) — those have no inputs and stay anchored where they already are.
+function enableModalKeyboardHandling(overlay) {
+  const modal = overlay.querySelector(".modal");
+  const vv = window.visualViewport;
+  if (!modal) return;
+  // If we're close to the end of the form's scrollable content, scroll all the way down
+  // so trailing fields and the Save/Cancel row surface above the keyboard too.
+  const revealTail = () => {
+    const remaining = modal.scrollHeight - (modal.scrollTop + modal.clientHeight);
+    if (remaining > 0 && remaining < 160) modal.scrollTo({ top: modal.scrollHeight, behavior: "smooth" });
+  };
+  modal.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    // Give the keyboard's open animation a moment to finish before measuring/scrolling.
+    setTimeout(() => {
+      t.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(revealTail, 300);
+    }, 250);
+  });
+  if (!vv) return;
+  const resize = () => {
+    overlay.style.height = vv.height + "px";
+    overlay.style.top = vv.offsetTop + "px";
+    overlay.style.bottom = "auto";
+    modal.style.maxHeight = Math.round(vv.height * 0.9) + "px";
+    if (document.activeElement && modal.contains(document.activeElement)) revealTail();
+  };
+  vv.addEventListener("resize", resize);
+  vv.addEventListener("scroll", resize);
+  resize();
+  const stop = new MutationObserver(() => {
+    if (document.body.contains(overlay)) return;
+    vv.removeEventListener("resize", resize);
+    vv.removeEventListener("scroll", resize);
+    stop.disconnect();
+  });
+  stop.observe(document.body, { childList: true });
+}
+
+/* ---------------- CUSTOM ALERT / CONFIRM ----------------
+   Replaces the browser's native alert()/confirm() — which show as an unstyled
+   "This page says" dialog with an invisible white OK button on many devices —
+   with our own centered, clearly-colored dialog. */
+function customAlert(message, opts={}) {
+  return new Promise((resolve) => {
+    const overlay = el(`<div class="overlay">
+      <div class="modal confirm-box">
+        <div class="confirm-msg">${message}</div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="alertOk">${opts.okLabel || "OK"}</button>
+        </div>
+      </div>
+    </div>`);
+    document.body.appendChild(overlay);
+    enableModalKeyboardHandling(overlay);
+    const close = () => { overlay.remove(); resolve(); };
+    overlay.querySelector("#alertOk").onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  });
+}
+function customConfirm(message, opts={}) {
+  return new Promise((resolve) => {
+    const danger = !!opts.danger;
+    const overlay = el(`<div class="overlay">
+      <div class="modal confirm-box">
+        <div class="confirm-msg">${message}</div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" id="confirmNo">${opts.cancelLabel || "Cancel"}</button>
+          <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="confirmYes">${opts.okLabel || (danger ? "Delete" : "OK")}</button>
+        </div>
+      </div>
+    </div>`);
+    document.body.appendChild(overlay);
+    enableModalKeyboardHandling(overlay);
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; overlay.remove(); resolve(v); };
+    overlay.querySelector("#confirmNo").onclick = () => finish(false);
+    overlay.querySelector("#confirmYes").onclick = () => finish(true);
+    overlay.onclick = (e) => { if (e.target === overlay) finish(false); };
+  });
+}
 function openModal(title, fieldsHtml, onSave, opts={}) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
@@ -573,6 +816,7 @@ function openModal(title, fieldsHtml, onSave, opts={}) {
     </div>
   </div></div>`);
   document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
   const close = () => overlay.remove();
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#modalCancel").onclick = close;
@@ -601,6 +845,7 @@ function openViewModal(title, rows, onEdit) {
     </div>
   </div></div>`);
   document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
   const close = () => overlay.remove();
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#modalCancel").onclick = close;
@@ -678,11 +923,12 @@ const TRASH_TABLES = [
   { table:"terms", label:"Terms", nameField:"name", icon:ic.setup },
   { table:"exams", label:"Exams", nameField:"name", icon:ic.exam },
   { table:"exam_types", label:"Exam types", nameField:"name", icon:ic.exam },
+  { table:"grades", label:"Grades", nameField:"grade", icon:ic.exam },
   { table:"fee_structures", label:"Fee items", nameField:"item_name", icon:ic.fees },
 ];
 async function softDelete(table, id) {
   try { await dbUpdate(table, id, { deleted_at: new Date().toISOString() }); }
-  catch (e) { if (confirm("This item can't be trashed (no trash support on this table yet). Delete permanently instead?")) { await dbDelete(table, id); } else { throw e; } }
+  catch (e) { if (await customConfirm("This item can't be trashed (no trash support on this table yet). Delete permanently instead?", { danger:true, okLabel:"Delete" })) { await dbDelete(table, id); } else { throw e; } }
 }
 async function restoreRecord(table, id) { await dbUpdate(table, id, { deleted_at: null }); }
 
@@ -805,7 +1051,7 @@ async function renderUpcomingWeek(body) {
 /* ---------------- ACADEMIC SETUP ---------------- */
 async function renderAcademic(container, sub="terms") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
-  const pillDefs = [["terms","Terms"],["classes","Classes"],["subjects","Subjects"],["examtypes","Exam Types"]];
+  const pillDefs = [["terms","Terms"],["classes","Classes"],["subjects","Subjects"],["examtypes","Exam Types"],["grades","Grades"],["idformat","ID Format"]];
   const pills = document.getElementById("pills");
   pillDefs.forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
@@ -817,6 +1063,8 @@ async function renderAcademic(container, sub="terms") {
   if (sub==="classes") return renderClasses(body);
   if (sub==="subjects") return renderSubjects(body);
   if (sub==="examtypes") return renderExamTypes(body);
+  if (sub==="grades") return renderGrades(body);
+  if (sub==="idformat") return renderIdFormat(body);
 }
 
 async function renderExamTypes(body) {
@@ -830,7 +1078,7 @@ async function renderExamTypes(body) {
       <div class="list-sub">Max score: ${t.max_score}</div></div></div>`);
     const view = () => openViewModal(t.name, [["Maximum score", t.max_score]], () => openExamTypeModal(body, t));
     const edit = () => openExamTypeModal(body, t);
-    const del = () => { if (confirm(`Move "${t.name}" to trash?`)) safe(async()=>{ await softDelete("exam_types", t.id); renderExamTypes(body); })(); };
+    const del = async () => { if (await customConfirm(`Move "${t.name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("exam_types", t.id); renderExamTypes(body); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
@@ -848,6 +1096,134 @@ function openExamTypeModal(body, t) {
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
 }
 
+/* ---- Grades: admin-defined grade bands (A+, A, B+ …) with a remark per band ---- */
+async function renderGrades(body) {
+  let grades = [];
+  let missingTable = false;
+  try { grades = await dbSelectActive("grades", { order:"min_score.desc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = `<div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Grades need a small table in your database before you can define them.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${GRADES_SETUP_SQL}</pre>
+      <button class="btn btn-primary" id="retryGradesBtn" style="margin-top:12px;">I've run it — Refresh</button>
+    </div>`;
+    document.getElementById("retryGradesBtn").onclick = () => renderGrades(body);
+    return;
+  }
+
+  gradesCache = grades;
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--teal-dark);">Grades</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add grade</button></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 12px;">Define the grade bands used on report cards and results — e.g. A+ for 90–100%, with a remark like "Excellent".</p>
+    <div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = grades.length ? "" : emptyState('No grades set up yet. Add bands like A+ (90–100), A (80–89)…');
+  grades.forEach(g => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(g.grade)}</div>
+      <div class="list-main"><div class="list-title">${g.grade}</div>
+      <div class="list-sub">${g.min_score}–${g.max_score}%${g.remark?(' · '+g.remark):''}</div></div></div>`);
+    const view = () => openViewModal(g.grade, [["Score range", `${g.min_score}% – ${g.max_score}%`], ["Remark", g.remark || "—"]], () => openGradeModal(body, grades, g));
+    const edit = () => openGradeModal(body, grades, g);
+    const del = async () => { if (await customConfirm(`Move grade "${g.grade}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("grades", g.id); gradesCache = null; renderGrades(body); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openGradeModal(body, grades, null);
+}
+function openGradeModal(body, existingGrades, g) {
+  const isEdit = !!g;
+  openModal(isEdit ? "Edit grade" : "New grade", `
+    <div class="field"><label>Grade (e.g. A+, A, B+)</label><input id="f_grade" placeholder="A+" value="${g?.grade||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Min score (%)</label><input id="f_min" type="number" min="0" max="100" step="1" value="${g?.min_score??''}"/></div>
+      <div class="field"><label>Max score (%)</label><input id="f_max" type="number" min="0" max="100" step="1" value="${g?.max_score??''}"/></div>
+    </div>
+    <div class="field"><label>Remark</label><input id="f_remark" placeholder="Excellent" value="${g?.remark||''}"/></div>
+  `, async (ov) => {
+    const grade = val(ov,"f_grade").trim();
+    const min_score = Number(val(ov,"f_min"));
+    const max_score = Number(val(ov,"f_max"));
+    if (!grade) throw new Error("Enter a grade label.");
+    if (val(ov,"f_min")==="" || val(ov,"f_max")==="" || Number.isNaN(min_score) || Number.isNaN(max_score)) throw new Error("Enter both a min and max score.");
+    if (min_score > max_score) throw new Error("Min score can't be greater than max score.");
+    const dupeName = existingGrades.find(e => e.grade.toLowerCase()===grade.toLowerCase() && (!isEdit || e.id!==g.id));
+    if (dupeName) throw new Error(`"${grade}" already exists. Edit that one instead of adding a duplicate.`);
+    const overlap = existingGrades.find(e => (!isEdit || e.id!==g.id) && min_score <= Number(e.max_score) && max_score >= Number(e.min_score));
+    if (overlap) throw new Error(`That range overlaps with "${overlap.grade}" (${overlap.min_score}–${overlap.max_score}%). Adjust the range so ranges don't repeat.`);
+    const payload = { grade, min_score, max_score, remark: val(ov,"f_remark").trim() || null };
+    if (isEdit) await dbUpdate("grades", g.id, payload); else await dbInsert("grades", payload);
+    gradesCache = null;
+    renderGrades(body);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+/* ---- ID Format: prefix used to auto-generate the next student/teacher ID ---- */
+async function renderIdFormat(body) {
+  const s = schoolSettings || {};
+  body.innerHTML = `
+    <div class="section-head"><h3 style="color:var(--teal-dark);">ID Format</h3></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.6;">Set a prefix once and every new registration gets a unique ID automatically — prefix + gender (M/F) + year + a running number, e.g. <b>DFM25000</b>. The number keeps counting up with every new registration, whatever the gender.</p>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving fails)</summary>
+    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ID_FORMAT_SQL}</pre></details>
+
+    <div class="card">
+      <h4 style="margin-bottom:10px;color:var(--navy);">Student IDs</h4>
+      <div class="grid2">
+        <div class="field"><label>Prefix</label><input id="f_s_prefix" placeholder="DF" value="${s.student_id_prefix||''}"/></div>
+        <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" value="${s.student_id_digits??3}"/></div>
+      </div>
+      <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" value="${s.student_id_seq??0}"/></div>
+      <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevSM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevSF">—</b></div>
+    </div>
+
+    <div class="card">
+      <h4 style="margin-bottom:10px;color:var(--navy);">Teacher IDs</h4>
+      <div class="grid2">
+        <div class="field"><label>Prefix</label><input id="f_t_prefix" placeholder="DF" value="${s.teacher_id_prefix||''}"/></div>
+        <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" value="${s.teacher_id_digits??3}"/></div>
+      </div>
+      <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" value="${s.teacher_id_seq??0}"/></div>
+      <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevTM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevTF">—</b></div>
+    </div>
+
+    <button class="btn btn-primary" id="saveIdBtn" style="width:100%;">Save ID format</button>
+    <div id="idMsg"></div>
+  `;
+  const refresh = () => {
+    const sp = val(body,"f_s_prefix"), sd = val(body,"f_s_digits"), sq = val(body,"f_s_seq");
+    const tp = val(body,"f_t_prefix"), td = val(body,"f_t_digits"), tq = val(body,"f_t_seq");
+    document.getElementById("prevSM").textContent = formatGeneratedId(sp, sq, sd, "Male") || "—";
+    document.getElementById("prevSF").textContent = formatGeneratedId(sp, sq, sd, "Female") || "—";
+    document.getElementById("prevTM").textContent = formatGeneratedId(tp, tq, td, "Male") || "—";
+    document.getElementById("prevTF").textContent = formatGeneratedId(tp, tq, td, "Female") || "—";
+  };
+  body.querySelectorAll("input").forEach(i => i.oninput = refresh);
+  refresh();
+  document.getElementById("saveIdBtn").onclick = async (e) => {
+    const msg = document.getElementById("idMsg");
+    e.target.textContent = "Saving…"; e.target.disabled = true;
+    try {
+      const payload = {
+        id: 1,
+        student_id_prefix: val(body,"f_s_prefix") || null,
+        student_id_digits: Number(val(body,"f_s_digits")) || 3,
+        student_id_seq: Number(val(body,"f_s_seq")) || 0,
+        teacher_id_prefix: val(body,"f_t_prefix") || null,
+        teacher_id_digits: Number(val(body,"f_t_digits")) || 3,
+        teacher_id_seq: Number(val(body,"f_t_seq")) || 0,
+      };
+      await dbUpsert("school_settings", payload, "id");
+      await loadSchoolSettings();
+      msg.innerHTML = `<div class="msg-ok">Saved — new registrations will use this format.</div>`;
+    } catch (err) {
+      msg.innerHTML = `<div class="err">${err.message}</div>`;
+    }
+    e.target.textContent = "Save ID format"; e.target.disabled = false;
+  };
+}
+
 async function renderTerms(body) {
   const terms = await dbSelectActive("terms", { order:"start_date.desc" });
   body.innerHTML = `<div class="section-head"><h3 style="color:var(--sky);">Terms</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add term</button></div><div class="card" id="list"></div>`;
@@ -859,7 +1235,7 @@ async function renderTerms(body) {
       <div class="list-sub">${t.start_date||""} → ${t.end_date||""}</div></div></div>`);
     const view = () => openViewModal(t.name, [["Start date", t.start_date], ["End date", t.end_date], ["Current term", t.is_current?"Yes":"No"]], () => openTermModal(body, t));
     const edit = () => openTermModal(body, t);
-    const del = () => { if (confirm(`Move "${t.name}" to trash?`)) safe(async()=>{ await softDelete("terms", t.id); renderTerms(body); })(); };
+    const del = async () => { if (await customConfirm(`Move "${t.name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("terms", t.id); renderTerms(body); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
@@ -870,8 +1246,8 @@ function openTermModal(body, t) {
   openModal(isEdit ? "Edit term" : "New term", `
     <div class="field"><label>Term name (e.g. First Term)</label><input id="f_name" value="${t?.name||''}"/></div>
     <div class="grid2">
-      <div class="field"><label>Start date</label><input id="f_start" type="date" value="${t?.start_date||''}"/></div>
-      <div class="field"><label>End date</label><input id="f_end" type="date" value="${t?.end_date||''}"/></div>
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${t?.start_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${t?.end_date||''}"/></div>
     </div>
     <div class="field"><label><input id="f_current" type="checkbox" style="width:auto;margin-right:6px;" ${t?.is_current?'checked':''}/>Set as current term</label></div>
   `, async (ov) => {
@@ -904,7 +1280,7 @@ async function renderClasses(body) {
       ["Subjects linked", subjectNames.join(", ") || "None — link in Subjects"],
     ], () => openClassModal(body, teachers, c));
     const edit = () => openClassModal(body, teachers, c);
-    const del = () => { if (confirm(`Move "${c.name}" to trash?`)) safe(async()=>{ await softDelete("classes", c.id); renderClasses(body); })(); };
+    const del = async () => { if (await customConfirm(`Move "${c.name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("classes", c.id); renderClasses(body); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
@@ -941,7 +1317,7 @@ async function renderSubjects(body) {
       <div class="list-main"><div class="list-title">${s.name}</div><div class="list-sub">${s.code||""} ${linkNames.length?('· '+linkNames.length+' class'+(linkNames.length>1?'es':'')+' linked'):'· Not linked to any class'}</div></div></div>`);
     const view = () => openViewModal(s.name, [["Code", s.code], ["Linked classes", linkNames.join(", ") || "None"]], () => openSubjectModal(body, classes, s, links.map(l=>l.class_id)));
     const edit = () => openSubjectModal(body, classes, s, links.map(l=>l.class_id));
-    const del = () => { if (confirm(`Move "${s.name}" to trash?`)) safe(async()=>{ await softDelete("subjects", s.id); renderSubjects(body); })(); };
+    const del = async () => { if (await customConfirm(`Move "${s.name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("subjects", s.id); renderSubjects(body); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   }
@@ -1017,7 +1393,7 @@ async function renderStudents(container, opts={}) {
       ["Status", s.status],
     ], () => openStudentModal(container, classes, s));
     const edit = () => openStudentModal(container, classes, s);
-    const del = () => { if (confirm(`Move ${s.full_name} to trash?`)) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter}); })(); };
+    const del = async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter}); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
@@ -1025,6 +1401,7 @@ async function renderStudents(container, opts={}) {
 }
 function openStudentModal(container, classes, s) {
   const isEdit = !!s;
+  const initialGender = s?.gender || "Male";
   openModal(isEdit ? "Edit student" : "Register student", `
     <div class="field" style="text-align:center;">
       <label>Photo</label>
@@ -1032,11 +1409,11 @@ function openStudentModal(container, classes, s) {
       <input id="f_photo" type="file" accept="image/*"/>
     </div>
     <div class="grid2">
-      <div class="field"><label>Admission no.</label><input id="f_adm" value="${s?.admission_no||''}"/></div>
+      <div class="field"><label>Admission no.</label><input id="f_adm" value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" value="${s?.full_name||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="date" value="${s?.dob||''}"/></div>
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly placeholder="Select date" value="${s?.dob||''}"/></div>
       <div class="field"><label>Gender</label><select id="f_gender">
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
@@ -1080,7 +1457,7 @@ function openStudentModal(container, classes, s) {
       emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
     };
-    if (isEdit) await dbUpdate("students", s.id, payload); else await dbInsert("students", payload);
+    if (isEdit) await dbUpdate("students", s.id, payload); else { await dbInsert("students", payload); await advanceIdSeq("student"); }
     renderStudents(container);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
   const photoInput = document.getElementById("f_photo");
@@ -1088,6 +1465,13 @@ function openStudentModal(container, classes, s) {
     const dataUrl = await fileToDataURL(photoInput.files[0]);
     if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(s?.full_name, dataUrl, 72);
   };
+  if (!isEdit) {
+    const admInput = document.getElementById("f_adm");
+    const genderSelect = document.getElementById("f_gender");
+    let admAutoFilled = admInput.value === nextIdFor("student", genderSelect.value);
+    admInput.oninput = () => { admAutoFilled = false; };
+    genderSelect.onchange = () => { if (admAutoFilled) admInput.value = nextIdFor("student", genderSelect.value); };
+  }
 }
 
 /* ---------------- TEACHERS ---------------- */
@@ -1124,7 +1508,7 @@ async function renderTeachers(container, opts={}) {
       ["Status", t.status],
     ], () => openTeacherModal(container, t));
     const edit = () => openTeacherModal(container, t);
-    const del = () => { if (confirm(`Move ${t.full_name} to trash?`)) safe(async()=>{ await softDelete("teachers", t.id); renderTeachers(container,{search}); })(); };
+    const del = async () => { if (await customConfirm(`Move ${t.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teachers", t.id); renderTeachers(container,{search}); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
@@ -1132,6 +1516,7 @@ async function renderTeachers(container, opts={}) {
 }
 function openTeacherModal(container, t) {
   const isEdit = !!t;
+  const initialGender = t?.gender || "Male";
   openModal(isEdit ? "Edit staff" : "Add staff", `
     <div class="field" style="text-align:center;">
       <label>Photo</label>
@@ -1139,7 +1524,7 @@ function openTeacherModal(container, t) {
       <input id="f_photo" type="file" accept="image/*"/>
     </div>
     <div class="grid2">
-      <div class="field"><label>Staff no.</label><input id="f_staffno" value="${t?.staff_no||''}"/></div>
+      <div class="field"><label>Staff no.</label><input id="f_staffno" value="${t?.staff_no || (isEdit ? '' : nextIdFor('teacher', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" value="${t?.full_name||''}"/></div>
     </div>
     <div class="grid2">
@@ -1176,7 +1561,7 @@ function openTeacherModal(container, t) {
       emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
     };
-    if (isEdit) await dbUpdate("teachers", t.id, payload); else await dbInsert("teachers", payload);
+    if (isEdit) await dbUpdate("teachers", t.id, payload); else { await dbInsert("teachers", payload); await advanceIdSeq("teacher"); }
     renderTeachers(container);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
   const photoInput = document.getElementById("f_photo");
@@ -1184,6 +1569,13 @@ function openTeacherModal(container, t) {
     const dataUrl = await fileToDataURL(photoInput.files[0]);
     if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(t?.full_name, dataUrl, 72);
   };
+  if (!isEdit) {
+    const staffInput = document.getElementById("f_staffno");
+    const genderSelect = document.getElementById("f_gender");
+    let staffAutoFilled = staffInput.value === nextIdFor("teacher", genderSelect.value);
+    staffInput.oninput = () => { staffAutoFilled = false; };
+    genderSelect.onchange = () => { if (staffAutoFilled) staffInput.value = nextIdFor("teacher", genderSelect.value); };
+  }
 }
 
 /* ---------------- ATTENDANCE ---------------- */
@@ -1207,7 +1599,7 @@ async function renderStudentAttendance(body, opts={}) {
   const classes = await dbSelectActive("classes", { order:"name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
     </div>
     <div class="card" id="classListCard"><div class="center-loading">Loading…</div></div>
   `;
@@ -1256,6 +1648,7 @@ async function openClassAttendanceViewModal(cls, date, onEdit) {
     </div>
   </div></div>`);
   document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
   const close = () => overlay.remove();
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#modalCancel").onclick = close;
@@ -1293,6 +1686,7 @@ async function openClassAttendanceModal(cls, date, onSaved) {
     </div>
   </div></div>`);
   document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
   const close = () => overlay.remove();
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#modalCancel").onclick = close;
@@ -1344,7 +1738,7 @@ async function renderStaffAttendance(body, opts={}) {
   const teachers = await dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
     </div>
     <div class="card" id="staffAttCard"><div class="center-loading">Loading…</div></div>
     <button class="btn btn-primary" id="saveStaffAttBtn" style="width:100%;">Save attendance</button>
@@ -1450,12 +1844,12 @@ async function renderFeeStructureClass(body, cls, terms) {
       <div class="list-sub">${f.terms?.name||''}</div></div></div>`);
     const view = () => openViewModal(f.item_name, [["Amount", currency()+Number(f.amount).toLocaleString()], ["Term", f.terms?.name]], () => openFeeItemModal(body, cls, terms, f, refresh));
     const edit = () => openFeeItemModal(body, cls, terms, f, refresh);
-    const del = () => { if (confirm(`Move "${f.item_name}" to trash?`)) safe(async()=>{ await softDelete("fee_structures", f.id); refresh(); })(); };
+    const del = async () => { if (await customConfirm(`Move "${f.item_name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("fee_structures", f.id); refresh(); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
   document.getElementById("addBtn").onclick = () => {
-    if (!terms.length) return alert("Create terms first in Setup.");
+    if (!terms.length) { customAlert("Create terms first in Setup."); return; }
     openFeeItemModal(body, cls, terms, null, refresh);
   };
 }
@@ -1670,10 +2064,33 @@ async function renderFeeHistory(body) {
 }
 
 /* ---------------- EXAMS ---------------- */
+// A single, consistent label for an exam — exam type + class + term. No separate
+// free-text "exam name" field anymore, so this can never show duplicated/repeated text.
+function examLabel(x) {
+  const type = x.exam_types?.name || x.name || "Exam";
+  const cls = (x.classes?.name || "") + (x.classes?.section ? (" " + x.classes.section) : "");
+  const term = x.terms?.name || "";
+  return [type, cls, term].filter(Boolean).join(" • ");
+}
+function examDateRange(x) {
+  if (x.exam_date && x.exam_end_date) return `${x.exam_date} → ${x.exam_end_date}`;
+  return x.exam_date || x.exam_end_date || "";
+}
+// Guards every exam picker against showing the same class+term+exam-type more than once,
+// even if duplicate rows already exist in the database from before.
+function dedupeExams(exams) {
+  const seen = new Set(); const out = [];
+  exams.forEach(x => {
+    const key = `${x.class_id}|${x.term_id}|${x.exam_type_id}`;
+    if (seen.has(key)) return;
+    seen.add(key); out.push(x);
+  });
+  return out;
+}
 async function renderExams(container, sub="exams") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
-  [["exams","Exams"],["enter","Enter results"],["report","Report card"]].forEach(([id,label])=>{
+  [["exams","Exams"],["enter","Enter results"],["results","Results"],["report","Report card"]].forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
     p.onclick = () => renderExams(container, id);
     pills.appendChild(p);
@@ -1681,6 +2098,7 @@ async function renderExams(container, sub="exams") {
   const body = document.getElementById("secBody");
   if (sub==="exams") return renderExamList(body);
   if (sub==="enter") return renderEnterResults(body);
+  if (sub==="results") return renderResultsOverview(body);
   if (sub==="report") return renderReportCard(body);
 }
 async function renderExamList(body) {
@@ -1690,43 +2108,55 @@ async function renderExamList(body) {
     dbSelectActive("classes", { order:"name.asc" }),
     dbSelectActive("exam_types", { order:"name.asc" }),
   ]);
-  body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exams</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam</button></div><div class="card" id="list"></div>`;
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exams</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam</button></div>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving an exam or a remark fails)</summary>
+    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${EXAM_MIGRATION_SQL}</pre></details>
+    <div class="card" id="list"></div>`;
   const list = document.getElementById("list");
   list.innerHTML = exams.length ? "" : emptyState("No exams created yet.");
   exams.forEach(x => {
+    const title = x.exam_types?.name || x.name || "Exam";
     const row = el(`<div class="list-row"><div class="avatar">${ic.exam}</div>
-      <div class="list-main"><div class="list-title">${x.name} ${x.exam_types?.name?`<span class="badge badge-grey">${x.exam_types.name}</span>`:''}</div>
-      <div class="list-sub">${x.classes?.name||''} ${x.classes?.section||''} · ${x.terms?.name||''} ${x.exam_date?('· '+x.exam_date):''}</div></div></div>`);
-    const view = () => openViewModal(x.name, [["Class", (x.classes?.name||'')+' '+(x.classes?.section||'')], ["Term", x.terms?.name], ["Exam type", x.exam_types?.name || "—"], ["Maximum score", x.exam_types?.max_score ?? "—"], ["Date", x.exam_date]], () => openExamModal(body, classes, terms, examTypes, x));
-    const edit = () => openExamModal(body, classes, terms, examTypes, x);
-    const del = () => { if (confirm(`Move "${x.name}" to trash?`)) safe(async()=>{ await softDelete("exams", x.id); renderExamList(body); })(); };
+      <div class="list-main"><div class="list-title">${title}</div>
+      <div class="list-sub">${x.classes?.name||''} ${x.classes?.section||''} · ${x.terms?.name||''}${examDateRange(x)?(' · '+examDateRange(x)):''}</div></div></div>`);
+    const view = () => openViewModal(title, [["Class", (x.classes?.name||'')+' '+(x.classes?.section||'')], ["Term", x.terms?.name], ["Start date", x.exam_date], ["End date", x.exam_end_date]], () => openExamModal(body, classes, terms, examTypes, exams, x));
+    const edit = () => openExamModal(body, classes, terms, examTypes, exams, x);
+    const del = async () => { if (await customConfirm(`Move "${title}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("exams", x.id); renderExamList(body); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
   document.getElementById("addBtn").onclick = () => {
-    if (!terms.length || !classes.length) return alert("Create classes and terms first in Setup.");
-    if (!examTypes.length) return alert("Create an exam type first in Setup (e.g. Assessment, Mid-Term) with its maximum score.");
-    openExamModal(body, classes, terms, examTypes, null);
+    if (!terms.length || !classes.length) { customAlert("Create classes and terms first in Setup."); return; }
+    if (!examTypes.length) { customAlert("Create an exam type first in Setup (e.g. Assessment, Mid-Term) with its maximum score."); return; }
+    openExamModal(body, classes, terms, examTypes, exams, null);
   };
 }
-function openExamModal(body, classes, terms, examTypes, x) {
+function openExamModal(body, classes, terms, examTypes, existingExams, x) {
   const isEdit = !!x;
   openModal(isEdit ? "Edit exam" : "New exam", `
-    <div class="field"><label>Exam name</label><input id="f_name" placeholder="Mid-Term Test" value="${x?.name||''}"/></div>
-    <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name} (max ${t.max_score})</option>`).join("")}</select></div>
+    <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="field"><label>Class</label><select id="f_class">${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
     <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${x?.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
-    <div class="field"><label>Date</label><input id="f_date" type="date" value="${x?.exam_date||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_end_date||''}"/></div>
+    </div>
   `, async (ov)=>{
-    const payload = { name: val(ov,"f_name"), exam_type_id: val(ov,"f_examtype")||null, class_id: val(ov,"f_class"), term_id: val(ov,"f_term"), exam_date: val(ov,"f_date")||null };
+    const exam_type_id = val(ov,"f_examtype")||null, class_id = val(ov,"f_class"), term_id = val(ov,"f_term");
+    const dupe = (existingExams||[]).find(e => e.exam_type_id===exam_type_id && e.class_id===class_id && e.term_id===term_id && (!isEdit || e.id!==x.id));
+    if (dupe) throw new Error("An exam of this type already exists for this class and term. Edit that one instead of creating a duplicate.");
+    const typeName = examTypes.find(t=>t.id===exam_type_id)?.name || "Exam";
+    const payload = { name: typeName, exam_type_id, class_id, term_id, exam_date: val(ov,"f_start")||null, exam_end_date: val(ov,"f_end")||null };
     if (isEdit) await dbUpdate("exams", x.id, payload); else await dbInsert("exams", payload);
     renderExamList(body);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
 }
 async function renderEnterResults(body) {
-  const exams = await dbSelect("exams", { select:"*,classes(name,section),exam_types(name,max_score)", order:"exam_date.desc" });
+  const examsRaw = await dbSelect("exams", { select:"*,classes(name,section),terms(name),exam_types(name,max_score)", order:"exam_date.desc" });
+  // Dedupe by class+term+exam type so an "End of Term" exam (or any type) never shows twice.
+  const exams = dedupeExams(examsRaw);
   if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
-  body.innerHTML = `<div class="card"><div class="field"><label>Select exam</label><select id="selExam">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}" data-max="${x.exam_types?.max_score||100}">${x.name}${x.exam_types?.name?(' — '+x.exam_types.name):''} — ${x.classes?.name||''}</option>`).join("")}</select></div>
+  body.innerHTML = `<div class="card"><div class="field"><label>Select exam</label><select id="selExam">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}" data-max="${x.exam_types?.max_score||100}">${examLabel(x)}</option>`).join("")}</select></div>
     <div class="field"><label>Subject</label><select id="selSubject"></select></div></div>
     <div id="resultsArea"><div class="center-loading">Choose an exam and subject</div></div>`;
   const selExam = document.getElementById("selExam");
@@ -1748,32 +2178,131 @@ async function renderEnterResults(body) {
       dbSelect("students", { class_id:`eq.${classId}`, status:"eq.active", order:"full_name.asc" }),
       dbSelect("exam_results", { exam_id:`eq.${examId}`, subject_id:`eq.${subjectId}` }),
     ]);
-    const marksMap = {}; results.forEach(r=>marksMap[r.student_id]=r.marks_obtained);
-    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th></tr></thead><tbody id="gridBody"></tbody></table></div>
+    const marksMap = {}, remarksMap = {};
+    results.forEach(r=>{ marksMap[r.student_id]=r.marks_obtained; remarksMap[r.student_id]=r.remarks||""; });
+    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th><th>Remarks</th></tr></thead><tbody id="gridBody"></tbody></table></div>
       <button class="btn btn-primary" id="saveResultsBtn" style="width:100%;">Save results</button><div id="resMsg"></div>`;
     const gb = document.getElementById("gridBody");
     students.forEach(s => {
-      gb.appendChild(elRow(`<tr><td>${s.full_name}</td><td><input type="number" max="${maxScore}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" value="${marksMap[s.id]??''}"/></td><td>${maxScore}</td></tr>`));
+      gb.appendChild(elRow(`<tr><td>${s.full_name}</td>
+        <td><input type="number" max="${maxScore}" min="0" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="markInput" value="${marksMap[s.id]??''}"/></td>
+        <td>${maxScore}</td>
+        <td><input type="text" placeholder="Teacher's remark…" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
     });
-    document.getElementById("saveResultsBtn").onclick = async (e) => {
+    document.getElementById("saveResultsBtn").onclick = async () => {
       const msg = document.getElementById("resMsg");
-      const inputs = [...gb.querySelectorAll("input")].filter(i=>i.value !== "");
-      const records = inputs.map(i => ({ exam_id: examId, student_id: i.dataset.sid, subject_id: subjectId, marks_obtained: Number(i.value), max_marks: maxScore }));
-      try { if (records.length) await dbUpsert("exam_results", records, "exam_id,student_id,subject_id"); msg.innerHTML = `<div class="msg-ok">Results saved.</div>`; }
-      catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
+      const markInputs = [...gb.querySelectorAll(".markInput")].filter(i=>i.value !== "");
+      const records = markInputs.map(i => {
+        const remarkEl = gb.querySelector(`.remarkInput[data-sid="${i.dataset.sid}"]`);
+        return { exam_id: examId, student_id: i.dataset.sid, subject_id: subjectId, marks_obtained: Number(i.value), max_marks: maxScore, remarks: (remarkEl && remarkEl.value) || null };
+      });
+      try {
+        // Upsert on (exam_id,student_id,subject_id) — re-saving the same student/subject
+        // updates their existing row instead of creating a repeat entry.
+        if (records.length) await dbUpsert("exam_results", records, "exam_id,student_id,subject_id");
+        msg.innerHTML = `<div class="msg-ok">Results saved.</div>`;
+      } catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
     };
   }
   selExam.onchange = loadSubjects;
   selSubject.onchange = loadGrid;
   if (exams.length) loadSubjects();
 }
-function gradeFor(pct) {
-  if (pct>=80) return "A"; if (pct>=70) return "B"; if (pct>=60) return "C"; if (pct>=50) return "D"; if (pct>=40) return "E"; return "F";
+
+/* ---- Results: every saved result, grouped per child / class / exam ---- */
+async function renderResultsOverview(body, filters={}) {
+  const [examsRaw, classes, terms, subjects, resultsRaw, students] = await Promise.all([
+    dbSelectActive("exams", { select:"*,classes(name,section),terms(name),exam_types(name)", order:"exam_date.desc" }),
+    dbSelectActive("classes", { order:"name.asc" }),
+    dbSelectActive("terms", { order:"start_date.desc" }),
+    dbSelectActive("subjects", { order:"name.asc" }),
+    dbSelect("exam_results", { select:"*" }),
+    dbSelectActive("students", { select:"id,full_name,admission_no,class_id" }),
+    loadGrades(),
+  ]);
+  const exams = dedupeExams(examsRaw);
+  const examMap = {}; exams.forEach(x=>examMap[x.id]=x);
+  const studentMap = {}; students.forEach(s=>studentMap[s.id]=s);
+  const subjectMap = {}; subjects.forEach(s=>subjectMap[s.id]=s.name);
+
+  // One row per (student, exam) — every subject saved for that student+exam rolls up into it.
+  const groups = {};
+  resultsRaw.forEach(r => {
+    const exam = examMap[r.exam_id];
+    if (!exam) return; // belongs to a trashed/duplicate exam we've already filtered out
+    if (filters.class_id && exam.class_id !== filters.class_id) return;
+    if (filters.term_id && exam.term_id !== filters.term_id) return;
+    const key = `${r.student_id}|${r.exam_id}`;
+    if (!groups[key]) groups[key] = { student_id:r.student_id, exam_id:r.exam_id, total:0, max:0, subjects:[] };
+    groups[key].total += Number(r.marks_obtained||0);
+    groups[key].max += Number(r.max_marks||0);
+    groups[key].subjects.push(r);
+  });
+  const rows = Object.values(groups)
+    .filter(g => studentMap[g.student_id] && examMap[g.exam_id])
+    .sort((a,b) => (studentMap[a.student_id].full_name||"").localeCompare(studentMap[b.student_id].full_name||""));
+
+  body.innerHTML = `
+    <div class="row" style="gap:10px;margin-bottom:14px;">
+      <select id="filterClass" style="flex:1;min-width:140px;"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}" ${filters.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
+      <select id="filterTerm" style="flex:1;min-width:140px;"><option value="">All terms</option>${terms.map(t=>`<option value="${t.id}" ${filters.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select>
+    </div>
+    <div class="card" id="resultsList"></div>
+  `;
+  document.getElementById("filterClass").onchange = (e) => renderResultsOverview(body, Object.assign({}, filters, { class_id: e.target.value || undefined }));
+  document.getElementById("filterTerm").onchange = (e) => renderResultsOverview(body, Object.assign({}, filters, { term_id: e.target.value || undefined }));
+
+  const list = document.getElementById("resultsList");
+  list.innerHTML = rows.length ? "" : emptyState("No results recorded yet. Enter marks from the \"Enter results\" tab.");
+  rows.forEach(g => {
+    const student = studentMap[g.student_id];
+    const exam = examMap[g.exam_id];
+    const pct = g.max ? (g.total/g.max*100) : 0;
+    const row = el(`<div class="list-row"><div class="avatar">${initials(student.full_name)}</div>
+      <div class="list-main"><div class="list-title">${student.full_name}</div>
+      <div class="list-sub">${examLabel(exam)}</div></div>
+      <div style="text-align:right;"><div style="font-weight:800;color:var(--navy);">${g.total}/${g.max}</div><div style="font-size:11.5px;color:var(--ink-soft);">${pct.toFixed(1)}% · ${gradeLabel(pct)}</div></div>
+    </div>`);
+    row.onclick = () => openViewModal(`${student.full_name} — ${examLabel(exam)}`, [
+      ["Admission no.", student.admission_no],
+      ...g.subjects.map(r => [subjectMap[r.subject_id] || "Subject", `${r.marks_obtained}/${r.max_marks}${r.remarks?(' — '+r.remarks):''}`]),
+      ["Total", `${g.total} / ${g.max}`],
+      ["Average", `${pct.toFixed(1)}%`],
+      ["Grade", gradeLabel(pct)],
+    ]);
+    list.appendChild(row);
+  });
 }
+// Admin-defined grade bands (Setup → Grades), cached after first load so report cards
+// and results don't re-fetch on every row. Falls back to a default A–F scale if the
+// admin hasn't set up any grades yet (or the grades table doesn't exist).
+let gradesCache = null;
+async function loadGrades() {
+  if (gradesCache !== null) return gradesCache;
+  try {
+    const rows = await dbSelectActive("grades", { order:"min_score.desc" });
+    gradesCache = rows.length ? rows : [];
+  } catch (e) { gradesCache = []; }
+  return gradesCache;
+}
+function gradeInfo(pct) {
+  const bands = gradesCache || [];
+  const match = bands.find(g => pct >= Number(g.min_score) && pct <= Number(g.max_score));
+  if (match) return { grade: match.grade, remark: match.remark || "" };
+  // Default scale — used only until the admin defines grades in Setup.
+  const grade = pct>=80?"A":pct>=70?"B":pct>=60?"C":pct>=50?"D":pct>=40?"E":"F";
+  return { grade, remark: "" };
+}
+function gradeFor(pct) { return gradeInfo(pct).grade; }
+function gradeLabel(pct) { const {grade,remark} = gradeInfo(pct); return remark ? `${grade} (${remark})` : grade; }
 async function renderReportCard(body) {
-  const exams = await dbSelect("exams", { select:"*,classes(name,section)", order:"exam_date.desc" });
+  const [examsRaw] = await Promise.all([
+    dbSelect("exams", { select:"*,classes(name,section),terms(name),exam_types(name)", order:"exam_date.desc" }),
+    loadGrades(),
+  ]);
+  const exams = dedupeExams(examsRaw);
   if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
-  body.innerHTML = `<div class="card"><div class="field"><label>Exam</label><select id="selExam2">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}">${x.name} — ${x.classes?.name||''}</option>`).join("")}</select></div>
+  body.innerHTML = `<div class="card"><div class="field"><label>Exam</label><select id="selExam2">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}">${examLabel(x)}</option>`).join("")}</select></div>
     <div class="field"><label>Student</label><select id="selStudent2"></select></div></div>
     <div id="cardArea"></div>`;
   const selExam2 = document.getElementById("selExam2");
@@ -1798,17 +2327,17 @@ async function renderReportCard(body) {
     area.innerHTML = `
       <div class="card" id="printArea">
         <div style="text-align:center;margin-bottom:14px;">
-          <h3 style="color:var(--navy);">Brightpath School</h3>
-          <div style="font-size:13px;color:var(--ink-soft);">${exam?.name || ''} — Report Card</div>
+          <h3 style="color:var(--navy);">Nova School</h3>
+          <div style="font-size:13px;color:var(--ink-soft);">${exam ? examLabel(exam) : ''} — Report Card</div>
         </div>
         <div class="row" style="margin-bottom:10px;font-size:13.5px;">
           <div><b>${student?.full_name}</b><br/><span style="color:var(--ink-soft);">Adm. No: ${student?.admission_no}</span></div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th></tr></thead><tbody>
-          ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained}</td><td>${r.max_marks}</td><td>${gradeFor((r.marks_obtained/r.max_marks)*100)}</td></tr>`).join("") || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
+        <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody>
+          ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained}</td><td>${r.max_marks}</td><td>${gradeLabel((r.marks_obtained/r.max_marks)*100)}</td><td>${r.remarks||''}</td></tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
         </tbody></table></div>
         <div class="row" style="margin-top:12px;font-weight:700;">
-          <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeFor(avg)}</div>
+          <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeLabel(avg)}</div>
         </div>
       </div>
       <button class="btn btn-ghost" id="printBtn" style="width:100%;margin-top:10px;">Print report card</button>
@@ -1888,19 +2417,19 @@ async function renderSettings(container) {
       <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.setup}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
       <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
         <div class="logo-upload" id="logoUpload" title="Tap to change logo">
-          ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Brightpath")}</span>`}
+          ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Nova School")}</span>`}
           <div class="cam">${ic.camera} Change</div>
         </div>
         <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
         <div style="flex:1;min-width:180px;">
-          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="Brightpath Academy" value="${s.school_name||''}"/></div>
+          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="Nova School Academy" value="${s.school_name||''}"/></div>
           <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="Excellence in every child" maxlength="60" value="${s.motto||''}"/></div>
         </div>
       </div>
       <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
       <div class="header-preview"><div class="hp-inner" id="hpInner">
-        <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"Brightpath")}</div>
-        <div><div class="hp-name" id="hpName">${s.school_name||"Brightpath"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
+        <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"Nova School")}</div>
+        <div><div class="hp-name" id="hpName">${s.school_name||"Nova School"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
       </div></div>
     </div>
 
@@ -1936,7 +2465,7 @@ async function renderSettings(container) {
   `;
 
   function updatePreview() {
-    const name = val(container,"f_sname") || "Brightpath";
+    const name = val(container,"f_sname") || "Nova School";
     const motto = val(container,"f_motto");
     document.getElementById("hpName").textContent = name;
     const hpLogo = document.getElementById("hpLogo");
@@ -2040,12 +2569,12 @@ async function renderTrash(container) {
       <div class="list-sub">${item.label} · deleted ${new Date(item.row.deleted_at).toLocaleDateString()}</div></div></div>`);
     row.onclick = () => openActionSheet([
       { label:"Restore", icon:ic.edit, onClick: safe(async()=>{ await restoreRecord(item.table, item.row.id); toast(`${name} restored.`, false); renderTrash(container); }) },
-      { label:"Delete permanently", icon:ic.trash, danger:true, onClick: () => { if (confirm(`Permanently delete "${name}"? This cannot be undone.`)) safe(async()=>{ await dbDelete(item.table, item.row.id); renderTrash(container); })(); } },
+      { label:"Delete permanently", icon:ic.trash, danger:true, onClick: () => { customConfirm(`Permanently delete "${name}"? This cannot be undone.`, { danger:true, okLabel:"Delete permanently" }).then(ok => { if (ok) safe(async()=>{ await dbDelete(item.table, item.row.id); renderTrash(container); })(); }); } },
     ]);
     list.appendChild(row);
   });
-  document.getElementById("emptyBtn").onclick = () => {
-    if (!confirm(`Permanently delete all ${allTrashed.length} item(s) in trash? This cannot be undone.`)) return;
+  document.getElementById("emptyBtn").onclick = async () => {
+    if (!(await customConfirm(`Permanently delete all ${allTrashed.length} item(s) in trash? This cannot be undone.`, { danger:true, okLabel:"Delete all" }))) return;
     safe(async () => {
       for (const item of allTrashed) { await dbDelete(item.table, item.row.id); }
       toast("Trash emptied.", false);
@@ -2081,6 +2610,116 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 window.addEventListener("error", (e) => { console.error(e.error || e.message); });
 
+/* ---------------- CUSTOM DATE PICKER ENGINE ----------------
+   Every input.datefield is a readonly text field (not a real native
+   input[type=date]) so its calendar popup — including the equivalent
+   of the OS "Set"/"Cancel" controls — is drawn entirely by us and can
+   be coloured however we like. The chosen value is written back into
+   the input's .value as an ISO "YYYY-MM-DD" string, and a real "change"
+   event is dispatched, so every existing val()/onchange() call in the
+   app keeps working exactly as before. */
+let activeDateCal = null;
+let activeDateInput = null;
+
+function closeDateCalendar() {
+  if (activeDateCal) { activeDateCal.remove(); activeDateCal = null; }
+  document.removeEventListener("mousedown", onDateCalOutsideClick, true);
+  document.removeEventListener("keydown", onDateCalKeydown, true);
+  window.removeEventListener("resize", closeDateCalendar);
+  window.removeEventListener("scroll", closeDateCalendar, true);
+  activeDateInput = null;
+}
+function onDateCalOutsideClick(e) {
+  if (activeDateCal && !activeDateCal.contains(e.target) && e.target !== activeDateInput) closeDateCalendar();
+}
+function onDateCalKeydown(e) { if (e.key === "Escape") closeDateCalendar(); }
+
+function openDateCalendar(inputEl) {
+  if (activeDateInput === inputEl) return; // already open for this field
+  closeDateCalendar();
+  activeDateInput = inputEl;
+
+  const todayD = new Date();
+  const parsed = inputEl.value ? new Date(inputEl.value + "T00:00:00") : null;
+  let viewYear = (parsed && !isNaN(parsed)) ? parsed.getFullYear() : todayD.getFullYear();
+  let viewMonth = (parsed && !isNaN(parsed)) ? parsed.getMonth() : todayD.getMonth();
+  let selectedIso = inputEl.value || null;
+
+  const pop = document.createElement("div");
+  pop.className = "date-cal-popup";
+  document.body.appendChild(pop);
+  activeDateCal = pop;
+
+  const pad = n => String(n).padStart(2, "0");
+  const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const todayIso = iso(todayD.getFullYear(), todayD.getMonth(), todayD.getDate());
+
+  function position() {
+    const r = inputEl.getBoundingClientRect();
+    const w = pop.offsetWidth || 288, h = pop.offsetHeight || 320;
+    let left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    let top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  }
+
+  function draw() {
+    const first = new Date(viewYear, viewMonth, 1);
+    const startDow = first.getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const monthName = first.toLocaleString("default", { month: "long" });
+    let cells = "";
+    for (let i = 0; i < startDow; i++) cells += `<div class="dc-cell dc-empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dStr = iso(viewYear, viewMonth, d);
+      const cls = ["dc-cell", "dc-day"];
+      if (dStr === selectedIso) cls.push("dc-selected");
+      if (dStr === todayIso) cls.push("dc-today");
+      cells += `<div class="${cls.join(' ')}" data-date="${dStr}">${d}</div>`;
+    }
+    pop.innerHTML = `
+      <div class="dc-header">
+        <button type="button" class="dc-nav" id="dcPrev">&#8249;</button>
+        <div class="dc-title">${monthName} ${viewYear}</div>
+        <button type="button" class="dc-nav" id="dcNext">&#8250;</button>
+      </div>
+      <div class="dc-grid dc-dow"><div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div></div>
+      <div class="dc-grid">${cells}</div>
+      <div class="dc-footer">
+        <button type="button" class="dc-link" id="dcToday">Today</button>
+        <button type="button" class="dc-link dc-danger" id="dcClear">Clear</button>
+      </div>`;
+    pop.querySelectorAll(".dc-day").forEach(cell => {
+      cell.onclick = () => choose(cell.dataset.date);
+    });
+    pop.querySelector("#dcPrev").onclick = () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } draw(); position(); };
+    pop.querySelector("#dcNext").onclick = () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } draw(); position(); };
+    pop.querySelector("#dcToday").onclick = () => { viewYear = todayD.getFullYear(); viewMonth = todayD.getMonth(); choose(todayIso); };
+    pop.querySelector("#dcClear").onclick = () => choose("");
+  }
+
+  function choose(dStr) {
+    selectedIso = dStr || null;
+    inputEl.value = dStr;
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+    closeDateCalendar();
+  }
+
+  draw();
+  position();
+  setTimeout(() => {
+    document.addEventListener("mousedown", onDateCalOutsideClick, true);
+    document.addEventListener("keydown", onDateCalKeydown, true);
+    window.addEventListener("resize", closeDateCalendar);
+    window.addEventListener("scroll", closeDateCalendar, true);
+  }, 0);
+}
+
+document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
+document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
+
 (async function boot() { await loadSchoolSettings(); render(); })();
 
 /* ---------------- PWA INSTALL SUPPORT ----------------
@@ -2089,7 +2728,7 @@ window.addEventListener("error", (e) => { console.error(e.error || e.message); }
    app installable and it can open standalone from the home screen. */
 if ("serviceWorker" in navigator) {
   const swSource = `
-    const CACHE = "brightpath-cache-v1";
+    const CACHE = "nova-school-cache-v1";
     self.addEventListener("install", (e) => { self.skipWaiting(); });
     self.addEventListener("activate", (e) => { self.clients.claim(); });
     self.addEventListener("fetch", (e) => {
@@ -2105,11 +2744,163 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-let deferredInstallPrompt = null;
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-});
+/* ---------------- PWA INSTALL OVERLAY ENGINE ----------------
+   Full-screen, fully app-styled "install this app" screen that appears
+   on open (in any browser — Chrome, Edge, Samsung Internet, Firefox,
+   Safari/iOS) and adapts its content to what that browser can actually
+   do:
+     • Chromium-based browsers (Chrome/Edge/Brave/Samsung/Opera) → wait
+       for the native install-eligibility event, then show a real
+       "Install Now" button that triggers the one-tap install.
+     • iOS (any browser, since they all use WebKit) → step-by-step
+       "Share → Add to Home Screen" instructions, since iOS has no
+       programmatic install trigger at all.
+     • Firefox (desktop & Android) → step-by-step menu instructions,
+       since Firefox does not support the install-eligibility event.
+   The overlay never shows again once the app is actually installed,
+   and can be dismissed (for this visit, or for a while) without
+   blocking access to the app itself. */
+const PWA_ICON_URL = "https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png";
+const PWA_OPTOUT_DAYS = 21;
+
+function detectPwaPlatform() {
+  const ua = navigator.userAgent || "";
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isFirefox = /Firefox|FxiOS/i.test(ua);
+  return { isStandalone, isIOS, isFirefox };
+}
+
+function pwaAlreadyHandled() {
+  try {
+    // ?installPrompt=1 in the URL always forces the overlay to show,
+    // ignoring any previous "Not now" / "Don't show again" / installed state.
+    // Handy for testing: yoursite.com/?installPrompt=1
+    if (new URLSearchParams(window.location.search).get("installPrompt") === "1") return false;
+    if (localStorage.getItem("pwaInstalled") === "true") return true;
+    const optOutUntil = parseInt(localStorage.getItem("pwaInstallOptOutUntil") || "0", 10);
+    if (Date.now() < optOutUntil) return true;
+    if (sessionStorage.getItem("pwaInstallDismissed") === "1") return true;
+  } catch (e) { /* storage unavailable — just show it */ }
+  return false;
+}
+
+function closePwaOverlay() {
+  const overlay = document.getElementById("pwaInstallOverlay");
+  if (overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
+  window.__pwaEventArrived = null;
+}
+function dismissPwaOverlay() {
+  try { sessionStorage.setItem("pwaInstallDismissed", "1"); } catch (e) {}
+  closePwaOverlay();
+}
+function optOutPwaOverlay() {
+  try { localStorage.setItem("pwaInstallOptOutUntil", String(Date.now() + PWA_OPTOUT_DAYS * 86400000)); } catch (e) {}
+  closePwaOverlay();
+}
+
+function pwaOverlayShell(bodyHtml) {
+  return `
+    <div class="pwa-card">
+      <button type="button" class="pwa-close" id="pwaCloseBtn" aria-label="Close">&times;</button>
+      <div class="pwa-icon"><img src="${PWA_ICON_URL}" alt=""/></div>
+      <div class="pwa-title">Install Nova School</div>
+      <div class="pwa-sub">Add Nova School Manager to your home screen for a faster, full-screen experience — no app store required.</div>
+      <div class="pwa-body">${bodyHtml}</div>
+      <div class="pwa-footer-links">
+        <button type="button" id="pwaNotNow">Not now</button>
+        <button type="button" id="pwaOptOut">Don't show again</button>
+      </div>
+    </div>`;
+}
+function pwaWireCommon(overlay) {
+  overlay.querySelector("#pwaCloseBtn").onclick = dismissPwaOverlay;
+  overlay.querySelector("#pwaNotNow").onclick = dismissPwaOverlay;
+  overlay.querySelector("#pwaOptOut").onclick = optOutPwaOverlay;
+}
+
+function renderPwaChecking(overlay) {
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-spinner"></div>
+    <div class="pwa-status">Checking if this browser supports one-tap install…</div>
+    <div class="pwa-actions"><button class="btn btn-ghost" disabled style="opacity:.6;">Preparing installer…</button></div>
+  `);
+  pwaWireCommon(overlay);
+}
+function renderPwaReady(overlay) {
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-actions"><button class="btn btn-primary" id="pwaInstallBtn">${ic.plus} Install Now</button></div>
+  `);
+  pwaWireCommon(overlay);
+  const btn = overlay.querySelector("#pwaInstallBtn");
+  btn.onclick = async () => {
+    if (!deferredInstallPrompt) { renderPwaFallback(overlay); return; }
+    btn.disabled = true; btn.textContent = "Installing…";
+    deferredInstallPrompt.prompt();
+    try {
+      const choice = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      if (choice.outcome !== "accepted") { btn.disabled = false; btn.innerHTML = `${ic.plus} Install Now`; }
+      // if accepted, the "appinstalled" event closes the overlay for us
+    } catch (e) { btn.disabled = false; btn.innerHTML = `${ic.plus} Install Now`; }
+  };
+}
+function renderPwaFallback(overlay) {
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-fallback-box">
+      ${ic.setup}
+      <div>Look for the install icon in your address bar, or open your browser's menu and choose <b>"Install Nova School Manager"</b> (or <b>"Add to Home Screen"</b>).</div>
+    </div>
+  `);
+  pwaWireCommon(overlay);
+}
+function renderPwaIOS(overlay) {
+  const shareIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>`;
+  const plusIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>`;
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-steps">
+      <div class="pwa-step"><span class="pwa-step-ic">${shareIcon}</span><span>Tap the <b>Share</b> icon in your browser's toolbar</span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">${plusIcon}</span><span>Scroll down and choose <b>Add to Home Screen</b></span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">✓</span><span>Tap <b>Add</b> — Nova School now opens like any other app</span></div>
+    </div>
+    <div class="pwa-actions"><button class="btn btn-ghost" id="pwaGotIt">Got it</button></div>
+  `);
+  pwaWireCommon(overlay);
+  overlay.querySelector("#pwaGotIt").onclick = dismissPwaOverlay;
+}
+function renderPwaFirefox(overlay) {
+  overlay.innerHTML = pwaOverlayShell(`
+    <div class="pwa-fallback-box">
+      ${ic.setup}
+      <div>Firefox doesn't support one-tap install yet. Open the <b>⋮ menu</b> and look for <b>"Install"</b> or <b>"Add to Home Screen"</b> — or open this page in Chrome/Edge for one-tap install.</div>
+    </div>
+    <div class="pwa-actions"><button class="btn btn-ghost" id="pwaGotIt">Continue in browser</button></div>
+  `);
+  pwaWireCommon(overlay);
+  overlay.querySelector("#pwaGotIt").onclick = dismissPwaOverlay;
+}
+
+function initPwaInstallOverlay() {
+  const overlay = document.getElementById("pwaInstallOverlay");
+  if (!overlay) return;
+  const p = detectPwaPlatform();
+  if (p.isStandalone || pwaAlreadyHandled()) return;
+
+  overlay.style.display = "flex";
+
+  if (p.isIOS) { renderPwaIOS(overlay); return; }
+  if (p.isFirefox) { renderPwaFirefox(overlay); return; }
+
+  // Chromium-family: wait briefly for the native install-eligibility event.
+  if (deferredInstallPrompt) { renderPwaReady(overlay); return; }
+  renderPwaChecking(overlay);
+  window.__pwaEventArrived = () => { if (overlay.style.display === "flex") renderPwaReady(overlay); };
+  setTimeout(() => {
+    if (overlay.style.display === "flex" && !deferredInstallPrompt) renderPwaFallback(overlay);
+  }, 2000);
+}
+
+initPwaInstallOverlay();
 </script>
 </body>
 </html>

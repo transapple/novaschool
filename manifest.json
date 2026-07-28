@@ -1,13 +1,14 @@
 {
-  "name": "Brightpath School Manager",
-  "short_name": "Brightpath",
-  "description": "Brightpath School Manager",
+  "name": "Nova School Manager",
+  "short_name": "Nova School",
+  "description": "Nova School Manager",
   "start_url": "./index.html",
+  "id": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#EEF2F9",
   "theme_color": "#16274A",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png",
