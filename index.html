@@ -246,6 +246,14 @@
   .col-method-d{background:var(--amber-tint);color:var(--amber-dark);}
   .att-btns{display:flex;gap:5px;flex-wrap:wrap;}
   .att-btn{padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:700;border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);}
+  /* Roll call: full name on its own line (no truncation), Present/Absent stacked below it. */
+  .roll-row{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px 6px;border-bottom:1px solid var(--line);cursor:default;}
+  .roll-row:last-child{border-bottom:none;}
+  .roll-top{display:flex;align-items:center;gap:12px;}
+  .roll-name{font-weight:700;font-size:14.5px;color:var(--ink);white-space:normal;overflow:visible;word-break:break-word;}
+  .roll-sub{font-size:12.5px;color:var(--ink-soft);margin-top:1px;}
+  .roll-row .att-btns{width:100%;}
+  .roll-row .att-btn{flex:1;padding:9px 10px;font-size:12.5px;text-align:center;}
   .att-btn.p.on{background:#e5f6ee;color:var(--teal-dark);border-color:var(--teal);}
 
   /* ---- Masthead (mobile branding strip; sidebar handles this on desktop) ---- */
@@ -426,6 +434,9 @@ alter table school_settings add column if not exists student_id_digits int defau
 alter table school_settings add column if not exists teacher_id_prefix text;
 alter table school_settings add column if not exists teacher_id_seq int default 0;
 alter table school_settings add column if not exists teacher_id_digits int default 3;`;
+// New "Grade" field added to both the student and staff registration forms.
+const GRADE_FIELD_SQL = `alter table students add column if not exists grade text;
+alter table teachers add column if not exists grade text;`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -583,6 +594,57 @@ function fileToDataURL(file) {
     r.onerror = () => reject(new Error("Could not read image file."));
     r.readAsDataURL(file);
   });
+}
+// Throws with a friendly message if any of the given field ids are empty — used to enforce
+// "required" fields on custom (non-<form>) modals.
+function requireFields(ov, fields) {
+  for (const [id, label] of fields) {
+    const elF = ov.querySelector("#"+id);
+    if (!elF) continue;
+    if (!String(elF.value || "").trim()) throw new Error(`${label} is required.`);
+  }
+}
+// Opens a live camera overlay and explicitly asks the browser for camera permission via
+// getUserMedia. Calls onCapture(dataUrl) with a JPEG data URL once the person snaps a photo.
+// If the browser can't do getUserMedia at all (or the person denies/it errors), calls
+// onUnavailable() so the caller can fall back to a native capture-attribute file input.
+function openCameraCapture(onCapture, onUnavailable) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { onUnavailable && onUnavailable(); return; }
+  const overlay = el(`<div class="overlay">
+    <div class="modal" style="max-width:420px;">
+      <button class="modal-close">&times;</button>
+      <h3>Take photo</h3>
+      <div style="border-radius:12px;overflow:hidden;background:#000;margin-top:10px;">
+        <video id="camVideo" autoplay playsinline style="width:100%;display:block;max-height:60vh;object-fit:cover;"></video>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" id="camCancel">Cancel</button>
+        <button class="btn btn-primary" id="camCapture">Capture</button>
+      </div>
+    </div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const video = overlay.querySelector("#camVideo");
+  let stream = null, settled = false;
+  const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); };
+  const close = () => { stop(); overlay.remove(); };
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#camCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  // This call is what triggers the browser/OS's "Allow camera access?" permission prompt.
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+    .then(s => { if (settled) { s.getTracks().forEach(t=>t.stop()); return; } stream = s; video.srcObject = s; })
+    .catch(() => { settled = true; close(); onUnavailable && onUnavailable(); });
+  overlay.querySelector("#camCapture").onclick = () => {
+    if (!stream) return;
+    settled = true;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 480; canvas.height = video.videoHeight || 480;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    close();
+    onCapture(dataUrl);
+  };
 }
 
 function render() {
@@ -1167,6 +1229,8 @@ async function renderIdFormat(body) {
     <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.6;">Set a prefix once and every new registration gets a unique ID automatically — prefix + gender (M/F) + year + a running number, e.g. <b>DFM25000</b>. The number keeps counting up with every new registration, whatever the gender.</p>
     <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving fails)</summary>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ID_FORMAT_SQL}</pre></details>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup — Grade field (run once)</summary>
+    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${GRADE_FIELD_SQL}</pre></details>
 
     <div class="card">
       <h4 style="margin-bottom:10px;color:var(--navy);">Student IDs</h4>
@@ -1379,12 +1443,12 @@ async function renderStudents(container, opts={}) {
     const row = el(`<div class="list-row">
       ${avatarHtml(s.full_name, s.photo_url)}
       <div class="list-main"><div class="list-title">${s.full_name}</div>
-      <div class="list-sub">#${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
+      <div class="list-sub">${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
       <span class="badge ${s.status==='active'?'badge-green':'badge-grey'}">${s.status}</span>
     </div>`);
     const view = () => openViewModal(s.full_name, [
       ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
+      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'], ["Grade", s.grade],
       ["Gender", s.gender], ["Date of birth", s.dob],
       ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
       ["Medical information", s.medical_info],
@@ -1402,39 +1466,48 @@ async function renderStudents(container, opts={}) {
 function openStudentModal(container, classes, s) {
   const isEdit = !!s;
   const initialGender = s?.gender || "Male";
+  let capturedPhotoDataUrl = null; // set when the in-browser camera (getUserMedia) captures a photo
   openModal(isEdit ? "Edit student" : "Register student", `
     <div class="field" style="text-align:center;">
       <label>Photo</label>
       <div id="photoPreviewWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml(s?.full_name, s?.photo_url, 72)}</div>
-      <input id="f_photo" type="file" accept="image/*"/>
+      <div class="row" style="justify-content:center;gap:8px;">
+        <button type="button" class="btn btn-ghost btn-sm" id="liveBtn">Live</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="pickBtn">Pick</button>
+      </div>
+      <input id="f_photo_live" type="file" accept="image/*" capture="user" style="display:none;"/>
+      <input id="f_photo_pick" type="file" accept="image/*" style="display:none;"/>
     </div>
     <div class="grid2">
-      <div class="field"><label>Admission no.</label><input id="f_adm" value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
-      <div class="field"><label>Full name</label><input id="f_name" value="${s?.full_name||''}"/></div>
+      <div class="field"><label>Admission no.</label><input id="f_adm" readonly value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
+      <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly placeholder="Select date" value="${s?.dob||''}"/></div>
-      <div class="field"><label>Gender</label><select id="f_gender">
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="Select date" value="${s?.dob||''}"/></div>
+      <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
-    <div class="field"><label>Class</label><select id="f_class"><option value="">— Unassigned —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+    <div class="grid2">
+      <div class="field"><label>Class</label><select id="f_class" required><option value="">— Select class —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+      <div class="field"><label>Grade</label><input id="f_grade" required placeholder="e.g. Grade 4" value="${s?.grade||''}"/></div>
+    </div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
     <div class="grid2">
-      <div class="field"><label>Name</label><input id="f_gname" value="${s?.guardian_name||''}"/></div>
-      <div class="field"><label>Relationship</label><input id="f_grel" placeholder="Mother, Father, Guardian…" value="${s?.guardian_relationship||''}"/></div>
+      <div class="field"><label>Name</label><input id="f_gname" required value="${s?.guardian_name||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_grel" required placeholder="Mother, Father, Guardian…" value="${s?.guardian_relationship||''}"/></div>
     </div>
-    <div class="field"><label>Phone number</label><input id="f_gphone" value="${s?.guardian_phone||''}"/></div>
+    <div class="field"><label>Phone number</label><input id="f_gphone" required value="${s?.guardian_phone||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Medical information</div>
-    <div class="field"><label>Allergies, conditions, medication, etc.</label><textarea id="f_medical" rows="2">${s?.medical_info||''}</textarea></div>
+    <div class="field"><label>Allergies, conditions, medication, etc.</label><textarea id="f_medical" rows="2" required>${s?.medical_info||''}</textarea></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
     <div class="grid2">
-      <div class="field"><label>Village</label><input id="f_village" value="${s?.village||''}"/></div>
-      <div class="field"><label>Subcounty</label><input id="f_subcounty" value="${s?.subcounty||''}"/></div>
+      <div class="field"><label>Village</label><input id="f_village" required value="${s?.village||''}"/></div>
+      <div class="field"><label>Subcounty</label><input id="f_subcounty" required value="${s?.subcounty||''}"/></div>
     </div>
-    <div class="field"><label>District</label><input id="f_district" value="${s?.district||''}"/></div>
+    <div class="field"><label>District</label><input id="f_district" required value="${s?.district||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Emergency contact</div>
     <div class="grid2">
@@ -1443,14 +1516,20 @@ function openStudentModal(container, classes, s) {
     </div>
     <div class="field"><label>Phone number</label><input id="f_ephone" value="${s?.emergency_phone||''}"/></div>
 
-    <div class="field"><label>Status</label><select id="f_status">
+    <div class="field"><label>Status</label><select id="f_status" required>
       ${["active","inactive","graduated","transferred"].map(v=>`<option value="${v}" ${s?.status===v?'selected':''}>${v}</option>`).join("")}</select></div>
   `, async (ov) => {
-    const photoFile = ov.querySelector("#f_photo").files[0];
-    const photo_url = photoFile ? await fileToDataURL(photoFile) : (s?.photo_url || null);
+    requireFields(ov, [
+      ["f_name","Full name"], ["f_dob","Date of birth"], ["f_class","Class"], ["f_grade","Grade"],
+      ["f_gname","Parent/guardian name"], ["f_grel","Parent/guardian relationship"], ["f_gphone","Parent/guardian phone"],
+      ["f_medical","Medical information"], ["f_village","Village"], ["f_subcounty","Subcounty"], ["f_district","District"],
+    ]);
+    const chosenFile = ov.querySelector("#f_photo_live").files[0] || ov.querySelector("#f_photo_pick").files[0];
+    if (!isEdit && !capturedPhotoDataUrl && !chosenFile) throw new Error("A registration photo is required — use Live or Pick.");
+    const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (s?.photo_url || null));
     const payload = {
       admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), dob: val(ov,"f_dob")||null,
-      gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
+      gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null, grade: val(ov,"f_grade"),
       guardian_name: val(ov,"f_gname"), guardian_relationship: val(ov,"f_grel"), guardian_phone: val(ov,"f_gphone"),
       medical_info: val(ov,"f_medical"),
       village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
@@ -1460,17 +1539,40 @@ function openStudentModal(container, classes, s) {
     if (isEdit) await dbUpdate("students", s.id, payload); else { await dbInsert("students", payload); await advanceIdSeq("student"); }
     renderStudents(container);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
-  const photoInput = document.getElementById("f_photo");
-  photoInput.onchange = async () => {
-    const dataUrl = await fileToDataURL(photoInput.files[0]);
-    if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(s?.full_name, dataUrl, 72);
+  const liveInput = document.getElementById("f_photo_live");
+  const pickInput = document.getElementById("f_photo_pick");
+  const setPreview = (dataUrl) => { document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(s?.full_name, dataUrl, 72); };
+  document.getElementById("liveBtn").onclick = () => {
+    openCameraCapture(
+      (dataUrl) => { // got a photo straight from the in-browser camera
+        capturedPhotoDataUrl = dataUrl;
+        liveInput.value = ""; pickInput.value = "";
+        setPreview(dataUrl);
+      },
+      () => { // getUserMedia unavailable/denied here — fall back to the device's native camera app
+        toast("In-page camera isn't available here — opening the picker instead.", false);
+        liveInput.click();
+      }
+    );
   };
+  document.getElementById("pickBtn").onclick = () => pickInput.click();
+  liveInput.onchange = async () => {
+    if (!liveInput.files[0]) return;
+    capturedPhotoDataUrl = null; pickInput.value = ""; // live capture takes precedence over any previously picked file
+    const dataUrl = await fileToDataURL(liveInput.files[0]);
+    if (dataUrl) setPreview(dataUrl);
+  };
+  pickInput.onchange = async () => {
+    if (!pickInput.files[0]) return;
+    capturedPhotoDataUrl = null; liveInput.value = ""; // picked file takes precedence over any prior capture
+    const dataUrl = await fileToDataURL(pickInput.files[0]);
+    if (dataUrl) setPreview(dataUrl);
+  };
+  // Admission no. is always generated from Setup → ID Format, based on gender — never hand-typed.
   if (!isEdit) {
     const admInput = document.getElementById("f_adm");
     const genderSelect = document.getElementById("f_gender");
-    let admAutoFilled = admInput.value === nextIdFor("student", genderSelect.value);
-    admInput.oninput = () => { admAutoFilled = false; };
-    genderSelect.onchange = () => { if (admAutoFilled) admInput.value = nextIdFor("student", genderSelect.value); };
+    genderSelect.onchange = () => { admInput.value = nextIdFor("student", genderSelect.value); };
   }
 }
 
@@ -1495,12 +1597,12 @@ async function renderTeachers(container, opts={}) {
     const row = el(`<div class="list-row">
       ${avatarHtml(t.full_name, t.photo_url)}
       <div class="list-main"><div class="list-title">${t.full_name}</div>
-      <div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· #'+t.staff_no):''}</div></div>
+      <div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· '+t.staff_no):''}</div></div>
       <span class="badge ${t.status==='active'?'badge-green':'badge-grey'}">${t.status}</span>
     </div>`);
     const view = () => openViewModal(t.full_name, [
       ["Photo", t.photo_url ? `<img src="${t.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["Staff no.", t.staff_no], ["Phone", t.phone], ["Gender", t.gender],
+      ["Staff no.", t.staff_no], ["Phone", t.phone], ["Gender", t.gender], ["Grade", t.grade],
       ["Specialty", t.specialty], ["Qualification", t.qualification],
       ["Village", t.village], ["Subcounty", t.subcounty], ["District", t.district],
       ["Emergency contact", t.emergency_name], ["Emergency relationship", t.emergency_relationship], ["Emergency phone", t.emergency_phone],
@@ -1521,42 +1623,49 @@ function openTeacherModal(container, t) {
     <div class="field" style="text-align:center;">
       <label>Photo</label>
       <div id="photoPreviewWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml(t?.full_name, t?.photo_url, 72)}</div>
-      <input id="f_photo" type="file" accept="image/*"/>
+      <input id="f_photo" type="file" accept="image/*" required/>
     </div>
     <div class="grid2">
-      <div class="field"><label>Staff no.</label><input id="f_staffno" value="${t?.staff_no || (isEdit ? '' : nextIdFor('teacher', initialGender))}"/></div>
-      <div class="field"><label>Full name</label><input id="f_name" value="${t?.full_name||''}"/></div>
+      <div class="field"><label>Staff no.</label><input id="f_staffno" readonly value="${t?.staff_no || (isEdit ? '' : nextIdFor('teacher', initialGender))}"/></div>
+      <div class="field"><label>Full name</label><input id="f_name" required value="${t?.full_name||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Phone</label><input id="f_phone" value="${t?.phone||''}"/></div>
-      <div class="field"><label>Gender</label><select id="f_gender"><option ${t?.gender==='Male'?'selected':''}>Male</option><option ${t?.gender==='Female'?'selected':''}>Female</option></select></div>
+      <div class="field"><label>Phone</label><input id="f_phone" required value="${t?.phone||''}"/></div>
+      <div class="field"><label>Gender</label><select id="f_gender" required><option ${t?.gender==='Male'?'selected':''}>Male</option><option ${t?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Specialty / subject</label><input id="f_spec" value="${t?.specialty||''}"/></div>
-      <div class="field"><label>Qualification</label><input id="f_qual" value="${t?.qualification||''}"/></div>
+      <div class="field"><label>Specialty / subject</label><input id="f_spec" required value="${t?.specialty||''}"/></div>
+      <div class="field"><label>Qualification</label><input id="f_qual" required value="${t?.qualification||''}"/></div>
     </div>
+    <div class="field"><label>Grade</label><input id="f_grade" required placeholder="e.g. Grade III Teacher" value="${t?.grade||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
     <div class="grid2">
-      <div class="field"><label>Village</label><input id="f_village" value="${t?.village||''}"/></div>
-      <div class="field"><label>Subcounty</label><input id="f_subcounty" value="${t?.subcounty||''}"/></div>
+      <div class="field"><label>Village</label><input id="f_village" required value="${t?.village||''}"/></div>
+      <div class="field"><label>Subcounty</label><input id="f_subcounty" required value="${t?.subcounty||''}"/></div>
     </div>
-    <div class="field"><label>District</label><input id="f_district" value="${t?.district||''}"/></div>
+    <div class="field"><label>District</label><input id="f_district" required value="${t?.district||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Emergency contact</div>
     <div class="grid2">
-      <div class="field"><label>Name</label><input id="f_ename" value="${t?.emergency_name||''}"/></div>
-      <div class="field"><label>Relationship</label><input id="f_erel" value="${t?.emergency_relationship||''}"/></div>
+      <div class="field"><label>Name</label><input id="f_ename" required value="${t?.emergency_name||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_erel" required value="${t?.emergency_relationship||''}"/></div>
     </div>
-    <div class="field"><label>Phone number</label><input id="f_ephone" value="${t?.emergency_phone||''}"/></div>
+    <div class="field"><label>Phone number</label><input id="f_ephone" required value="${t?.emergency_phone||''}"/></div>
 
-    <div class="field"><label>Status</label><select id="f_status"><option value="active" ${t?.status==='active'?'selected':''}>active</option><option value="inactive" ${t?.status==='inactive'?'selected':''}>inactive</option></select></div>
+    <div class="field"><label>Status</label><select id="f_status" required><option value="active" ${t?.status==='active'?'selected':''}>active</option><option value="inactive" ${t?.status==='inactive'?'selected':''}>inactive</option></select></div>
   `, async (ov) => {
+    requireFields(ov, [
+      ["f_name","Full name"], ["f_phone","Phone"], ["f_spec","Specialty/subject"], ["f_qual","Qualification"], ["f_grade","Grade"],
+      ["f_village","Village"], ["f_subcounty","Subcounty"], ["f_district","District"],
+      ["f_ename","Emergency contact name"], ["f_erel","Emergency contact relationship"], ["f_ephone","Emergency contact phone"],
+    ]);
     const photoFile = ov.querySelector("#f_photo").files[0];
+    if (!isEdit && !photoFile) throw new Error("A photo is required.");
     const photo_url = photoFile ? await fileToDataURL(photoFile) : (t?.photo_url || null);
     const payload = {
       staff_no: val(ov,"f_staffno"), full_name: val(ov,"f_name"), phone: val(ov,"f_phone"),
-      gender: val(ov,"f_gender"), specialty: val(ov,"f_spec"), qualification: val(ov,"f_qual"),
+      gender: val(ov,"f_gender"), specialty: val(ov,"f_spec"), qualification: val(ov,"f_qual"), grade: val(ov,"f_grade"),
       village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
       emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
@@ -1569,12 +1678,11 @@ function openTeacherModal(container, t) {
     const dataUrl = await fileToDataURL(photoInput.files[0]);
     if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(t?.full_name, dataUrl, 72);
   };
+  // Staff no. is always generated from Setup → ID Format, based on gender — never hand-typed.
   if (!isEdit) {
     const staffInput = document.getElementById("f_staffno");
     const genderSelect = document.getElementById("f_gender");
-    let staffAutoFilled = staffInput.value === nextIdFor("teacher", genderSelect.value);
-    staffInput.oninput = () => { staffAutoFilled = false; };
-    genderSelect.onchange = () => { if (staffAutoFilled) staffInput.value = nextIdFor("teacher", genderSelect.value); };
+    genderSelect.onchange = () => { staffInput.value = nextIdFor("teacher", genderSelect.value); };
   }
 }
 
@@ -1702,9 +1810,11 @@ async function openClassAttendanceModal(cls, date, onSaved) {
   const state = {};
   students.forEach(s => {
     state[s.id] = marks[s.id] || null;
-    const row = el(`<div class="list-row" style="cursor:default;">
-      ${avatarHtml(s.full_name, s.photo_url)}
-      <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">#${s.admission_no}</div></div>
+    const row = el(`<div class="roll-row">
+      <div class="roll-top">
+        ${avatarHtml(s.full_name, s.photo_url)}
+        <div class="list-main"><div class="roll-name">${s.full_name}</div><div class="roll-sub">${s.admission_no}</div></div>
+      </div>
       <div class="att-btns" data-sid="${s.id}">
         <button class="att-btn p ${state[s.id]==='present'?'on':''}" data-v="present">Present</button>
         <button class="att-btn a ${state[s.id]==='absent'?'on':''}" data-v="absent">Absent</button>
@@ -1754,9 +1864,11 @@ async function renderStaffAttendance(body, opts={}) {
   const state = {};
   teachers.forEach(t => {
     state[t.id] = marks[t.id] || null;
-    const row = el(`<div class="list-row" style="cursor:default;">
-      ${avatarHtml(t.full_name, t.photo_url)}
-      <div class="list-main"><div class="list-title">${t.full_name}</div><div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· #'+t.staff_no):''}</div></div>
+    const row = el(`<div class="roll-row">
+      <div class="roll-top">
+        ${avatarHtml(t.full_name, t.photo_url)}
+        <div class="list-main"><div class="roll-name">${t.full_name}</div><div class="roll-sub">${t.specialty||'General'} ${t.staff_no?('· '+t.staff_no):''}</div></div>
+      </div>
       <div class="att-btns" data-tid="${t.id}">
         <button class="att-btn p ${state[t.id]==='present'?'on':''}" data-v="present">Present</button>
         <button class="att-btn a ${state[t.id]==='absent'?'on':''}" data-v="absent">Absent</button>
@@ -1951,7 +2063,7 @@ async function renderFeePayment(body) {
     body.innerHTML = emptyState(!students.length ? "Register an active student first." : "Create a term first in Setup.");
     return;
   }
-  const studentOptionsHtml = (list) => `<option value="">— Select student —</option>` + list.map(s=>`<option value="${s.id}" data-class="${s.class_id||''}">${s.full_name} (#${s.admission_no})</option>`).join("");
+  const studentOptionsHtml = (list) => `<option value="">— Select student —</option>` + list.map(s=>`<option value="${s.id}" data-class="${s.class_id||''}">${s.full_name} (${s.admission_no})</option>`).join("");
   body.innerHTML = `
     <div class="card">
       <div class="field"><label>Filter by class</label><select id="f_classFilter"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}">${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
@@ -2049,7 +2161,7 @@ async function renderFeeHistory(body) {
   const tb = document.getElementById("tb");
   payments.forEach(p => {
     const studentName = p.students?.full_name || "—";
-    const admissionNo = p.students?.admission_no ? ` <span style="opacity:.6;font-weight:600;">#${p.students.admission_no}</span>` : "";
+    const admissionNo = p.students?.admission_no ? ` <span style="opacity:.6;font-weight:600;">${p.students.admission_no}</span>` : "";
     const termName = p.terms?.name || "—";
     const amountText = `${currency()}${Number(p.amount_paid || 0).toLocaleString()}`;
     const methodText = methodLabel(p.method) || "—";
@@ -2155,6 +2267,7 @@ async function renderEnterResults(body) {
   const examsRaw = await dbSelect("exams", { select:"*,classes(name,section),terms(name),exam_types(name,max_score)", order:"exam_date.desc" });
   // Dedupe by class+term+exam type so an "End of Term" exam (or any type) never shows twice.
   const exams = dedupeExams(examsRaw);
+  await loadGrades(); // so the live Grade column below can use the admin-defined grade bands
   if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
   body.innerHTML = `<div class="card"><div class="field"><label>Select exam</label><select id="selExam">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}" data-max="${x.exam_types?.max_score||100}">${examLabel(x)}</option>`).join("")}</select></div>
     <div class="field"><label>Subject</label><select id="selSubject"></select></div></div>
@@ -2180,14 +2293,25 @@ async function renderEnterResults(body) {
     ]);
     const marksMap = {}, remarksMap = {};
     results.forEach(r=>{ marksMap[r.student_id]=r.marks_obtained; remarksMap[r.student_id]=r.remarks||""; });
-    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th><th>Remarks</th></tr></thead><tbody id="gridBody"></tbody></table></div>
+    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody id="gridBody"></tbody></table></div>
       <button class="btn btn-primary" id="saveResultsBtn" style="width:100%;">Save results</button><div id="resMsg"></div>`;
     const gb = document.getElementById("gridBody");
     students.forEach(s => {
+      const mark = marksMap[s.id];
+      const initialGrade = (mark !== undefined && mark !== null && mark !== "") ? gradeFor((Number(mark)/maxScore)*100) : "—";
       gb.appendChild(elRow(`<tr><td>${s.full_name}</td>
         <td><input type="number" max="${maxScore}" min="0" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="markInput" value="${marksMap[s.id]??''}"/></td>
         <td>${maxScore}</td>
+        <td class="gradeCell" data-sid="${s.id}" style="font-weight:700;">${initialGrade}</td>
         <td><input type="text" placeholder="Teacher's remark…" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
+    });
+    // Live-update the Grade cell as marks are typed, using the admin-defined grade bands.
+    gb.querySelectorAll(".markInput").forEach(inp => {
+      inp.addEventListener("input", () => {
+        const cell = gb.querySelector(`.gradeCell[data-sid="${inp.dataset.sid}"]`);
+        if (!cell) return;
+        cell.textContent = inp.value === "" ? "—" : gradeFor((Number(inp.value)/maxScore)*100);
+      });
     });
     document.getElementById("saveResultsBtn").onclick = async () => {
       const msg = document.getElementById("resMsg");
