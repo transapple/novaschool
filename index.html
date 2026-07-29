@@ -244,7 +244,13 @@
   .fee-history-table .col-method-h,.fee-history-table .col-method-d{width:16%;white-space:nowrap;}
 
   /* ---------- PARENT PORTAL: digital receipt ---------- */
-  .receipt-box{padding:4px 0 10px;}
+  .receipt-box{padding:4px 0 10px;position:relative;}
+  .receipt-stamp{position:absolute;top:64px;right:6px;width:104px;height:104px;border-radius:50%;border:2.5px solid var(--teal);opacity:.6;transform:rotate(-16deg);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2;}
+  .receipt-stamp-inner{width:86px;height:86px;border-radius:50%;border:1.5px solid var(--teal);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4px;}
+  .receipt-stamp .rs-line1{font-size:8px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-dark);line-height:1.2;}
+  .receipt-stamp .rs-line2{font-size:12px;font-weight:800;letter-spacing:.03em;color:var(--teal-dark);margin:2px 0;}
+  .receipt-stamp .rs-line3{font-size:7.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--teal-dark);}
+  @media print{ .receipt-stamp{opacity:.7;} }
   .receipt-head{text-align:center;margin-bottom:14px;padding-bottom:14px;border-bottom:2px dashed var(--line);}
   .receipt-logo{width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:6px;}
   .receipt-school{font-size:17px;font-weight:800;color:var(--navy);}
@@ -298,6 +304,15 @@
   .logo-upload:hover{border-color:var(--teal);}
   .logo-upload img{width:100%;height:100%;object-fit:cover;}
   .logo-upload .cam{position:absolute;right:0;bottom:0;left:0;background:rgba(22,39,74,.72);color:#fff;font-size:10px;font-weight:700;text-align:center;padding:4px 0;letter-spacing:.2px;}
+  .stamp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:16px;}
+  .stamp-tile{text-align:center;}
+  .stamp-tile .logo-upload{width:84px;height:84px;border-radius:50%;margin:0 auto 8px;background:var(--teal-tint);}
+  .stamp-tile .stamp-label{font-size:11.5px;font-weight:700;color:var(--ink-soft);}
+  .stamp-tile .stamp-del{margin-top:4px;background:none;border:none;color:var(--red);font-size:11px;font-weight:700;padding:2px 6px;}
+  .stamp-tile .stamp-del:hover{text-decoration:underline;}
+  .receipt-preview-chip{display:inline-block;background:var(--teal-tint);color:var(--teal-dark);font-weight:800;font-size:13px;letter-spacing:.03em;padding:6px 12px;border-radius:8px;margin-top:6px;}
+  .receipt-stamp-img{position:absolute;top:56px;right:10px;width:96px;height:96px;object-fit:contain;opacity:.85;transform:rotate(-10deg);pointer-events:none;z-index:2;}
+  @media print{ .receipt-stamp-img{opacity:.9;} }
   .swatch-row{display:flex;gap:10px;flex-wrap:wrap;}
   .swatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;display:flex;align-items:center;justify-content:center;transition:transform .12s ease;box-shadow:0 1px 3px rgba(22,39,74,.15);}
   .swatch:hover{transform:scale(1.08);}
@@ -400,7 +415,8 @@ const ic = {
   attendance:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>`,
   fees:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 6V4h12v2"/></svg>`,
   exam:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>`,
-  setup:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.63.24 1.51.7 1.51 1z"/></svg>`,
+  settings:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.63.24 1.51.7 1.51 1z"/></svg>`,
+  stamp:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3c0 1.5 1 2 1 3.5S8 11 8 12.5h8c0-1.5-2-2.5-2-4S16 6.5 16 5a3 3 0 0 0-3-3z"/><path d="M4 17h16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M2 21h20"/><path d="M7 12.5h10L19 17H5z"/></svg>`,
   users:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   plus:`<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`,
   logout:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>`,
@@ -457,6 +473,20 @@ create policy "Anyone can read school settings" on school_settings for select us
 create policy "Admins can update school settings" on school_settings for update using (true);`;
 const EXAM_MIGRATION_SQL = `alter table exams add column if not exists exam_end_date date;
 alter table exam_results add column if not exists remarks text;`;
+const STAMPS_RECEIPT_SQL = `alter table school_settings add column if not exists stamp_head_teacher text;
+alter table school_settings add column if not exists stamp_deputy_head_teacher text;
+alter table school_settings add column if not exists stamp_bursar text;
+alter table school_settings add column if not exists stamp_other text;
+alter table school_settings add column if not exists receipt_prefix text default 'RCT';
+alter table school_settings add column if not exists receipt_digits int default 6;
+alter table school_settings add column if not exists receipt_next_number int default 1;
+alter table payments add column if not exists receipt_no text;`;
+const STAMP_TYPES = [
+  { key:"stamp_head_teacher", label:"Head Teacher" },
+  { key:"stamp_deputy_head_teacher", label:"Deputy Head Teacher" },
+  { key:"stamp_bursar", label:"Bursar" },
+  { key:"stamp_other", label:"Other office stamp" },
+];
 const GRADES_SETUP_SQL = `create table if not exists grades (
   id bigint generated always as identity primary key,
   grade text not null,
@@ -491,9 +521,19 @@ const COMMUNICATIONS_SQL = `create table if not exists school_communications (
   created_at timestamptz default now()
 );
 alter table school_communications enable row level security;
+drop policy if exists "Anyone can read school_communications" on school_communications;
 create policy "Anyone can read school_communications" on school_communications for select using (true);
+drop policy if exists "Authenticated can manage school_communications" on school_communications;
 create policy "Authenticated can manage school_communications" on school_communications for all using (true);
-alter publication supabase_realtime add table school_communications;`;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'school_communications'
+  ) then
+    alter publication supabase_realtime add table school_communications;
+  end if;
+end $$;`;
 // One-time setup for the School Meetings page — PTA meetings, parent-teacher
 // conferences, staff briefings, etc., each with a date/time so they can be
 // sorted into "upcoming" for parents and staff to plan around.
@@ -509,9 +549,45 @@ const MEETINGS_SQL = `create table if not exists school_meetings (
   created_at timestamptz default now()
 );
 alter table school_meetings enable row level security;
+drop policy if exists "Anyone can read school_meetings" on school_meetings;
 create policy "Anyone can read school_meetings" on school_meetings for select using (true);
+drop policy if exists "Authenticated can manage school_meetings" on school_meetings;
 create policy "Authenticated can manage school_meetings" on school_meetings for all using (true);
-alter publication supabase_realtime add table school_meetings;`;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'school_meetings'
+  ) then
+    alter publication supabase_realtime add table school_meetings;
+  end if;
+end $$;`;
+// One-time setup for Finance's "Fee Reminders" tool. A reminder with
+// student_id = null goes out to every parent; one with a student_id only
+// reaches the parent(s) linked to that specific student (see
+// fetchParentFeeReminders on the parent side).
+const FEE_REMINDERS_SQL = `create table if not exists fee_reminders (
+  id bigint generated always as identity primary key,
+  student_id uuid references students(id) on delete cascade,
+  title text not null,
+  message text not null,
+  created_by text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table fee_reminders enable row level security;
+create policy "Anyone can read fee_reminders" on fee_reminders for select using (true);
+create policy "Anyone can create fee_reminders" on fee_reminders for insert with check (true);
+create policy "Anyone can update fee_reminders" on fee_reminders for update using (true);`;
+// Optional but recommended: once a payment/receipt is recorded it should never
+// be editable or deletable again — the app's UI never exposes an edit/delete
+// action for fee_payments, but this closes the door at the database level too,
+// regardless of policies set up before this app existed.
+const FEE_PAYMENTS_READONLY_SQL = `alter table fee_payments enable row level security;
+drop policy if exists "fee_payments no update" on fee_payments;
+drop policy if exists "fee_payments no delete" on fee_payments;
+create policy "fee_payments no update" on fee_payments for update using (false);
+create policy "fee_payments no delete" on fee_payments for delete using (false);`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -583,10 +659,10 @@ const NAV = [
   {id:"attendance", label:"Attendance", icon:ic.attendance},
   {id:"fees", label:"Fees", icon:ic.fees},
   {id:"exams", label:"Exams", icon:ic.exam},
-  {id:"academic", label:"Setup", icon:ic.setup},
+  {id:"academic", label:"Setup", icon:ic.settings},
   {id:"comms", label:"Comms", icon:ic.megaphone},
   {id:"users", label:"Account", icon:ic.users},
-  {id:"settings", label:"Settings", icon:ic.sliders},
+  {id:"settings", label:"Settings", icon:ic.settings},
   {id:"trash", label:"Trash", icon:ic.trash},
 ];
 // Distinct icon tint per section in the bottom nav (inactive state only — the active
@@ -596,6 +672,72 @@ const NAV_ICON_COLOR = {
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
   academic:"#0e9488", comms:"#c2410c", users:"var(--navy-2)", settings:"#7a4fc4", trash:"var(--slate)",
 };
+
+/* ---------------- MOTHER SYSTEM: REMOTE FEATURE CONTROL ----------------
+   NAV ids in this list can be switched on/off per-school from the TransApple
+   Mother System (schools.features jsonb column). "Core" ids below are NEVER
+   gated — every school always keeps Home, Users/Account, Settings and Trash,
+   regardless of plan, so nobody ever gets locked out of their own account
+   settings or bin. Everything else follows schools.features[navId]; a module
+   is treated as ENABLED unless the Mother System has explicitly set it to
+   false (so schools created before this system existed, or with no features
+   configured yet, are unaffected).
+   This id list must be kept in sync with FEATURE_MODULES in the Mother App. */
+const CORE_NAV_IDS = new Set(["dashboard","users","settings","trash"]);
+const GATABLE_NAV_IDS = ["health","students","teachers","attendance","fees","exams","academic","comms"];
+
+// The full school row from the Mother System's `schools` table (status, plan,
+// features, name/motto). Kept separate from `schoolSettings` (this app's own
+// `school_settings` table) — this one is the record the Mother System owns.
+let CURRENT_SCHOOL = null;
+async function loadCurrentSchool() {
+  if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
+  try {
+    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,features" });
+    CURRENT_SCHOOL = rows[0] || null;
+  } catch (e) { CURRENT_SCHOOL = null; }
+}
+function isFeatureEnabled(navId) {
+  if (CORE_NAV_IDS.has(navId)) return true;
+  const f = CURRENT_SCHOOL?.features;
+  if (!f || typeof f !== "object") return true; // no config from Mother System yet — don't lock anyone out
+  return f[navId] !== false;
+}
+// Is this school allowed to be used at all right now, per the Mother System?
+function schoolIsActive() {
+  if (!CURRENT_SCHOOL) return true; // couldn't reach the schools row (offline, RLS not set up yet, etc.) — fail open, not closed
+  return CURRENT_SCHOOL.status === "active";
+}
+function schoolBlockedMessage() {
+  const s = CURRENT_SCHOOL?.status;
+  if (s === "pending") return "Your school's registration is still awaiting approval from TransApple. Please check back shortly.";
+  if (s === "suspended") return "Access to this school has been suspended by TransApple. Please contact your administrator or TransApple support.";
+  if (s === "deactivated") return "This school's account has been deactivated by TransApple. Please contact TransApple support if you believe this is a mistake.";
+  return "This school's account is not currently active. Please contact TransApple support.";
+}
+// Polls the Mother System's schools row every 45s (and whenever the tab regains
+// focus) so plan/feature/status changes made from the Mother App take effect
+// here automatically, without anyone needing to log out and back in.
+let __schoolSyncTimer = null;
+function startSchoolSync() {
+  stopSchoolSync();
+  const tick = async () => {
+    if (!CURRENT_SCHOOL_ID) return;
+    const prevStatus = CURRENT_SCHOOL?.status;
+    const prevFeatures = JSON.stringify(CURRENT_SCHOOL?.features || {});
+    await loadCurrentSchool();
+    if (!auth) return; // logged out while this was in flight
+    const changed = prevStatus !== CURRENT_SCHOOL?.status || prevFeatures !== JSON.stringify(CURRENT_SCHOOL?.features || {});
+    if (changed) {
+      if (!schoolIsActive()) { render(); return; } // full block screen takes over immediately
+      if (!hasNavAccess(profile, tab)) tab = "dashboard";
+      render();
+    }
+  };
+  __schoolSyncTimer = setInterval(tick, 45000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
+}
+function stopSchoolSync() { if (__schoolSyncTimer) { clearInterval(__schoolSyncTimer); __schoolSyncTimer = null; } }
 
 /* ---------------- DEPARTMENTS & ACCESS CONTROL ----------------
    Mirrors the school's org chart. Each department lists the job
@@ -648,6 +790,7 @@ function deptAccess(p) {
 }
 function hasFullAccess(p) { return deptAccess(p) === "all"; }
 function hasNavAccess(p, navId) {
+  if (!isFeatureEnabled(navId)) return false; // Mother System module gate overrides department access entirely
   const a = deptAccess(p);
   return a === "all" || a.includes(navId);
 }
@@ -780,19 +923,44 @@ create policy "Anyone can read parent_students" on parent_students for select us
 create policy "Anyone can manage parent_students" on parent_students for all using (true);
 
 -- Messages a parent sends to the school from the Contact School page.
+-- "department" routes it to Administration, Academics or Finance.
 create table if not exists parent_messages (
   id bigint generated always as identity primary key,
   parent_id uuid references profiles(id) on delete cascade,
   parent_name text,
+  department text,
   subject text not null,
   message text not null,
   status text not null default 'unread',
   created_at timestamptz default now()
 );
+alter table parent_messages add column if not exists department text;
 alter table parent_messages enable row level security;
 create policy "Anyone can read parent_messages" on parent_messages for select using (true);
 create policy "Anyone can create parent_messages" on parent_messages for insert with check (true);
 create policy "Anyone can update parent_messages" on parent_messages for update using (true);
+
+-- Private Contact: a confidential note from a parent to one specific staff
+-- member, found by searching their account/username. Only shown to the
+-- parent who sent it and the staff member it's addressed to — enforced on
+-- the client by always filtering on parent_id or recipient_id (this app has
+-- no Supabase Auth session to key real row-level security off of, same as
+-- every other table here).
+create table if not exists private_messages (
+  id bigint generated always as identity primary key,
+  parent_id uuid references profiles(id) on delete cascade,
+  parent_name text,
+  recipient_id uuid references profiles(id) on delete cascade,
+  recipient_name text,
+  subject text not null,
+  message text not null,
+  status text not null default 'unread',
+  created_at timestamptz default now()
+);
+alter table private_messages enable row level security;
+create policy "Anyone can read private_messages" on private_messages for select using (true);
+create policy "Anyone can create private_messages" on private_messages for insert with check (true);
+create policy "Anyone can update private_messages" on private_messages for update using (true);
 
 -- Verifies a Student ID + the student's exact registered name match, then
 -- links that student to a parent profile. Used both when adding a child
@@ -884,7 +1052,7 @@ begin
     'profiles','students','teachers','classes','class_subjects','subjects','terms',
     'exams','exam_types','exam_results','grades','attendance','staff_attendance',
     'fee_structures','fee_payments','school_communications','school_meetings',
-    'school_settings','account_change_requests','parent_students','parent_messages'
+    'school_settings','account_change_requests','parent_students','parent_messages','private_messages','fee_reminders'
   ]
   loop
     if to_regclass(t) is not null then
@@ -1170,11 +1338,13 @@ async function login(username, password, remember) {
   if (!row || !row.id) throw new Error("Incorrect username or password.");
   profile = scrubProfile(row);
   setCurrentSchool(profile.school_id);
+  await loadCurrentSchool();
   auth = { user: { id: profile.id } }; // no real token — just marks "signed in" for the UI gate below
   if (remember) rememberSession(username); else clearRememberedSession();
   markDeviceSeen();
   pinLocked = false;
   tab = "dashboard";
+  startSchoolSync();
   render();
 }
 // Silently restores a "remembered" session on app launch by just looking the
@@ -1191,9 +1361,11 @@ async function tryRestoreRememberedSession() {
     if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
     profile = scrubProfile(row);
     setCurrentSchool(profile.school_id);
+    await loadCurrentSchool();
     auth = { user: { id: profile.id } };
     markDeviceSeen();
     pinLocked = false;
+    startSchoolSync();
     return true;
   } catch (e) {
     return false;
@@ -1245,7 +1417,7 @@ async function linkParentChild(parentId, admission_no, student_name) {
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
-function logout() { auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; clearRememberedSession(); pinLocked = false; render(); }
+function logout() { stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null; clearRememberedSession(); pinLocked = false; render(); }
 // Confirms identity with the account's PIN (no email anywhere in this app),
 // then sets a new password via the reset_password() Postgres function.
 async function resetPassword({ username, pin, new_password }) {
@@ -1348,6 +1520,7 @@ function render() {
     return;
   }
   if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
+  if (auth && !schoolIsActive()) { renderSchoolBlocked(); return; }
   if (profile?.role === "parent" || profile?.department === "parents") { renderParentApp(); return; }
   app().innerHTML = `
     <div class="shell">
@@ -1484,10 +1657,12 @@ function renderSchoolRegistration() {
       });
       profile = scrubProfile(newAdmin);
       setCurrentSchool(profile.school_id);
+      await loadCurrentSchool();
       auth = { user: { id: profile.id } };
       markDeviceSeen();
       pinLocked = false;
       tab = "users";
+      startSchoolSync();
       toast(`${schoolName} registered! Add the rest of your team from Users & Roles.`, false);
       render();
     } catch (e) {
@@ -1686,6 +1861,24 @@ function renderLogin() {
    Shown instead of the login form when a "remembered" session was silently
    restored on launch — a quick PIN re-confirms it's really this person before
    handing back full access, without making them type their password again. */
+function renderSchoolBlocked() {
+  const status = CURRENT_SCHOOL?.status || "inactive";
+  app().innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <div class="brand" style="justify-content:center;">
+          <div class="brand-badge">${ic.lock || "🔒"}</div>
+        </div>
+        <h2 style="margin-bottom:10px;">Access unavailable</h2>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">${schoolBlockedMessage()}</div>
+        <div class="tiny-note" style="margin-bottom:18px;">Status: <b>${status}</b></div>
+        <button class="btn btn-ghost" id="blockedLogout" style="width:100%;">Log out</button>
+        <button class="btn btn-primary" id="blockedRetry" style="width:100%;margin-top:8px;">Check again</button>
+      </div>
+    </div>`;
+  document.getElementById("blockedLogout").onclick = logout;
+  document.getElementById("blockedRetry").onclick = async () => { await loadCurrentSchool(); render(); };
+}
 function renderPinUnlock() {
   app().innerHTML = `
     <div class="login-wrap"><div class="login-card">
@@ -1945,9 +2138,9 @@ function bindTapHold(rowEl, { onTap, onHold }) {
 const TRASH_TABLES = [
   { table:"students", label:"Students", nameField:"full_name", icon:ic.student },
   { table:"teachers", label:"Staff", nameField:"full_name", icon:ic.teacher },
-  { table:"classes", label:"Classes", nameField:"name", icon:ic.setup },
-  { table:"subjects", label:"Subjects", nameField:"name", icon:ic.setup },
-  { table:"terms", label:"Terms", nameField:"name", icon:ic.setup },
+  { table:"classes", label:"Classes", nameField:"name", icon:ic.settings },
+  { table:"subjects", label:"Subjects", nameField:"name", icon:ic.settings },
+  { table:"terms", label:"Terms", nameField:"name", icon:ic.settings },
   { table:"exams", label:"Exams", nameField:"name", icon:ic.exam },
   { table:"exam_types", label:"Exam types", nameField:"name", icon:ic.exam },
   { table:"grades", label:"Grades", nameField:"grade", icon:ic.exam },
@@ -1973,7 +2166,7 @@ const NAV_PARENT = [
   { id:"pfees", label:"Fees", icon:ic.fees },
   { id:"pnotifications", label:"Notifications", icon:ic.megaphone },
   { id:"pcontact", label:"Contact", icon:ic.phone },
-  { id:"psettings", label:"Settings", icon:ic.setup },
+  { id:"psettings", label:"Settings", icon:ic.settings },
 ];
 const PARENT_TAB_COLOR = { pchildren:"var(--sky)", pfees:"var(--red)", pnotifications:"#c2410c", pcontact:"var(--indigo)", psettings:"var(--slate)" };
 const PARENT_TAB_ANIM = { pchildren:"slideInLeft", pfees:"wiggleIn", pnotifications:"popScale", pcontact:"fadeSlideDown", psettings:"riseIn" };
@@ -1994,8 +2187,8 @@ function markNotifsRead(ids) {
   ids.forEach(id => read.add(id));
   try { localStorage.setItem(parentReadKey(), JSON.stringify([...read])); } catch (e) {}
 }
-function notifIdsFor(meetings, announcements) {
-  return [...meetings.map(m => `meeting:${m.id}`), ...announcements.map(a => `announcement:${a.id}`)];
+function notifIdsFor(meetings, announcements, reminders=[]) {
+  return [...meetings.map(m => `meeting:${m.id}`), ...announcements.map(a => `announcement:${a.id}`), ...reminders.map(r => `reminder:${r.id}`)];
 }
 const parentAudienceOk = (a) => !a || a === "Everyone" || a === "All parents";
 async function fetchParentMeetings() {
@@ -2007,6 +2200,15 @@ async function fetchParentAnnouncements(limit=20) {
   const rows = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:String(limit) });
   return rows.filter(c => parentAudienceOk(c.audience));
 }
+// Fee reminders from Finance — a row with no student_id goes to every
+// parent; a row with a student_id only shows up for the parent(s) linked to
+// that specific child.
+async function fetchParentFeeReminders(limit=20) {
+  const rows = await dbSelectActive("fee_reminders", { order:"created_at.desc", limit:String(limit), select:"*,students(full_name)" });
+  let childIds = [];
+  try { childIds = (await getParentChildren()).map(c => c.id); } catch (e) {}
+  return rows.filter(r => !r.student_id || childIds.includes(r.student_id));
+}
 // Refreshes the red unread-count badge on the "Meetings" nav entry (sidebar +
 // bottom nav) in place, without a full re-render. Called after every parent
 // shell render, and again immediately after the Meetings page marks its
@@ -2015,9 +2217,9 @@ async function refreshParentBadges() {
   if (!profile || (profile.role !== "parent" && profile.department !== "parents")) return;
   let count = 0;
   try {
-    const [meetings, announcements] = await Promise.all([fetchParentMeetings().catch(()=>[]), fetchParentAnnouncements().catch(()=>[])]);
+    const [meetings, announcements, reminders] = await Promise.all([fetchParentMeetings().catch(()=>[]), fetchParentAnnouncements().catch(()=>[]), fetchParentFeeReminders().catch(()=>[])]);
     const read = getReadNotifIds();
-    count = notifIdsFor(meetings, announcements).filter(id => !read.has(id)).length;
+    count = notifIdsFor(meetings, announcements, reminders).filter(id => !read.has(id)).length;
   } catch (e) { count = 0; }
   document.querySelectorAll('[data-nav="pnotifications"]').forEach(node => {
     let badge = node.querySelector(".nav-badge-count");
@@ -2034,7 +2236,7 @@ async function refreshParentBadges() {
 // table/RPC (see PARENT_PORTAL_SQL) hasn't been created in Supabase yet.
 function missingSetupHtml(message) {
   return `<div class="card">
-    <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.setup}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>${message}</p></div></div>
+    <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>${message}</p></div></div>
     <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your school's administrator/developer to run this once in the Supabase SQL editor, then refresh.</p>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${PARENT_PORTAL_SQL}</pre>
   </div>`;
@@ -2116,12 +2318,13 @@ async function computeChildFeeSummary(studentId, classId) {
    the red unread badge on the "Meetings" nav entry immediately (see
    refreshParentBadges / markNotifsRead above). */
 async function renderParentMeetings(container) {
-  let meetings = [], announcements = [], meetingsMissing = false;
+  let meetings = [], announcements = [], reminders = [], meetingsMissing = false;
   try { meetings = await fetchParentMeetings(); }
   catch (e) { meetingsMissing = true; }
   try { announcements = await fetchParentAnnouncements(); } catch (e) {}
+  try { reminders = await fetchParentFeeReminders(); } catch (e) {}
 
-  markNotifsRead(notifIdsFor(meetings, announcements));
+  markNotifsRead(notifIdsFor(meetings, announcements, reminders));
   refreshParentBadges();
 
   container.innerHTML = `
@@ -2129,6 +2332,10 @@ async function renderParentMeetings(container) {
       <h3 style="color:#c2410c;margin-bottom:12px;">Upcoming meetings</h3>
       <div id="meetingsList"></div>
       ${meetingsMissing ? `<p style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-top:10px;">Meetings haven't been set up for this school yet — check back later.</p>` : ""}
+    </div>
+    <div class="card">
+      <h3 style="color:var(--red);margin-bottom:12px;">Fee reminders</h3>
+      <div id="reminderList"></div>
     </div>
     <div class="card">
       <h3 style="color:var(--indigo);margin-bottom:12px;">Announcements</h3>
@@ -2147,6 +2354,15 @@ async function renderParentMeetings(container) {
       ["Audience", m.audience || "Everyone"], ["Details", m.description],
     ]);
     meetingsList.appendChild(row);
+  });
+
+  const reminderList = document.getElementById("reminderList");
+  reminderList.innerHTML = reminders.length ? "" : emptyState("No fee reminders right now.");
+  reminders.forEach(r => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.fees}</div>
+      <div class="list-main"><div class="list-title">${r.title}</div><div class="list-sub">${r.students ? `About ${r.students.full_name}` : "To all parents"} · ${formatDate(r.created_at)}</div></div></div>`);
+    row.onclick = () => openViewModal(r.title, [["About", r.students ? r.students.full_name : "All parents"], ["Message", r.message], ["Sent on", new Date(r.created_at).toLocaleString()]]);
+    reminderList.appendChild(row);
   });
 
   const announceList = document.getElementById("announceList");
@@ -2280,8 +2496,8 @@ async function renderParentFees(container) {
   const totalDue = summaries.reduce((a,s)=>a+s.totalDue, 0);
   container.innerHTML = `
     <div class="stat-grid">
-      <div class="stat"><div class="num">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total fees paid</div></div>
-      <div class="stat"><div class="num" style="color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Total balance due</div></div>
+      <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total fees paid</div></div>
+      <div class="stat"><div class="num" style="font-size:20px;color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Total balance due</div></div>
     </div>
     <div class="section-head"><h3 style="color:var(--red);">By child</h3></div>
     <div class="card" id="list"></div>
@@ -2325,8 +2541,8 @@ async function renderParentChildFeeDetail(container, child) {
       <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
     </div>
     <div class="stat-grid">
-      <div class="stat"><div class="num">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
-      <div class="stat"><div class="num" style="color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Balance due</div></div>
+      <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
+      <div class="stat"><div class="num" style="font-size:20px;color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Balance due</div></div>
     </div>
     <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
     <div class="card"><h3 style="color:var(--teal-dark);margin-bottom:10px;">Payment history &amp; receipts</h3><div id="payList"></div></div>
@@ -2345,16 +2561,45 @@ async function renderParentChildFeeDetail(container, child) {
 }
 
 /* ---- Digital receipt ---- */
+/* Assigns a permanent, sequential receipt number the first time a receipt is
+   viewed (using the format configured in Settings), then reuses it on every
+   reprint. Falls back to the old id-based number if the receipt_no column /
+   settings columns haven't been migrated in yet (see STAMPS_RECEIPT_SQL). */
+async function getOrAssignReceiptNo(payment) {
+  if (payment.receipt_no) return payment.receipt_no;
+  const s = schoolSettings || {};
+  try {
+    const prefix = s.receipt_prefix || "RCT";
+    const digits = s.receipt_digits || 6;
+    const next = s.receipt_next_number || 1;
+    const receiptNo = `${prefix}-${String(next).padStart(digits, "0")}`;
+    await dbUpdate("payments", payment.id, { receipt_no: receiptNo });
+    await dbUpsert("school_settings", { id:1, receipt_next_number: next + 1 }, "id");
+    await loadSchoolSettings();
+    payment.receipt_no = receiptNo;
+    return receiptNo;
+  } catch (e) {
+    return `RCT-${String(payment.id).slice(0,8).toUpperCase()}`;
+  }
+}
 async function openReceiptModal(payment, student) {
   let receivedByName = "";
   if (payment.received_by) {
     try { const r = await dbSelect("profiles", { id:`eq.${payment.received_by}`, select:"full_name" }); receivedByName = r[0]?.full_name || ""; } catch(e) {}
   }
   const s = schoolSettings || {};
-  const receiptNo = `RCT-${String(payment.id).slice(0,8).toUpperCase()}`;
+  const receiptNo = await getOrAssignReceiptNo(payment);
   const overlay = el(`<div class="overlay"><div class="modal" style="max-width:420px;">
     <button class="modal-close">&times;</button>
     <div id="receiptArea" class="receipt-box">
+      ${s.stamp_bursar ? `<img src="${s.stamp_bursar}" alt="Bursar's stamp" class="receipt-stamp-img"/>` : `
+      <div class="receipt-stamp">
+        <div class="receipt-stamp-inner">
+          <div class="rs-line1">Official Receipt</div>
+          <div class="rs-line2">PAID</div>
+          <div class="rs-line3">Bursar's Office</div>
+        </div>
+      </div>`}
       <div class="receipt-head">
         ${s.logo_url ? `<img src="${s.logo_url}" alt="" class="receipt-logo"/>` : ""}
         <div class="receipt-school">${s.school_name || "Nova School"}</div>
@@ -2389,7 +2634,26 @@ async function openReceiptModal(payment, student) {
   overlay.querySelector("#receiptPrintBtn").onclick = () => window.print();
 }
 
-/* ---- Contact School ---- */
+/* ---- Contact School ----
+   Three ways for a parent to reach out from here:
+   1. Call/email the school directly (school_settings contact info).
+   2. "Send a message" to a department (Administration, Academics or
+      Finance) — goes to parent_messages, seen by whichever staff handle
+      that department.
+   3. "Private Contact" — search for one specific staff member by their
+      account/username and send a confidential note that only that staff
+      member (and this parent) will see — goes to private_messages. */
+const PARENT_MSG_DEPARTMENTS = [
+  ["administration", "Administration"],
+  ["academic", "Academics"],
+  ["finance", "Finance"],
+];
+function parentMsgDeptOptions() {
+  return `<option value="" selected>— Select department —</option>` +
+    PARENT_MSG_DEPARTMENTS.map(([key,label]) => `<option value="${key}">${label}</option>`).join("");
+}
+function parentMsgDeptLabel(key) { return PARENT_MSG_DEPARTMENTS.find(([k])=>k===key)?.[1] || "General"; }
+
 async function renderParentContact(container) {
   const s = schoolSettings || {};
   container.innerHTML = `
@@ -2406,22 +2670,35 @@ async function renderParentContact(container) {
     </div>
     <div class="card">
       <h3 style="color:var(--indigo);margin-bottom:12px;">Send a message</h3>
+      <div class="field"><label>Department</label><select id="f_department">${parentMsgDeptOptions()}</select></div>
       <div class="field"><label>Subject</label><input id="f_subject" placeholder="e.g. Question about Term 2 fees"/></div>
       <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder="Write your message…"></textarea></div>
       <button class="btn btn-primary" id="sendMsgBtn" style="width:100%;">Send message</button>
       <div id="msgStatus"></div>
     </div>
     <div class="card" id="sentMsgs"><div class="center-loading">Loading…</div></div>
+    <div class="card">
+      <h3 style="color:var(--purple);margin-bottom:4px;">Private Contact</h3>
+      <div class="tiny-note" style="margin:0 0 12px;text-align:left;">Search for a staff member by their account/username and send a confidential message — only they will see it.</div>
+      <div class="row" style="gap:8px;">
+        <input id="f_staffSearch" placeholder="Search by username…" style="flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;"/>
+        <button class="btn btn-primary" id="staffSearchBtn">${ic.search || "Search"}</button>
+      </div>
+      <div id="staffSearchResults" style="margin-top:10px;"></div>
+    </div>
+    <div class="card" id="sentPrivateMsgs"><div class="center-loading">Loading…</div></div>
   `;
   document.getElementById("sendMsgBtn").onclick = async () => {
     const status = document.getElementById("msgStatus"); status.innerHTML = "";
+    const department = document.getElementById("f_department").value;
     const subject = document.getElementById("f_subject").value.trim();
     const message = document.getElementById("f_message").value.trim();
+    if (!department) { status.innerHTML = `<div class="err">Please select a department.</div>`; return; }
     if (!subject || !message) { status.innerHTML = `<div class="err">Please fill in both subject and message.</div>`; return; }
     try {
-      await dbInsert("parent_messages", { parent_id: profile.id, parent_name: profile.full_name, subject, message });
-      status.innerHTML = `<div class="msg-ok">Message sent to the school office.</div>`;
-      document.getElementById("f_subject").value = ""; document.getElementById("f_message").value = "";
+      await dbInsert("parent_messages", { parent_id: profile.id, parent_name: profile.full_name, department, subject, message });
+      status.innerHTML = `<div class="msg-ok">Message sent to ${parentMsgDeptLabel(department)}.</div>`;
+      document.getElementById("f_department").value = ""; document.getElementById("f_subject").value = ""; document.getElementById("f_message").value = "";
       loadSentMessages();
     } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
   };
@@ -2430,12 +2707,74 @@ async function renderParentContact(container) {
     try {
       const msgs = await dbSelect("parent_messages", { parent_id:`eq.${profile.id}`, order:"created_at.desc", limit:"20" });
       wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your messages</h3>` +
-        (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject}</div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No messages sent yet."));
+        (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject}${m.department ? ` <span style="color:var(--ink-soft);font-weight:600;">· ${parentMsgDeptLabel(m.department)}</span>` : ""}</div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No messages sent yet."));
     } catch (e) {
       wrap.innerHTML = missingSetupHtml("Messaging needs one more one-time setup step.");
     }
   }
+
+  async function searchStaff() {
+    const results = document.getElementById("staffSearchResults");
+    const term = document.getElementById("f_staffSearch").value.trim();
+    if (!term) { results.innerHTML = ""; return; }
+    results.innerHTML = `<div class="center-loading">Searching…</div>`;
+    try {
+      const staff = await dbSelect("profiles", {
+        username: `ilike.*${encodeURIComponent(term)}*`,
+        role: "neq.parent",
+        deleted_at: "is.null",
+        select: "id,full_name,username,department,position,photo_url",
+        limit: "10",
+      });
+      results.innerHTML = staff.length ? staff.map(p => `
+        <div class="list-row" data-staffid="${p.id}" style="cursor:pointer;">
+          ${avatarHtml(p.full_name, p.photo_url)}
+          <div class="list-main">
+            <div class="list-title">${p.full_name}</div>
+            <div class="list-sub">@${p.username}${DEPARTMENTS[p.department] ? ` · ${DEPARTMENTS[p.department].label}` : ""}${p.position ? ` · ${p.position}` : ""}</div>
+          </div>
+        </div>`).join("") : emptyState("No staff account found with that username.");
+      results.querySelectorAll("[data-staffid]").forEach(row => {
+        row.onclick = () => {
+          const staffMember = staff.find(p => p.id === row.dataset.staffid);
+          if (staffMember) openPrivateMessageModal(staffMember, loadSentPrivateMessages);
+        };
+      });
+    } catch (e) {
+      results.innerHTML = missingSetupHtml("Private Contact needs one more one-time setup step.");
+    }
+  }
+  document.getElementById("staffSearchBtn").onclick = searchStaff;
+  document.getElementById("f_staffSearch").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); searchStaff(); } });
+
+  async function loadSentPrivateMessages() {
+    const wrap = document.getElementById("sentPrivateMsgs");
+    try {
+      const msgs = await dbSelect("private_messages", { parent_id:`eq.${profile.id}`, order:"created_at.desc", limit:"20" });
+      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your private messages</h3>` +
+        (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject} <span style="color:var(--ink-soft);font-weight:600;">· to ${m.recipient_name || "staff"}</span></div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No private messages sent yet."));
+    } catch (e) {
+      wrap.innerHTML = missingSetupHtml("Private Contact needs one more one-time setup step.");
+    }
+  }
   loadSentMessages();
+  loadSentPrivateMessages();
+}
+function openPrivateMessageModal(staffMember, onSent) {
+  openModal(`Private message to ${staffMember.full_name}`, `
+    <div class="tiny-note" style="text-align:left;">This is confidential — only @${staffMember.username} will see it, not the rest of the school office.</div>
+    <div class="field"><label>Subject</label><input id="f_psubject" placeholder="e.g. About my child's progress"/></div>
+    <div class="field"><label>Message</label><textarea id="f_pmessage" rows="4" placeholder="Write your message…"></textarea></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_psubject","Subject"],["f_pmessage","Message"]]);
+    await dbInsert("private_messages", {
+      parent_id: profile.id, parent_name: profile.full_name,
+      recipient_id: staffMember.id, recipient_name: staffMember.full_name,
+      subject: val(ov,"f_psubject"), message: val(ov,"f_pmessage"),
+    });
+    toast(`Private message sent to ${staffMember.full_name}.`, false);
+    if (onSent) onSent();
+  }, { saveLabel: "Send privately" });
 }
 
 /* ---- Settings: account details, change password, log out ----
@@ -2467,7 +2806,7 @@ async function renderParentSettings(container) {
     </div>
   `;
   document.getElementById("editAcctBtn").onclick = () => openEditParentAccountModal(container);
-  document.getElementById("logoutBtnSettings").onclick = () => { if (confirm("Log out?")) logout(); };
+  document.getElementById("logoutBtnSettings").onclick = async () => { if (await customConfirm("Log out?")) logout(); };
   document.getElementById("changePassBtn").onclick = async () => {
     const status = document.getElementById("passStatus"); status.innerHTML = "";
     const pin = document.getElementById("f_cpin").value.trim();
@@ -3586,7 +3925,7 @@ function renderLowAttendanceList(container, lowList, students, windowStart) {
 async function renderFees(container, sub="payments") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
-  [["payments","Record payment"],["history","Payment history"],["structure","Fee structure"]].forEach(([id,label])=>{
+  [["payments","Record payment"],["history","Payment history"],["structure","Fee structure"],["health","Fees Health"],["status","Payment Status"],["reminders","Reminders"]].forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
     p.onclick = () => renderFees(container, id);
     pills.appendChild(p);
@@ -3595,6 +3934,310 @@ async function renderFees(container, sub="payments") {
   if (sub==="structure") return renderFeeStructure(body);
   if (sub==="payments") return renderFeePayment(body);
   if (sub==="history") return renderFeeHistory(body);
+  if (sub==="health") return renderFeesHealth(body);
+  if (sub==="status") return renderFeeStatus(body);
+  if (sub==="reminders") return renderFeeReminders(body);
+}
+/* ---- Fees Health Dashboard — Current Term / Last Term / Previous Terms,
+   each with a clickable "Total Payments" figure that opens the list of
+   every student who paid within that group. ---- */
+async function renderFeesHealth(body) {
+  const [terms, payments] = await Promise.all([
+    dbSelectActive("terms", { order:"start_date.desc" }),
+    dbSelect("fee_payments", { select:"student_id,amount_paid,term_id,students(full_name,admission_no,photo_url,classes(name,section))" }).catch(()=>[]),
+  ]);
+  if (!terms.length) { body.innerHTML = emptyState("Create terms first in Setup, then come back to see fee health."); return; }
+  const sorted = [...terms].sort((a,b) => new Date(b.start_date) - new Date(a.start_date));
+  const currentTerm = sorted.find(t => t.is_current) || sorted[0];
+  const currentIdx = sorted.findIndex(t => t.id === currentTerm.id);
+  const lastTerm = sorted[currentIdx + 1] || null;
+  const previousTerms = sorted.slice(currentIdx + 2);
+
+  function groupStats(termList) {
+    const ids = new Set(termList.map(t => t.id));
+    const rows = payments.filter(p => ids.has(p.term_id));
+    const total = rows.reduce((a,p) => a + Number(p.amount_paid||0), 0);
+    const studentIds = new Set(rows.map(p => p.student_id));
+    return { total, studentCount: studentIds.size, rows };
+  }
+  function termRangeLabel(termList) {
+    if (!termList.length) return "No term yet";
+    return termList.map(t => t.name).join(", ");
+  }
+  function feeHealthCard(key, title, termList, stats) {
+    if (!termList.length) {
+      return `<div class="card"><h3 style="color:var(--red);margin-bottom:4px;">${title}</h3>${emptyState("No term in this group yet.")}</div>`;
+    }
+    return `<div class="card">
+      <h3 style="color:var(--red);margin-bottom:2px;">${title}</h3>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">${termRangeLabel(termList)}</div>
+      <div class="stat-grid">
+        <div class="stat" id="fh_total_${key}" style="cursor:pointer;"><div class="num">${currency()}${stats.total.toLocaleString()}</div><div class="lbl">Total Payments</div></div>
+        <div class="stat"><div class="num">${stats.studentCount}</div><div class="lbl">Students paid</div></div>
+      </div>
+    </div>`;
+  }
+
+  const curStats = groupStats([currentTerm]);
+  const lastStats = groupStats(lastTerm ? [lastTerm] : []);
+  const prevStats = groupStats(previousTerms);
+
+  body.innerHTML = `
+    <div class="section-head"><h3 style="color:var(--red);">Fees Health Dashboard</h3></div>
+    ${feeHealthCard("current", "Current Term", [currentTerm], curStats)}
+    ${feeHealthCard("last", "Last Term", lastTerm ? [lastTerm] : [], lastStats)}
+    ${feeHealthCard("previous", "Previous Terms", previousTerms, prevStats)}
+  `;
+  const bind = (key, title, termList, stats) => {
+    if (!termList.length) return;
+    const el2 = document.getElementById(`fh_total_${key}`);
+    if (el2) el2.onclick = () => renderPaidStudentsList(body, title, stats.rows);
+  };
+  bind("current", "Current Term — Students who have paid", [currentTerm], curStats);
+  bind("last", "Last Term — Students who have paid", lastTerm ? [lastTerm] : [], lastStats);
+  bind("previous", "Previous Terms — Students who have paid", previousTerms, prevStats);
+}
+// Aggregates payment rows per student (a student may have paid more than once
+// in the group) then lists them, each showing how much they've paid in total.
+function renderPaidStudentsList(body, title, rows) {
+  const byStudent = new Map();
+  rows.forEach(p => {
+    const sid = p.student_id;
+    if (!byStudent.has(sid)) byStudent.set(sid, { student: p.students, total: 0 });
+    byStudent.get(sid).total += Number(p.amount_paid||0);
+  });
+  const list = [...byStudent.values()].filter(e => e.student).sort((a,b) => b.total - a.total);
+  body.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees Health</button>
+    <div class="section-head"><h3 style="color:var(--red);">${title}</h3></div>
+    <div class="card" id="paidList"></div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderFeesHealth(body);
+  const paidList = document.getElementById("paidList");
+  paidList.innerHTML = list.length ? "" : emptyState("No payments recorded for this period yet.");
+  list.forEach(({ student:s, total }) => {
+    const className = s.classes ? (s.classes.name + (s.classes.section?(' '+s.classes.section):'')) : "Unassigned";
+    const row = el(`<div class="list-row">${avatarHtml(s.full_name, s.photo_url, 40)}
+      <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">${s.admission_no||''} · ${className}</div></div>
+      <div style="text-align:right;font-weight:800;color:var(--teal-dark);">${currency()}${total.toLocaleString()}</div>
+    </div>`);
+    paidList.appendChild(row);
+  });
+}
+
+/* ---- Payment Status — every active student's overall paid percentage
+   (total ever paid vs. total ever assigned across their class's fee
+   structure), with quick bracket filters for chasing unpaid balances.
+   Clicking a student opens their full payment history & receipts. ---- */
+const FEE_PCT_BRACKETS = [
+  ["below30", "Below 30%", (p) => p < 30],
+  ["50", "50%", (p) => p >= 30 && p < 50],
+  ["75", "75%", (p) => p >= 50 && p < 75],
+  ["100", "100%", (p) => p >= 75],
+];
+async function renderFeeStatus(body, bracketKey="") {
+  const [students, structures, payments] = await Promise.all([
+    dbSelect("students", { status:"eq.active", select:"id,full_name,admission_no,photo_url,class_id,classes(name,section)", order:"full_name.asc" }),
+    dbSelectActive("fee_structures", { select:"class_id,amount" }).catch(()=>[]),
+    dbSelect("fee_payments", { select:"student_id,amount_paid" }).catch(()=>[]),
+  ]);
+  const assignedByClass = {};
+  structures.forEach(s => { assignedByClass[s.class_id] = (assignedByClass[s.class_id]||0) + Number(s.amount||0); });
+  const paidByStudent = {};
+  payments.forEach(p => { paidByStudent[p.student_id] = (paidByStudent[p.student_id]||0) + Number(p.amount_paid||0); });
+  const rows = students.map(s => {
+    const assigned = assignedByClass[s.class_id] || 0;
+    const paid = paidByStudent[s.id] || 0;
+    const pct = assigned > 0 ? Math.min(100, (paid/assigned)*100) : (paid > 0 ? 100 : 0);
+    return { student: s, assigned, paid, pct };
+  });
+  const bracket = FEE_PCT_BRACKETS.find(b => b[0]===bracketKey);
+  const filtered = bracket ? rows.filter(r => bracket[2](r.pct)) : rows;
+  filtered.sort((a,b) => a.pct - b.pct);
+
+  body.innerHTML = `
+    <div class="section-head"><h3 style="color:var(--red);">Payment Status</h3></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 12px;">Each student's total paid vs. their class's total assigned fees, across all terms. Tap a student to see their full payment history and receipts.</p>
+    <div class="pill-row" id="pctPills"></div>
+    <div class="card" id="statusList"></div>
+  `;
+  const pctPills = document.getElementById("pctPills");
+  const allPill = el(`<div class="pill ${!bracketKey?'active':''}">All (${rows.length})</div>`);
+  allPill.onclick = () => renderFeeStatus(body, "");
+  pctPills.appendChild(allPill);
+  FEE_PCT_BRACKETS.forEach(([key,label,test]) => {
+    const count = rows.filter(r=>test(r.pct)).length;
+    const p = el(`<div class="pill ${bracketKey===key?'active':''}">${label} (${count})</div>`);
+    p.onclick = () => renderFeeStatus(body, key);
+    pctPills.appendChild(p);
+  });
+  const list = document.getElementById("statusList");
+  list.innerHTML = filtered.length ? "" : emptyState("No students match this filter.");
+  filtered.forEach(({ student:s, assigned, paid, pct }) => {
+    const className = s.classes ? (s.classes.name + (s.classes.section?(' '+s.classes.section):'')) : "Unassigned";
+    const color = pct>=100 ? 'var(--teal-dark)' : pct>=50 ? 'var(--amber-dark)' : 'var(--red)';
+    const row = el(`<div class="list-row">${avatarHtml(s.full_name, s.photo_url, 40)}
+      <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">${s.admission_no||''} · ${className} · ${currency()}${paid.toLocaleString()} / ${currency()}${assigned.toLocaleString()}</div></div>
+      <div style="text-align:right;font-weight:800;color:${color};">${pct.toFixed(0)}%</div>${ic.chevronRight}
+    </div>`);
+    row.onclick = () => renderStaffStudentFeeDetail(body, s, () => renderFeeStatus(body, bracketKey));
+    list.appendChild(row);
+  });
+}
+/* ---- Staff-side view of one student's fee balance by term, full payment
+   history and receipts — the Finance-side equivalent of the parent portal's
+   own child fee detail page. Receipts here are the same immutable
+   openReceiptModal used everywhere else: view/print only, never editable. ---- */
+async function renderStaffStudentFeeDetail(body, student, onBack) {
+  body.innerHTML = `<div class="center-loading">Loading…</div>`;
+  const className = student.classes ? (student.classes.name + (student.classes.section ? (' '+student.classes.section) : '')) : "Unassigned";
+  const [structure, payments] = await Promise.all([
+    dbSelect("fee_structures", { class_id:`eq.${student.class_id||'null'}`, select:"*,terms(name)" }).catch(()=>[]),
+    dbSelect("fee_payments", { student_id:`eq.${student.id}`, select:"*,terms(name)", order:"payment_date.desc" }).catch(()=>[]),
+  ]);
+  const totalAssigned = structure.reduce((a,b)=>a+Number(b.amount||0),0);
+  const totalPaid = payments.reduce((a,b)=>a+Number(b.amount_paid||0),0);
+  const totalDue = Math.max(totalAssigned-totalPaid,0);
+  const termIds = [...new Set(structure.map(s=>s.term_id))];
+  const termRowsHtml = termIds.map(tid => {
+    const items = structure.filter(s=>s.term_id===tid);
+    const termName = items[0]?.terms?.name || "Term";
+    const due = items.reduce((a,b)=>a+Number(b.amount||0),0);
+    const paidForTerm = payments.filter(p=>p.term_id===tid).reduce((a,b)=>a+Number(b.amount_paid||0),0);
+    const bal = Math.max(due-paidForTerm,0);
+    return `<div class="view-row"><div class="vlabel">${termName}</div><div class="vvalue">${currency()}${paidForTerm.toLocaleString()} / ${currency()}${due.toLocaleString()} <span style="color:${bal>0?'var(--red)':'var(--teal-dark)'};">(${currency()}${bal.toLocaleString()} due)</span></div></div>`;
+  }).join("");
+  body.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back</button>
+    <div class="card row" style="align-items:center;gap:12px;">
+      ${avatarHtml(student.full_name, student.photo_url, 52)}
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${student.admission_no||''} · ${className}</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
+      <div class="stat"><div class="num" style="font-size:20px;color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Balance due</div></div>
+    </div>
+    <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
+    <div class="card">
+      <h3 style="color:var(--teal-dark);margin-bottom:4px;">Payment history &amp; receipts</h3>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Once issued, a receipt is permanent — it cannot be edited or deleted, only viewed or reprinted.</div>
+      <div id="payList"></div>
+    </div>
+  `;
+  document.getElementById("backBtn").onclick = onBack;
+  const payList = document.getElementById("payList");
+  payList.innerHTML = payments.length ? "" : emptyState("No payments recorded yet.");
+  payments.forEach(p => {
+    const row = el(`<div class="list-row" style="gap:10px;"><div class="avatar">${ic.fees}</div>
+      <div class="list-main"><div class="list-title">${currency()}${Number(p.amount_paid||0).toLocaleString()} · ${p.terms?.name||''}</div><div class="list-sub">${formatDate(p.payment_date)} · ${methodLabel(p.method)}</div></div>
+      <button class="btn btn-ghost btn-sm" id="rcpt${p.id}">Receipt</button></div>`);
+    row.querySelector(`#rcpt${p.id}`).onclick = (e) => { e.stopPropagation(); openReceiptModal(p, student); };
+    row.onclick = () => openReceiptModal(p, student);
+    payList.appendChild(row);
+  });
+}
+
+/* ---- Fee Reminders (individual student or all parents) + Finance
+   Announcements — both reachable from the Fees tab without needing full
+   access to the staff Comms section. Reminders use their own table
+   (fee_reminders); announcements reuse the shared school_communications
+   table (type='announcement') so they show up in the same place parents
+   already check for announcements. ---- */
+async function renderFeeReminders(body) {
+  const students = await dbSelect("students", { status:"eq.active", select:"id,full_name,admission_no", order:"full_name.asc" }).catch(()=>[]);
+  body.innerHTML = `
+    <div class="card">
+      <h3 style="color:var(--red);margin-bottom:4px;">Send a fee reminder</h3>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Send to every parent, or target the parent(s) of one specific student (e.g. to chase an outstanding balance).</div>
+      <div class="field"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
+      <div class="field" id="f_remStudentWrap" style="display:none;"><label>Student</label><select id="f_remStudent"><option value="">— Select student —</option>${students.map(s=>`<option value="${s.id}">${s.full_name} (${s.admission_no})</option>`).join("")}</select></div>
+      <div class="field"><label>Title</label><input id="f_remTitle" placeholder="e.g. Term 2 balance reminder"/></div>
+      <div class="field"><label>Message</label><textarea id="f_remMessage" rows="4" placeholder="Write your reminder…"></textarea></div>
+      <button class="btn btn-primary" id="sendRemBtn" style="width:100%;">Send reminder</button>
+      <div id="remStatus"></div>
+    </div>
+    <div class="card" id="remList"><div class="center-loading">Loading…</div></div>
+    <div class="card">
+      <h3 style="color:var(--indigo);margin-bottom:4px;">Send a finance announcement</h3>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Broadcasts to everyone the same way the school's Announcements page does.</div>
+      <div class="field"><label>Audience</label><select id="f_annAudience"><option>Everyone</option><option>All parents</option></select></div>
+      <div class="field"><label>Title</label><input id="f_annTitle" placeholder="e.g. New payment method accepted"/></div>
+      <div class="field"><label>Message</label><textarea id="f_annMessage" rows="4" placeholder="Write the announcement…"></textarea></div>
+      <button class="btn btn-primary" id="sendAnnBtn" style="width:100%;">Send announcement</button>
+      <div id="annStatus"></div>
+    </div>
+    <div class="card" id="annList"><div class="center-loading">Loading…</div></div>
+  `;
+  const targetSel = document.getElementById("f_remTarget");
+  const studentWrap = document.getElementById("f_remStudentWrap");
+  targetSel.onchange = () => { studentWrap.style.display = targetSel.value==="student" ? "" : "none"; };
+
+  async function loadReminders() {
+    const wrap = document.getElementById("remList");
+    try {
+      const rows = await dbSelectActive("fee_reminders", { order:"created_at.desc", limit:"20", select:"*,students(full_name,admission_no)" });
+      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Recent reminders</h3>` +
+        (rows.length ? rows.map(r => `<div class="list-row"><div class="list-main"><div class="list-title">${r.title}</div><div class="list-sub">${r.students ? `To ${r.students.full_name} (${r.students.admission_no||''})` : "To all parents"} · ${formatDate(r.created_at)}</div></div>
+          <button class="btn btn-ghost btn-sm" data-delrem="${r.id}">${ic.trash||"Delete"}</button></div>`).join("") : emptyState("No reminders sent yet."));
+      wrap.querySelectorAll("[data-delrem]").forEach(btn => {
+        btn.onclick = async () => { if (await customConfirm("Delete this reminder?", { danger:true, okLabel:"Delete" })) safe(async()=>{ await dbUpdate("fee_reminders", btn.dataset.delrem, { deleted_at:new Date().toISOString() }); loadReminders(); })(); };
+      });
+    } catch (e) {
+      wrap.innerHTML = `<div class="card">
+        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>Fee Reminders needs a small table in your database before you can send anything.</p></div></div>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${FEE_REMINDERS_SQL}</pre>
+        <button class="btn btn-primary" id="retryRemBtn" style="margin-top:12px;">I've run it — Refresh</button>
+      </div>`;
+      const retryBtn = document.getElementById("retryRemBtn");
+      if (retryBtn) retryBtn.onclick = loadReminders;
+    }
+  }
+  document.getElementById("sendRemBtn").onclick = async () => {
+    const status = document.getElementById("remStatus"); status.innerHTML = "";
+    const title = document.getElementById("f_remTitle").value.trim();
+    const message = document.getElementById("f_remMessage").value.trim();
+    const target = targetSel.value;
+    const studentId = document.getElementById("f_remStudent").value;
+    if (!title || !message) { status.innerHTML = `<div class="err">Please fill in both title and message.</div>`; return; }
+    if (target==="student" && !studentId) { status.innerHTML = `<div class="err">Please select a student.</div>`; return; }
+    try {
+      await dbInsert("fee_reminders", { student_id: target==="student" ? studentId : null, title, message, created_by: profile?.full_name || null });
+      status.innerHTML = `<div class="msg-ok">Reminder sent.</div>`;
+      document.getElementById("f_remTitle").value = ""; document.getElementById("f_remMessage").value = "";
+      loadReminders();
+    } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
+  };
+
+  async function loadAnnouncements() {
+    const wrap = document.getElementById("annList");
+    try {
+      const rows = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:"20" });
+      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Recent announcements</h3>` +
+        (rows.length ? rows.map(c => `<div class="list-row"><div class="list-main"><div class="list-title">${c.title}</div><div class="list-sub">${c.audience||"Everyone"} · ${formatDate(c.created_at)}</div></div></div>`).join("") : emptyState("No announcements sent yet."));
+    } catch (e) {
+      wrap.innerHTML = `<div class="card">
+        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>Announcements need a small table in your database before you can send anything.</p></div></div>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${COMMUNICATIONS_SQL}</pre>
+        <button class="btn btn-primary" id="retryAnnBtn" style="margin-top:12px;">I've run it — Refresh</button>
+      </div>`;
+      const retryBtn = document.getElementById("retryAnnBtn");
+      if (retryBtn) retryBtn.onclick = loadAnnouncements;
+    }
+  }
+  document.getElementById("sendAnnBtn").onclick = async () => {
+    const status = document.getElementById("annStatus"); status.innerHTML = "";
+    const title = document.getElementById("f_annTitle").value.trim();
+    const message = document.getElementById("f_annMessage").value.trim();
+    if (!title || !message) { status.innerHTML = `<div class="err">Please fill in both title and message.</div>`; return; }
+    try {
+      await dbInsert("school_communications", { type:"announcement", title, message, audience: document.getElementById("f_annAudience").value, created_by: profile?.full_name || null });
+      status.innerHTML = `<div class="msg-ok">Announcement sent.</div>`;
+      document.getElementById("f_annTitle").value = ""; document.getElementById("f_annMessage").value = "";
+      loadAnnouncements();
+    } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
+  };
+  loadReminders();
+  loadAnnouncements();
 }
 async function renderFeeStructure(body) {
   const [classes, terms, items] = await Promise.all([
@@ -3767,6 +4410,9 @@ async function renderFeePayment(body) {
       <div class="field"><label>Note (optional)</label><input id="f_note"/></div>
       <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
       <div id="payMsg"></div>
+      <div class="tiny-note" style="margin-top:10px;text-align:left;">Once recorded, a payment and its receipt are permanent — they can't be edited or deleted afterwards, so double-check the details before saving.</div>
+      <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">Enforce this at the database level too (optional, one-time)</summary>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${FEE_PAYMENTS_READONLY_SQL}</pre></details>
     </div>`;
   const classFilterSel = document.getElementById("f_classFilter");
   const studentSel = document.getElementById("f_student");
@@ -3825,11 +4471,19 @@ function formatDate(d) {
   if (isNaN(dt.getTime())) return d;
   return dt.toLocaleDateString(undefined, { day:"numeric", month:"short", year:"numeric" });
 }
-async function renderFeeHistory(body) {
-  const payments = await dbSelect("fee_payments", { select:"*,students(full_name,admission_no),terms(name)", order:"payment_date.desc", limit:"100" });
-  if (!payments.length) { body.innerHTML = emptyState("No payments recorded yet."); return; }
+async function renderFeeHistory(body, termFilter="") {
+  const terms = await dbSelectActive("terms", { order:"start_date.desc" }).catch(()=>[]);
+  const params = { select:"*,students(full_name,admission_no),terms(name)", order:"payment_date.desc", limit:"100" };
+  if (termFilter) params.term_id = `eq.${termFilter}`;
+  const payments = await dbSelect("fee_payments", params);
+  const termFilterHtml = `<div class="card">
+    <div class="field" style="margin-bottom:0;"><label>Filter by term</label><select id="f_historyTerm">
+      <option value="">All terms</option>${terms.map(t=>`<option value="${t.id}" ${termFilter===t.id?'selected':''}>${t.name}</option>`).join("")}
+    </select></div>
+  </div>`;
+  if (!payments.length) { body.innerHTML = termFilterHtml + emptyState("No payments recorded yet for this filter."); bindHistoryTermFilter(body); return; }
   const total = payments.reduce((a,b)=>a+Number(b.amount_paid), 0);
-  body.innerHTML = `
+  body.innerHTML = termFilterHtml + `
     <div class="card table-wrap">
       <table class="fee-history-table">
         <thead><tr>
@@ -3843,7 +4497,7 @@ async function renderFeeHistory(body) {
       </table>
     </div>
     <div class="card row" style="font-weight:700;">
-      <div style="color:var(--navy);">Total collected (last ${payments.length})</div>
+      <div style="color:var(--navy);">Total collected (${termFilter ? terms.find(t=>t.id===termFilter)?.name||"this term" : `last ${payments.length}`})</div>
       <div style="color:var(--teal-dark);font-size:16px;">${currency()}${total.toLocaleString()}</div>
     </div>`;
   const tb = document.getElementById("tb");
@@ -3861,7 +4515,14 @@ async function renderFeeHistory(body) {
       <td class="col-method-d">${methodText}</td>
     </tr>`));
   });
+  bindHistoryTermFilter(body);
 }
+function bindHistoryTermFilter(body) {
+  const sel = document.getElementById("f_historyTerm");
+  if (sel) sel.onchange = () => renderFeeHistory(body, sel.value);
+}
+
+
 
 /* ---------------- EXAMS ---------------- */
 // A single, consistent label for an exam — exam type + class + term. No separate
@@ -3935,7 +4596,8 @@ function openExamModal(body, classes, terms, examTypes, existingExams, x) {
   const isEdit = !!x;
   openModal(isEdit ? "Edit exam" : "New exam", `
     <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
-    <div class="field"><label>Class</label><select id="f_class">${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
+    <div class="field"><label>Class</label><select id="f_class">${isEdit ? "" : `<option value="__all__">— All Classes —</option>`}${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
+    ${isEdit ? "" : `<div class="tiny-note" style="margin:6px 0 0;text-align:left;">Choose "All Classes" to create this exam for every class at once (skipping any class that already has one for this type and term).</div>`}</div>
     <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${x?.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="grid2">
       <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_date||''}"/></div>
@@ -3943,10 +4605,20 @@ function openExamModal(body, classes, terms, examTypes, existingExams, x) {
     </div>
   `, async (ov)=>{
     const exam_type_id = val(ov,"f_examtype")||null, class_id = val(ov,"f_class"), term_id = val(ov,"f_term");
+    const typeName = examTypes.find(t=>t.id===exam_type_id)?.name || "Exam";
+    const exam_date = val(ov,"f_start")||null, exam_end_date = val(ov,"f_end")||null;
+    if (class_id === "__all__") {
+      const already = new Set((existingExams||[]).filter(e => e.exam_type_id===exam_type_id && e.term_id===term_id).map(e=>e.class_id));
+      const targetClasses = classes.filter(c => !already.has(c.id));
+      if (!targetClasses.length) throw new Error("Every class already has an exam of this type for this term.");
+      await dbInsert("exams", targetClasses.map(c => ({ name: typeName, exam_type_id, class_id: c.id, term_id, exam_date, exam_end_date })));
+      renderExamList(body);
+      toast(`Created for ${targetClasses.length} class${targetClasses.length===1?'':'es'}${already.size ? ` (${already.size} already had one and were skipped)` : ""}.`, false);
+      return;
+    }
     const dupe = (existingExams||[]).find(e => e.exam_type_id===exam_type_id && e.class_id===class_id && e.term_id===term_id && (!isEdit || e.id!==x.id));
     if (dupe) throw new Error("An exam of this type already exists for this class and term. Edit that one instead of creating a duplicate.");
-    const typeName = examTypes.find(t=>t.id===exam_type_id)?.name || "Exam";
-    const payload = { name: typeName, exam_type_id, class_id, term_id, exam_date: val(ov,"f_start")||null, exam_end_date: val(ov,"f_end")||null };
+    const payload = { name: typeName, exam_type_id, class_id, term_id, exam_date, exam_end_date };
     if (isEdit) await dbUpdate("exams", x.id, payload); else await dbInsert("exams", payload);
     renderExamList(body);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
@@ -4285,10 +4957,12 @@ async function renderReportCard(body) {
     const total = results.reduce((a,r)=>a+Number(r.marks_obtained||0),0);
     const maxTotal = results.reduce((a,r)=>a+Number(r.max_marks||0),0);
     const avg = maxTotal ? (total/maxTotal*100) : 0;
+    const s = schoolSettings || {};
     area.innerHTML = `
       <div class="card" id="printArea">
         <div style="text-align:center;margin-bottom:14px;">
-          <h3 style="color:var(--navy);">Nova School</h3>
+          ${s.logo_url ? `<img src="${s.logo_url}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;margin-bottom:6px;"/>` : ""}
+          <h3 style="color:var(--navy);">${s.school_name || "Nova School"}</h3>
           <div style="font-size:13px;color:var(--ink-soft);">${exam ? examLabel(exam) : ''} — Report Card</div>
         </div>
         <div class="row" style="margin-bottom:10px;font-size:13.5px;">
@@ -4300,6 +4974,13 @@ async function renderReportCard(body) {
         <div class="row" style="margin-top:12px;font-weight:700;">
           <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeLabel(avg)}</div>
         </div>
+        ${s.stamp_head_teacher ? `
+        <div style="margin-top:22px;display:flex;justify-content:flex-end;">
+          <div style="text-align:center;">
+            <img src="${s.stamp_head_teacher}" alt="Head Teacher's stamp" style="width:80px;height:80px;object-fit:contain;"/>
+            <div style="font-size:11px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:4px;margin-top:2px;">Head Teacher</div>
+          </div>
+        </div>` : ""}
       </div>
       <button class="btn btn-ghost" id="printBtn" style="width:100%;margin-top:10px;">Print report card</button>
     `;
@@ -4344,8 +5025,8 @@ async function renderUsers(container) {
   if (!isAdmin) {
     container.innerHTML = meCard + `<div id="myReqs"></div>`;
     const logoutBtn = document.getElementById("logoutBtn");
-    if (logoutBtn) logoutBtn.onclick = () => {
-      if (confirm("Log out?")) logout();
+    if (logoutBtn) logoutBtn.onclick = async () => {
+      if (await customConfirm("Log out?")) logout();
     };
     const reqBtn = document.getElementById("reqBtn");
     if (reqBtn) reqBtn.onclick = () => {
@@ -4380,8 +5061,8 @@ async function renderUsers(container) {
     <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
     <div class="card" id="reqList"></div>`;
   const logoutBtn = document.getElementById("logoutBtn");
-  if (logoutBtn) logoutBtn.onclick = () => {
-    if (confirm("Log out?")) logout();
+  if (logoutBtn) logoutBtn.onclick = async () => {
+    if (await customConfirm("Log out?")) logout();
   };
   const list = document.getElementById("list");
   const deptOptions = (selected) => `<option value="" ${!selected?'selected':''}>— No department —</option>` +
@@ -4516,13 +5197,15 @@ async function renderSettings(container) {
   const colorKey = s.brand_color && BRAND_PRESETS[s.brand_color] ? s.brand_color : "teal";
   let logoDataUrl = s.logo_url || null;
   let selectedColor = colorKey;
+  const stampData = {};
+  STAMP_TYPES.forEach(t => { stampData[t.key] = s[t.key] || null; });
 
   container.innerHTML = `
     <h3 style="color:var(--navy);margin-bottom:4px;">School Settings</h3>
     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Your school's identity — shown across the whole app, including the header everyone sees.</p>
 
     <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.setup}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
+      <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
       <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
         <div class="logo-upload" id="logoUpload" title="Tap to change logo">
           ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Nova School")}</span>`}
@@ -4554,6 +5237,36 @@ async function renderSettings(container) {
         <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="info@school.edu" value="${s.email||''}"/></div>
       </div>
       <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="P.O. Box 1, Kampala">${s.address||''}</textarea></div>
+    </div>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.stamp}</div><div><h3 style="color:var(--navy);">Official stamps</h3><p>Upload the stamps used on receipts, reports and other official documents.</p></div></div>
+      <div class="stamp-grid" id="stampGrid">
+        ${STAMP_TYPES.map(t => `
+          <div class="stamp-tile" data-key="${t.key}">
+            <div class="logo-upload stamp-upload" data-key="${t.key}" title="Tap to upload">
+              ${s[t.key] ? `<img class="stampPreviewImg" data-key="${t.key}" src="${s[t.key]}"/>` : `<span class="stampPreviewImg" data-key="${t.key}">${ic.stamp}</span>`}
+              <div class="cam">${ic.camera} ${s[t.key] ? "Replace" : "Upload"}</div>
+            </div>
+            <div class="stamp-label">${t.label}</div>
+            ${s[t.key] ? `<button type="button" class="stamp-del" data-key="${t.key}">Remove</button>` : ""}
+          </div>`).join("")}
+      </div>
+      <input type="file" id="stampFile" accept="image/*" style="display:none;"/>
+      <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving a stamp or receipt number fails)</summary>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${STAMPS_RECEIPT_SQL}</pre></details>
+    </div>
+
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.edit}</div><div><h3 style="color:var(--navy);">Receipt number format</h3><p>Controls how receipt numbers are generated for fee payments.</p></div></div>
+      <div class="grid2">
+        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="RCT" maxlength="12" value="${s.receipt_prefix||'RCT'}"/></div>
+        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" value="${s.receipt_digits||6}"/></div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Next receipt number</label>
+        <input id="f_rnext" type="number" min="1" value="${s.receipt_next_number||1}"/>
+        <div id="receiptPreview" class="receipt-preview-chip"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -4601,6 +5314,60 @@ async function renderSettings(container) {
     };
   });
 
+  /* ---- Official stamps: upload / replace / delete ---- */
+  const stampFileInput = document.getElementById("stampFile");
+  let activeStampKey = null;
+  function renderStampTile(key) {
+    const tile = container.querySelector(`.stamp-tile[data-key="${key}"]`);
+    if (!tile) return;
+    const label = STAMP_TYPES.find(t => t.key === key).label;
+    const val = stampData[key];
+    tile.innerHTML = `
+      <div class="logo-upload stamp-upload" data-key="${key}" title="Tap to upload">
+        ${val ? `<img class="stampPreviewImg" data-key="${key}" src="${val}"/>` : `<span class="stampPreviewImg" data-key="${key}">${ic.stamp}</span>`}
+        <div class="cam">${ic.camera} ${val ? "Replace" : "Upload"}</div>
+      </div>
+      <div class="stamp-label">${label}</div>
+      ${val ? `<button type="button" class="stamp-del" data-key="${key}">Remove</button>` : ""}`;
+    wireStampTile(key);
+  }
+  function wireStampTile(key) {
+    const tile = container.querySelector(`.stamp-tile[data-key="${key}"]`);
+    if (!tile) return;
+    tile.querySelector(".stamp-upload").onclick = () => { activeStampKey = key; stampFileInput.click(); };
+    const delBtn = tile.querySelector(".stamp-del");
+    if (delBtn) delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const label = STAMP_TYPES.find(t => t.key === key).label;
+      if (!(await customConfirm(`Remove the ${label} stamp? You can upload a new one any time.`, { danger:true, okLabel:"Remove" }))) return;
+      stampData[key] = null;
+      renderStampTile(key);
+    };
+  }
+  STAMP_TYPES.forEach(t => wireStampTile(t.key));
+  stampFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file || !activeStampKey) return;
+    stampData[activeStampKey] = await fileToDataURL(file);
+    renderStampTile(activeStampKey);
+    activeStampKey = null;
+  };
+
+  /* ---- Receipt number format preview ---- */
+  function updateReceiptPreview() {
+    const prefix = (val(container,"f_rprefix") || "RCT").trim();
+    const digits = Math.max(1, parseInt(val(container,"f_rdigits"), 10) || 6);
+    const next = Math.max(1, parseInt(val(container,"f_rnext"), 10) || 1);
+    const preview = document.getElementById("receiptPreview");
+    if (preview) preview.textContent = `Next receipt: ${prefix}-${String(next).padStart(digits, "0")}`;
+  }
+  ["f_rprefix","f_rdigits","f_rnext"].forEach(id => {
+    const field = document.getElementById(id);
+    if (field) field.oninput = updateReceiptPreview;
+  });
+  updateReceiptPreview();
+
   document.getElementById("saveSettingsBtn").onclick = async (e) => {
     const msg = document.getElementById("settingsMsg");
     e.target.textContent = "Saving…"; e.target.disabled = true;
@@ -4617,7 +5384,11 @@ async function renderSettings(container) {
         address: val(container,"f_address") || null,
         brand_color: selectedColor,
         currency_symbol: val(container,"f_currency") || "₦",
+        receipt_prefix: (val(container,"f_rprefix") || "RCT").trim(),
+        receipt_digits: Math.max(1, parseInt(val(container,"f_rdigits"), 10) || 6),
+        receipt_next_number: Math.max(1, parseInt(val(container,"f_rnext"), 10) || 1),
       };
+      STAMP_TYPES.forEach(t => { payload[t.key] = stampData[t.key] || null; });
       await dbUpsert("school_settings", payload, "id");
       await loadSchoolSettings();
       msg.innerHTML = `<div class="msg-ok">Saved — your school's branding is now live everywhere.</div>`;
@@ -4958,7 +5729,7 @@ function renderPwaReady(overlay) {
 function renderPwaFallback(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-fallback-box">
-      ${ic.setup}
+      ${ic.settings}
       <div>Look for the install icon in your address bar, or open your browser's menu and choose <b>"Install Nova School Manager"</b> (or <b>"Add to Home Screen"</b>). The app opens once it's installed.</div>
     </div>
   `);
@@ -4978,7 +5749,7 @@ function renderPwaIOS(overlay) {
 function renderPwaFirefox(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-fallback-box">
-      ${ic.setup}
+      ${ic.settings}
       <div>Firefox doesn't support one-tap install yet. Open the <b>⋮ menu</b> and choose <b>"Install"</b> or <b>"Add to Home Screen"</b>, then launch Nova School from there — or open this link in Chrome/Edge for one-tap install.</div>
     </div>
   `);
