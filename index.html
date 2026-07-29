@@ -79,8 +79,8 @@
 
   /* ---------- LOGIN ---------- */
   @keyframes gradientFlow{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
-  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 35%,var(--sky) 65%,var(--navy) 100%);background-size:300% 300%;animation:gradientFlow 14s ease infinite;padding:20px;}
-  .login-card{background:var(--card);border-radius:20px;padding:36px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(10,20,50,.35);}
+  .login-wrap{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;align-items:center;justify-content:center;background:linear-gradient(120deg,var(--navy) 0%,var(--navy-2) 35%,var(--sky) 65%,var(--navy) 100%);background-size:300% 300%;animation:gradientFlow 14s ease infinite;padding:20px;}
+  .login-card{background:var(--card);border-radius:20px;padding:36px 28px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 20px 60px rgba(10,20,50,.35);margin:auto;}
   .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
   .brand-badge{width:42px;height:42px;border-radius:12px;background:var(--teal);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;}
   .brand-name{font-size:19px;font-weight:800;color:var(--navy);}
@@ -170,6 +170,9 @@
   .bn-item.active{color:var(--teal-dark);background:var(--teal-tint);transform:translateY(-2px);}
   .bn-item svg{flex-shrink:0;transition:transform .25s ease;}
   .bn-item.active svg{transform:scale(1.08);}
+  .bn-icon-wrap{position:relative;display:inline-flex;}
+  .nav-badge-count{position:absolute;top:-6px;right:-9px;background:var(--red);color:#fff;font-size:9.5px;font-weight:800;line-height:1;min-width:15px;height:15px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px #fff;animation:popScale .25s ease;}
+  .nav-item .nav-badge-count{position:static;margin-left:auto;min-width:18px;height:18px;font-size:11px;box-shadow:none;}
 
   @media(min-width:860px){
     .sidebar{display:flex;}
@@ -239,6 +242,21 @@
   .fee-history-table .col-term-h,.fee-history-table .col-term-d{width:18%;overflow-wrap:break-word;}
   .fee-history-table .col-amount-h,.fee-history-table .col-amount-d{width:18%;white-space:nowrap;}
   .fee-history-table .col-method-h,.fee-history-table .col-method-d{width:16%;white-space:nowrap;}
+
+  /* ---------- PARENT PORTAL: digital receipt ---------- */
+  .receipt-box{padding:4px 0 10px;}
+  .receipt-head{text-align:center;margin-bottom:14px;padding-bottom:14px;border-bottom:2px dashed var(--line);}
+  .receipt-logo{width:44px;height:44px;border-radius:10px;object-fit:cover;margin-bottom:6px;}
+  .receipt-school{font-size:17px;font-weight:800;color:var(--navy);}
+  .receipt-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .receipt-title{font-size:12.5px;font-weight:700;color:var(--teal-dark);margin-top:8px;text-transform:uppercase;letter-spacing:.04em;}
+  .receipt-amount{display:flex;justify-content:space-between;align-items:center;background:var(--teal-tint);border-radius:12px;padding:14px 16px;margin-top:14px;font-weight:800;color:var(--teal-dark);font-size:17px;}
+  .receipt-foot{font-size:11px;color:var(--ink-soft);text-align:center;margin-top:14px;}
+  @media print{
+    body *{visibility:hidden;}
+    #receiptArea,#receiptArea *{visibility:visible;}
+    #receiptArea{position:fixed;left:0;top:0;width:100%;margin:0;padding:24px;}
+  }
   .col-date-h{background:var(--sky);}
   .col-date-d{background:var(--sky-tint);color:#1D5A96;}
   .col-student-h{background:var(--indigo);}
@@ -362,6 +380,14 @@ let DEV_MODE = false;  // ← must stay false in production: true lets anyone sk
 let auth = null;       // { access_token, user }
 let profile = null;    // { id, full_name, role }
 let cache = {};        // simple in-memory cache per tab
+// ---- Multi-school support ----
+// Every account belongs to exactly one school (profiles.school_id). Once someone
+// logs in, CURRENT_SCHOOL_ID is set from their profile and every dbSelect/dbInsert
+// call below is automatically scoped to that school — no per-call-site changes
+// needed elsewhere in the app. "schools" itself is never scoped (there's only
+// ever one row per school, looked up by id, not filtered by school_id).
+let CURRENT_SCHOOL_ID = null;
+const SCHOOL_SCOPE_EXEMPT = new Set(["schools"]);
 let tab = "dashboard";
 let loading = false;
 let pinLocked = false; // true when a remembered session was restored and is waiting on a PIN unlock
@@ -392,7 +418,12 @@ const ic = {
   chevronRight:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>`,
   more:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
   megaphone:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v3a1 1 0 0 0 1 1h2l3.5 5.5V4.5L6 10H4a1 1 0 0 0-1 1z"/><path d="M13 8a4 4 0 0 1 0 8"/><path d="M17 5a8 8 0 0 1 0 14"/></svg>`,
-  keyLock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4"/><path d="M10.5 11.5L20 2M17 5l3 3M14 8l2 2"/></svg>`
+  keyLock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4"/><path d="M10.5 11.5L20 2M17 5l3 3M14 8l2 2"/></svg>`,
+  phone:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+  calendar:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>`,
+  clock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
+  pin:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  pulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`
 };
 
 /* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
@@ -463,6 +494,24 @@ alter table school_communications enable row level security;
 create policy "Anyone can read school_communications" on school_communications for select using (true);
 create policy "Authenticated can manage school_communications" on school_communications for all using (true);
 alter publication supabase_realtime add table school_communications;`;
+// One-time setup for the School Meetings page — PTA meetings, parent-teacher
+// conferences, staff briefings, etc., each with a date/time so they can be
+// sorted into "upcoming" for parents and staff to plan around.
+const MEETINGS_SQL = `create table if not exists school_meetings (
+  id bigint generated always as identity primary key,
+  title text not null,
+  description text,
+  meeting_date timestamptz not null,
+  location text,
+  audience text,
+  created_by text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table school_meetings enable row level security;
+create policy "Anyone can read school_meetings" on school_meetings for select using (true);
+create policy "Authenticated can manage school_meetings" on school_meetings for all using (true);
+alter publication supabase_realtime add table school_meetings;`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -528,6 +577,7 @@ function sidebarBrandHtml() {
 
 const NAV = [
   {id:"dashboard", label:"Home", icon:ic.home},
+  {id:"health", label:"School Health", icon:ic.pulse},
   {id:"students", label:"Students", icon:ic.student},
   {id:"teachers", label:"Staff", icon:ic.teacher},
   {id:"attendance", label:"Attendance", icon:ic.attendance},
@@ -542,7 +592,7 @@ const NAV = [
 // Distinct icon tint per section in the bottom nav (inactive state only — the active
 // tab keeps the standard teal highlight from the .bn-item.active CSS class).
 const NAV_ICON_COLOR = {
-  dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)",
+  dashboard:"var(--teal)", health:"#e11d48", students:"var(--sky)", teachers:"var(--purple)",
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
   academic:"#0e9488", comms:"#c2410c", users:"var(--navy-2)", settings:"#7a4fc4", trash:"var(--slate)",
 };
@@ -711,6 +761,309 @@ create policy "Anyone can create account change requests" on account_change_requ
 create policy "Anyone can update account change requests" on account_change_requests for update using (true);
 alter publication supabase_realtime add table account_change_requests;`;
 
+/* ---------------- PARENT PORTAL ----------------
+   Parents get their own login (role = 'parent', separate from the staff
+   department system above). A parent is linked to their child only after the
+   Student ID (admission no.) AND the student's exact registered name are
+   both verified server-side — see link_parent_child()/create_parent_account()
+   below. One-time setup: run this once in Supabase → SQL Editor. */
+const PARENT_PORTAL_SQL = `-- Links a parent profile to one or more student records.
+create table if not exists parent_students (
+  id bigint generated always as identity primary key,
+  parent_id uuid references profiles(id) on delete cascade,
+  student_id uuid references students(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique(parent_id, student_id)
+);
+alter table parent_students enable row level security;
+create policy "Anyone can read parent_students" on parent_students for select using (true);
+create policy "Anyone can manage parent_students" on parent_students for all using (true);
+
+-- Messages a parent sends to the school from the Contact School page.
+create table if not exists parent_messages (
+  id bigint generated always as identity primary key,
+  parent_id uuid references profiles(id) on delete cascade,
+  parent_name text,
+  subject text not null,
+  message text not null,
+  status text not null default 'unread',
+  created_at timestamptz default now()
+);
+alter table parent_messages enable row level security;
+create policy "Anyone can read parent_messages" on parent_messages for select using (true);
+create policy "Anyone can create parent_messages" on parent_messages for insert with check (true);
+create policy "Anyone can update parent_messages" on parent_messages for update using (true);
+
+-- Verifies a Student ID + the student's exact registered name match, then
+-- links that student to a parent profile. Used both when adding a child
+-- after sign-up and (inside create_parent_account below) during sign-up.
+drop function if exists link_parent_child(uuid, text, text);
+create function link_parent_child(p_parent_id uuid, p_admission_no text, p_student_name text) returns students
+language plpgsql security definer as $link_parent_child$
+declare found_student students;
+begin
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
+  end if;
+  insert into parent_students (parent_id, student_id) values (p_parent_id, found_student.id)
+    on conflict (parent_id, student_id) do nothing;
+  return found_student;
+end;
+$link_parent_child$;
+grant execute on function link_parent_child(uuid,text,text) to anon, authenticated;
+
+-- Creates a parent account. The Student ID + exact registered name match is
+-- verified FIRST — the account (and the link to the child) is only created
+-- once that check passes.
+drop function if exists create_parent_account(text, text, text, text, text, text, text, text);
+create function create_parent_account(
+  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
+  p_photo_url text, p_admission_no text, p_student_name text
+) returns profiles
+language plpgsql security definer as $create_parent_account$
+declare new_row profiles; found_student students;
+begin
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
+  end if;
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url)
+  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url)
+  returning * into new_row;
+  insert into parent_students (parent_id, student_id) values (new_row.id, found_student.id)
+    on conflict (parent_id, student_id) do nothing;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_parent_account$;
+grant execute on function create_parent_account(text,text,text,text,text,text,text,text) to anon, authenticated;`;
+
+/* ---------------- MULTI-SCHOOL SETUP ----------------
+   Run this ONCE in Supabase → SQL Editor to turn this single-school app into
+   a multi-school one. It: creates the `schools` registry table, adds a
+   `school_id` column to every existing table, backfills existing rows into a
+   first "default" school (so nothing already in your database gets orphaned),
+   and updates create_account/create_parent_account/link_parent_child to be
+   school-aware. Nothing here changes how the app works for a school that's
+   already using it — it just adds the ability to have more than one. */
+const MULTI_SCHOOL_SQL = `create table if not exists schools (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  status text not null default 'active', -- 'active' or 'suspended'
+  created_at timestamptz not null default now()
+);
+alter table schools enable row level security;
+drop policy if exists "Anyone can read active schools" on schools;
+create policy "Anyone can read active schools" on schools for select using (true);
+
+-- One default school so existing data has somewhere to belong.
+insert into schools (name) select 'My School' where not exists (select 1 from schools);
+
+-- Add school_id to every table this app uses, and backfill it to the first
+-- school so nothing existing breaks. Safe to re-run.
+do $$
+declare t text; default_school uuid;
+begin
+  select id into default_school from schools order by created_at limit 1;
+  foreach t in array array[
+    'profiles','students','teachers','classes','class_subjects','subjects','terms',
+    'exams','exam_types','exam_results','grades','attendance','staff_attendance',
+    'fee_structures','fee_payments','school_communications','school_meetings',
+    'school_settings','account_change_requests','parent_students','parent_messages'
+  ]
+  loop
+    if to_regclass(t) is not null then
+      execute format('alter table %I add column if not exists school_id uuid references schools(id)', t);
+      execute format('update %I set school_id = %L where school_id is null', t, default_school);
+    end if;
+  end loop;
+end $$;
+
+-- Creates a new staff account within a specific school.
+drop function if exists create_account(text, text, text, text, text, text, text);
+create function create_account(
+  p_full_name text, p_username text, p_department text,
+  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_account$
+declare new_row profiles;
+begin
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id)
+  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id)
+  returning * into new_row;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_account$;
+grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
+
+-- Creates a parent account, scoped to the school the student belongs to.
+drop function if exists create_parent_account(text, text, text, text, text, text, text, text);
+create function create_parent_account(
+  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
+  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_parent_account$
+declare new_row profiles; found_student students;
+begin
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and school_id = p_school_id
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
+  end if;
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id)
+  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id)
+  returning * into new_row;
+  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
+    on conflict (parent_id, student_id) do nothing;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_parent_account$;
+grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;
+
+-- Links an additional child, scoped to the parent's own school.
+drop function if exists link_parent_child(uuid, text, text);
+create function link_parent_child(p_parent_id uuid, p_admission_no text, p_student_name text) returns students
+language plpgsql security definer as $link_parent_child$
+declare found_student students; parent_school uuid;
+begin
+  select school_id into parent_school from profiles where id = p_parent_id;
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and school_id = parent_school
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
+  end if;
+  insert into parent_students (parent_id, student_id, school_id) values (p_parent_id, found_student.id, parent_school)
+    on conflict (parent_id, student_id) do nothing;
+  return found_student;
+end;
+$link_parent_child$;
+grant execute on function link_parent_child(uuid,text,text) to anon, authenticated;`;
+
+/* ---------------- SCHOOL SELF-REGISTRATION (TransApple mother system) ----------------
+   Run this ONCE in Supabase → SQL Editor, after MULTI_SCHOOL_SQL. It powers the
+   "Register Your School" screen shown the first time this app is opened on a
+   new browser/device with no account yet.
+   IMPORTANT — data ownership: everything collected on that screen about the
+   SCHOOL itself (name, motto, location, size range, school password) is written
+   ONLY to the `schools` table below. `schools` is the TransApple mother system's
+   registry — the same table mother-app.html reads and manages — never this
+   app's own operational tables (profiles, students, etc). That keeps school
+   registration data fully owned and manageable by the mother system, exactly
+   like a school that a mother-app admin created directly. Only the first
+   Administrator's login account is created here, in `profiles`, because that
+   account has to exist in this app's database for them to log in and start
+   creating the rest of their team. */
+const SCHOOL_SELF_REGISTRATION_SQL = `-- Extra fields the registration screen collects about the school itself —
+-- these live on the mother system's own \`schools\` table, not in this app's data.
+alter table schools add column if not exists motto text;
+alter table schools add column if not exists location text;
+alter table schools add column if not exists size_range text;
+alter table schools add column if not exists password_hash text;
+
+-- Extra contact fields for the first Administrator account.
+alter table profiles add column if not exists whatsapp text;
+alter table profiles add column if not exists email text;
+alter table profiles add column if not exists location text;
+
+-- Registers a brand-new school (written to the mother system's \`schools\`
+-- table) AND creates its first Administrator account together, atomically —
+-- if either half fails, nothing is created.
+drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text);
+create function register_school(
+  p_school_name text, p_school_motto text, p_school_location text,
+  p_school_password text, p_school_size_range text,
+  p_admin_full_name text, p_admin_username text, p_admin_phone text,
+  p_admin_whatsapp text, p_admin_email text, p_admin_location text,
+  p_admin_password text, p_admin_pin text default null
+) returns profiles
+language plpgsql security definer as $register_school$
+declare new_school schools; new_admin profiles;
+begin
+  if p_school_name is null or trim(p_school_name) = '' then
+    raise exception 'School name is required.';
+  end if;
+  if p_school_password is null or length(p_school_password) < 6 then
+    raise exception 'School password must be at least 6 characters.';
+  end if;
+  if p_admin_full_name is null or trim(p_admin_full_name) = '' then
+    raise exception 'Administrator full name is required.';
+  end if;
+  if p_admin_username is null or trim(p_admin_username) = '' then
+    raise exception 'Administrator username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_admin_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  if p_admin_password is null or length(p_admin_password) < 6 then
+    raise exception 'Administrator password must be at least 6 characters.';
+  end if;
+
+  -- School record: owned by the mother system, not this app's own tables.
+  insert into schools (name, motto, location, size_range, password_hash, status)
+  values (
+    trim(p_school_name), nullif(trim(p_school_motto),''), nullif(trim(p_school_location),''),
+    nullif(p_school_size_range,''), crypt(p_school_password, gen_salt('bf')), 'active'
+  ) returning * into new_school;
+
+  -- First Administrator — Administration department = full access to everything.
+  insert into profiles (
+    full_name, username, department, phone, whatsapp, email, location,
+    pin, password_hash, role, school_id
+  ) values (
+    trim(p_admin_full_name), p_admin_username, 'administration',
+    nullif(p_admin_phone,''), nullif(p_admin_whatsapp,''), nullif(p_admin_email,''), nullif(p_admin_location,''),
+    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', new_school.id
+  ) returning * into new_admin;
+
+  new_admin.password_hash := null;
+  return new_admin;
+end;
+$register_school$;
+grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;`;
+
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
   // Accounts no longer go through Supabase Auth at all (see AUTH section below), so
@@ -739,20 +1092,33 @@ async function sb(path, opts = {}) {
 }
 const qs = (obj) => Object.entries(obj).filter(([,v])=>v!==undefined && v!==null && v!=="").map(([k,v])=>`${k}=${v}`).join("&");
 
+// Every read/write below is scoped to CURRENT_SCHOOL_ID automatically, so the
+// hundreds of call sites elsewhere in the app never need to mention school_id
+// themselves — school isolation lives in exactly one place.
+function scopedParams(table, params) {
+  const p = Object.assign({}, params);
+  if (CURRENT_SCHOOL_ID && !SCHOOL_SCOPE_EXEMPT.has(table)) p.school_id = `eq.${CURRENT_SCHOOL_ID}`;
+  return p;
+}
+function scopedBody(table, body) {
+  if (!CURRENT_SCHOOL_ID || SCHOOL_SCOPE_EXEMPT.has(table)) return body;
+  if (Array.isArray(body)) return body.map(row => Object.assign({ school_id: CURRENT_SCHOOL_ID }, row));
+  return Object.assign({ school_id: CURRENT_SCHOOL_ID }, body);
+}
 async function dbSelect(table, params={}) {
-  return sb(`/rest/v1/${table}?${qs(Object.assign({select:"*"}, params))}`);
+  return sb(`/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`);
 }
 async function dbInsert(table, body) {
-  return sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+  return sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scopedBody(table, body)), headers:{ "Prefer":"return=representation" } });
 }
 async function dbUpdate(table, id, body) {
-  return sb(`/rest/v1/${table}?id=eq.${id}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+  return sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
 }
 async function dbUpsert(table, body, onConflict) {
-  return sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(body), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
+  return sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scopedBody(table, body)), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
 }
 async function dbDelete(table, id) {
-  return sb(`/rest/v1/${table}?id=eq.${id}`, { method:"DELETE" });
+  return sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
 }
 async function dbSelectActive(table, params={}) {
   try { return await dbSelect(table, Object.assign({ deleted_at:"is.null" }, params)); }
@@ -766,14 +1132,32 @@ async function dbSelectActive(table, params={}) {
    pgcrypto inside those functions; the plain password only ever leaves the
    browser over HTTPS to be checked/hashed, and is never stored or returned. */
 const REMEMBER_KEY = "novaRememberedUsername";
+const REMEMBER_SCHOOL_KEY = "novaRememberedSchoolId";
+// Tracks whether this browser/device has ever registered a school or logged in
+// before — independent of "remember me" and NOT cleared on logout — so a
+// returning device goes straight to the log-in screen instead of being shown
+// "Register Your School" again every time someone signs out.
+const DEVICE_SEEN_KEY = "novaDeviceSeen";
+function markDeviceSeen() { try { localStorage.setItem(DEVICE_SEEN_KEY, "true"); } catch (e) {} }
+function isDeviceSeen() { try { return localStorage.getItem(DEVICE_SEEN_KEY) === "true"; } catch (e) { return false; } }
 function rememberSession(username) {
   try { localStorage.setItem(REMEMBER_KEY, username); } catch (e) {}
 }
 function clearRememberedSession() {
-  try { localStorage.removeItem(REMEMBER_KEY); } catch (e) {}
+  try { localStorage.removeItem(REMEMBER_KEY); localStorage.removeItem(REMEMBER_SCHOOL_KEY); } catch (e) {}
 }
 function getRememberedSession() {
   try { return localStorage.getItem(REMEMBER_KEY) || null; } catch (e) { return null; }
+}
+function setCurrentSchool(schoolId) {
+  CURRENT_SCHOOL_ID = schoolId || null;
+  try { if (schoolId) localStorage.setItem(REMEMBER_SCHOOL_KEY, schoolId); } catch (e) {}
+}
+// Used only to decide the very first screen shown on this device (see render()) —
+// if this device has ever been associated with a school before, skip straight to
+// the log-in screen instead of "Register Your School".
+function getRememberedSchool() {
+  try { return localStorage.getItem(REMEMBER_SCHOOL_KEY) || null; } catch (e) { return null; }
 }
 function scrubProfile(row) {
   if (!row) return row;
@@ -785,8 +1169,10 @@ async function login(username, password, remember) {
   const row = Array.isArray(rows) ? rows[0] : rows;
   if (!row || !row.id) throw new Error("Incorrect username or password.");
   profile = scrubProfile(row);
+  setCurrentSchool(profile.school_id);
   auth = { user: { id: profile.id } }; // no real token — just marks "signed in" for the UI gate below
   if (remember) rememberSession(username); else clearRememberedSession();
+  markDeviceSeen();
   pinLocked = false;
   tab = "dashboard";
   render();
@@ -799,12 +1185,14 @@ async function tryRestoreRememberedSession() {
   const username = getRememberedSession();
   if (!username) return false;
   try {
-    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at" });
+    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id" });
     const row = rows[0];
     if (!row) { clearRememberedSession(); return false; }
     if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
     profile = scrubProfile(row);
+    setCurrentSchool(profile.school_id);
     auth = { user: { id: profile.id } };
+    markDeviceSeen();
     pinLocked = false;
     return true;
   } catch (e) {
@@ -814,13 +1202,50 @@ async function tryRestoreRememberedSession() {
 // Creates a new staff account. Department drives what they can see (see
 // deptAccess/hasNavAccess above) — "Administration" already gets full access on
 // its own, so the legacy `role` column just stays "staff" for everyone.
-async function signup({ full_name, username, department, phone, password, pin, photo_url }) {
+async function signup({ full_name, username, department, phone, password, pin, photo_url, school_id }) {
   await sb(`/rest/v1/rpc/create_account`, { method:"POST", body: JSON.stringify({
     p_full_name: full_name, p_username: username, p_department: department || null,
     p_phone: phone || null, p_password: password, p_pin: pin || null, p_photo_url: photo_url || null,
+    p_school_id: school_id,
   }) });
 }
-function logout() { auth = null; profile = null; cache = {}; clearRememberedSession(); pinLocked = false; render(); }
+// Schools shown in the signup school picker — only active ones, id+name only.
+async function listActiveSchools() {
+  return dbSelect("schools", { select:"id,name", status:"eq.active", order:"name.asc" });
+}
+// Options for the "School Size Range" field on the registration screen.
+const SCHOOL_SIZE_RANGES = ["1–100 students","101–300 students","301–600 students","601–1000 students","1000+ students"];
+// Registers a brand-new school (stored in the mother system's `schools` table —
+// see SCHOOL_SELF_REGISTRATION_SQL) and creates its first Administrator account
+// in one atomic call. Returns the new Administrator's profile.
+async function registerSchool({ schoolName, schoolMotto, schoolLocation, schoolPassword, schoolSizeRange, adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminLocation, adminPassword, adminPin }) {
+  const rows = await sb(`/rest/v1/rpc/register_school`, { method:"POST", body: JSON.stringify({
+    p_school_name: schoolName, p_school_motto: schoolMotto || null, p_school_location: schoolLocation || null,
+    p_school_password: schoolPassword, p_school_size_range: schoolSizeRange || null,
+    p_admin_full_name: adminFullName, p_admin_username: adminUsername, p_admin_phone: adminPhone || null,
+    p_admin_whatsapp: adminWhatsapp || null, p_admin_email: adminEmail || null, p_admin_location: adminLocation || null,
+    p_admin_password: adminPassword, p_admin_pin: adminPin || null,
+  }) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+// Creates a parent account. The Student ID + exact registered name match is verified
+// server-side FIRST (see create_parent_account() in PARENT_PORTAL_SQL) — the account
+// only comes into existence, already linked to the child, once that check passes.
+async function createParentAccount({ full_name, username, phone, password, pin, photo_url, admission_no, student_name, school_id }) {
+  await sb(`/rest/v1/rpc/create_parent_account`, { method:"POST", body: JSON.stringify({
+    p_full_name: full_name, p_username: username, p_phone: phone || null, p_password: password,
+    p_pin: pin || null, p_photo_url: photo_url || null, p_admission_no: admission_no, p_student_name: student_name,
+    p_school_id: school_id,
+  }) });
+}
+// Links an additional child to an existing parent account, same verification.
+async function linkParentChild(parentId, admission_no, student_name) {
+  const rows = await sb(`/rest/v1/rpc/link_parent_child`, { method:"POST", body: JSON.stringify({
+    p_parent_id: parentId, p_admission_no: admission_no, p_student_name: student_name,
+  }) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+function logout() { auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; clearRememberedSession(); pinLocked = false; render(); }
 // Confirms identity with the account's PIN (no email anywhere in this app),
 // then sets a new password via the reset_password() Postgres function.
 async function resetPassword({ username, pin, new_password }) {
@@ -918,8 +1343,12 @@ function openCameraCapture(onCapture, onUnavailable) {
 
 function render() {
   if (pinLocked) { renderPinUnlock(); return; }
-  if (!auth && !DEV_MODE) { renderLogin(); return; }
+  if (!auth && !DEV_MODE) {
+    if (!isDeviceSeen()) { renderSchoolRegistration(); } else { renderLogin(); }
+    return;
+  }
   if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
+  if (profile?.role === "parent" || profile?.department === "parents") { renderParentApp(); return; }
   app().innerHTML = `
     <div class="shell">
       <div class="sidebar">
@@ -975,7 +1404,7 @@ function render() {
   pageTitle.style.animation = `${TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
-  const renderers = { dashboard: renderDashboard, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, comms: renderComms, users: renderUsers, settings: renderSettings, trash: renderTrash };
+  const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, comms: renderComms, users: renderUsers, settings: renderSettings, trash: renderTrash };
   (renderers[tab] || renderDashboard)(content).catch(errShow(content));
 }
 function errShow(container) {
@@ -990,6 +1419,84 @@ function errShow(container) {
   };
 }
 
+/* ---------------- SCHOOL REGISTRATION SCREEN ----------------
+   Shown as the very first screen when this app is opened on a brand-new
+   browser, device, or window with no account yet (see render()/isDeviceSeen()).
+   Collects the new school's own details (stored by the TransApple mother
+   system — see SCHOOL_SELF_REGISTRATION_SQL, NOT in this app's own tables)
+   plus its first Administrator account, then logs that Administrator straight
+   in and drops them on Users & Roles to start creating accounts for the rest
+   of their team, each with their own role. */
+function renderSchoolRegistration() {
+  app().innerHTML = `
+    <div class="login-wrap"><div class="login-card" style="max-width:420px;">
+      <div class="brand">${sidebarBrandHtml()}</div>
+      <div class="tiny-note" style="font-size:16px;font-weight:800;color:var(--ink);margin-bottom:2px;">Register Your School to Use This System</div>
+      <div class="tiny-note" style="margin-bottom:14px;">A few details about your school, then set up your Administrator account.</div>
+      <div id="regMsg"></div>
+      <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="e.g. Meridian Academy" /></div>
+      <div class="field"><label>School Motto</label><input id="r_motto" placeholder="e.g. Knowledge, Character, Service" /></div>
+      <div class="field"><label>School Location</label><input id="r_location" placeholder="e.g. Ntinda, Kampala" /></div>
+      <div class="field"><label>School Password</label><input id="r_schoolPassword" type="password" placeholder="At least 6 characters" /></div>
+      <div class="field"><label>School Size Range</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
+
+      <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:14px;">First Administrator Details</div>
+      <div class="field"><label>Full Name</label><input id="r_adminName" placeholder="Jane Okafor" /></div>
+      <div class="field"><label>Username</label><input id="r_adminUsername" autocapitalize="none" placeholder="jane.okafor" /></div>
+      <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="+256 700 000 000" /></div>
+      <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="+256 700 000 000" /></div>
+      <div class="field"><label>Email</label><input id="r_adminEmail" type="email" placeholder="jane@school.edu" /></div>
+      <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;">Only an Administrator can register a new school — everyone else is added afterwards from Users &amp; Roles.</div></div>
+      <div class="field"><label>Location</label><input id="r_adminLocation" placeholder="e.g. Kampala" /></div>
+      <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="At least 6 characters" /></div>
+      <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+
+      <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
+      <div class="tiny-note" style="text-align:center;margin-top:12px;">Already registered? <span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
+    </div></div>
+  `;
+  document.getElementById("toLoginFromReg").onclick = () => renderLogin();
+  document.getElementById("registerSchoolBtn").onclick = async () => {
+    const msg = document.getElementById("regMsg"); msg.innerHTML = "";
+    const schoolName = document.getElementById("r_schoolName").value.trim();
+    const schoolMotto = document.getElementById("r_motto").value.trim();
+    const schoolLocation = document.getElementById("r_location").value.trim();
+    const schoolPassword = document.getElementById("r_schoolPassword").value;
+    const schoolSizeRange = document.getElementById("r_sizeRange").value;
+    const adminFullName = document.getElementById("r_adminName").value.trim();
+    const adminUsername = document.getElementById("r_adminUsername").value.trim();
+    const adminPhone = document.getElementById("r_adminPhone").value.trim();
+    const adminWhatsapp = document.getElementById("r_adminWhatsapp").value.trim();
+    const adminEmail = document.getElementById("r_adminEmail").value.trim();
+    const adminLocation = document.getElementById("r_adminLocation").value.trim();
+    const adminPassword = document.getElementById("r_adminPassword").value;
+    const adminPin = document.getElementById("r_adminPin").value.trim();
+    const btn = document.getElementById("registerSchoolBtn");
+    try {
+      if (!schoolName) throw new Error("Enter your school's name.");
+      if (!schoolPassword || schoolPassword.length < 6) throw new Error("School password must be at least 6 characters.");
+      if (!adminFullName || !adminUsername) throw new Error("The Administrator's full name and username are required.");
+      if (!adminPassword || adminPassword.length < 6) throw new Error("The Administrator's password must be at least 6 characters.");
+      btn.disabled = true; btn.textContent = "Registering…";
+      const newAdmin = await registerSchool({
+        schoolName, schoolMotto, schoolLocation, schoolPassword, schoolSizeRange,
+        adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminLocation, adminPassword, adminPin,
+      });
+      profile = scrubProfile(newAdmin);
+      setCurrentSchool(profile.school_id);
+      auth = { user: { id: profile.id } };
+      markDeviceSeen();
+      pinLocked = false;
+      tab = "users";
+      toast(`${schoolName} registered! Add the rest of your team from Users & Roles.`, false);
+      render();
+    } catch (e) {
+      msg.innerHTML = `<div class="err">${e.message}</div>`;
+      btn.disabled = false; btn.textContent = "Register School";
+    }
+  };
+}
+
 /* ---------------- LOGIN SCREEN ---------------- */
 function departmentSelectOptions(selected) {
   return `<option value="" ${!selected?'selected':''}>— Select department —</option>` +
@@ -997,16 +1504,20 @@ function departmentSelectOptions(selected) {
 }
 function renderLogin() {
   let mode = "login";
+  let signupAccountType = "staff"; // "staff" or "parent"
   function draw() {
     app().innerHTML = `
       <div class="login-wrap"><div class="login-card">
         <div class="brand">${sidebarBrandHtml()}</div>
         <div id="loginMsg"></div>
         <div id="loginForm"></div>
-        <div class="tiny-note">${mode==="login" ? `New school account? <span class="link-btn" id="toSignup" style="cursor:pointer">Create one</span>` : mode==="forgot" ? "" : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
+        <div class="tiny-note">${mode==="login" ? `Joining a school that's already registered? <span class="link-btn" id="toSignup" style="cursor:pointer">Create your account</span>` : mode==="forgot" ? "" : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
+        ${mode==="login" ? `<div class="tiny-note">Registering a brand-new school? <span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>` : ""}
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
+    const toRegisterSchoolLink = document.getElementById("toRegisterSchool");
+    if (toRegisterSchoolLink) toRegisterSchoolLink.onclick = () => renderSchoolRegistration();
     if (mode === "login") {
       formDiv.innerHTML = `
         <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
@@ -1059,6 +1570,16 @@ function renderLogin() {
     } else {
       let signupPhotoDataUrl = null;
       formDiv.innerHTML = `
+        <div class="row" style="gap:8px;margin-bottom:16px;">
+          <button type="button" class="btn ${signupAccountType==='staff'?'btn-primary':'btn-ghost'} btn-sm" id="acctStaffBtn" style="flex:1;">Staff account</button>
+          <button type="button" class="btn ${signupAccountType==='parent'?'btn-primary':'btn-ghost'} btn-sm" id="acctParentBtn" style="flex:1;">Parent account</button>
+        </div>
+        <div id="signupFields"></div>
+      `;
+      document.getElementById("acctStaffBtn").onclick = () => { signupAccountType = "staff"; draw(); };
+      document.getElementById("acctParentBtn").onclick = () => { signupAccountType = "parent"; draw(); };
+      const fieldsWrap = document.getElementById("signupFields");
+      const photoBlockHtml = `
         <div class="field" style="text-align:center;">
           <label>Photo (optional)</label>
           <div id="signupPhotoWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml("", null, 64)}</div>
@@ -1068,15 +1589,45 @@ function renderLogin() {
           </div>
           <input id="signupPhotoLive" type="file" accept="image/*" capture="user" style="display:none;"/>
           <input id="signupPhotoPick" type="file" accept="image/*" style="display:none;"/>
-        </div>
-        <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
-        <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
-        <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select></div>
-        <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
-        <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-        <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
-        <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
-      `;
+        </div>`;
+      const schoolFieldHtml = `<div class="field"><label>School</label><select id="school_id"><option value="">Loading schools…</option></select></div>`;
+      if (signupAccountType === "staff") {
+        fieldsWrap.innerHTML = `
+          ${photoBlockHtml}
+          ${schoolFieldHtml}
+          <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
+          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
+          <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select></div>
+          <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
+          <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
+        `;
+      } else {
+        fieldsWrap.innerHTML = `
+          ${photoBlockHtml}
+          ${schoolFieldHtml}
+          <div class="field"><label>Your full name</label><input id="fname" placeholder="Amaka Obi" /></div>
+          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="amaka.obi" /></div>
+          <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
+          <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Link your child</div>
+          <div class="tiny-note" style="margin:0 0 6px;text-align:left;">We match your child's Student ID with their exact registered name before your account is created — nothing is created until that match succeeds.</div>
+          <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="e.g. DF001" /></div>
+          <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="Full name as registered at the school" /></div>
+          <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
+        `;
+      }
+      listActiveSchools().then(schools => {
+        const sel = document.getElementById("school_id");
+        if (!sel) return;
+        if (!schools.length) { sel.innerHTML = `<option value="">No schools available</option>`; return; }
+        sel.innerHTML = `<option value="">Select your school…</option>` + schools.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+      }).catch(() => {
+        const sel = document.getElementById("school_id");
+        if (sel) sel.innerHTML = `<option value="">Couldn't load schools</option>`;
+      });
       const signupLiveInput = document.getElementById("signupPhotoLive");
       const signupPickInput = document.getElementById("signupPhotoPick");
       const setSignupPreview = (dataUrl) => { document.getElementById("signupPhotoWrap").innerHTML = avatarHtml("", dataUrl, 64); };
@@ -1102,21 +1653,31 @@ function renderLogin() {
       document.getElementById("submitBtn").onclick = async () => {
         const full_name = document.getElementById("fname").value.trim();
         const username = document.getElementById("username").value.trim();
-        const department = document.getElementById("department").value;
         const phone = document.getElementById("phone").value.trim();
         const password = document.getElementById("password").value;
         const pin = document.getElementById("pin").value.trim();
         const msg = document.getElementById("loginMsg");
         msg.innerHTML = "";
         try {
+          const school_id = document.getElementById("school_id").value;
+          if (!school_id) throw new Error("Select your school.");
           if (!full_name || !username || !password) throw new Error("Full name, username and password are required.");
-          await signup({ full_name, username, department, phone, password, pin, photo_url: signupPhotoDataUrl });
+          if (signupAccountType === "staff") {
+            const department = document.getElementById("department").value;
+            await signup({ full_name, username, department, phone, password, pin, photo_url: signupPhotoDataUrl, school_id });
+          } else {
+            const admission_no = document.getElementById("p_adm").value.trim();
+            const student_name = document.getElementById("p_sname").value.trim();
+            if (!admission_no || !student_name) throw new Error("Enter your child's Student ID and exact registered name.");
+            await createParentAccount({ full_name, username, phone, password, pin, photo_url: signupPhotoDataUrl, admission_no, student_name, school_id });
+          }
           msg.innerHTML = `<div class="msg-ok">Account created. You can log in now.</div>`; mode="login"; draw();
         }
         catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
       };
       document.getElementById("toLogin").onclick = () => { mode = "login"; draw(); };
     }
+    enableAuthKeyboardHandling();
   }
   draw();
 }
@@ -1146,6 +1707,7 @@ function renderPinUnlock() {
   document.getElementById("unlockBtn").onclick = tryUnlock;
   document.getElementById("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock(); });
   document.getElementById("useLoginInstead").onclick = () => { auth = null; profile = null; pinLocked = false; clearRememberedSession(); render(); };
+  enableAuthKeyboardHandling();
 }
 
 /* ---------------- MODAL HELPER ---------------- */
@@ -1193,6 +1755,38 @@ function enableModalKeyboardHandling(overlay) {
     stop.disconnect();
   });
   stop.observe(document.body, { childList: true });
+}
+
+// Keeps the login/sign-up card fully visible and scrollable when the on-screen
+// keyboard opens — same idea as enableModalKeyboardHandling above, but targeting
+// .login-wrap/.login-card instead of an .overlay/.modal pair.
+function enableAuthKeyboardHandling() {
+  const wrap = document.querySelector(".login-wrap");
+  const card = document.querySelector(".login-card");
+  if (!wrap || !card) return;
+  const vv = window.visualViewport;
+  const revealTail = () => {
+    const remaining = card.scrollHeight - (card.scrollTop + card.clientHeight);
+    if (remaining > 0 && remaining < 160) card.scrollTo({ top: card.scrollHeight, behavior: "smooth" });
+  };
+  wrap.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    setTimeout(() => {
+      t.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(revealTail, 300);
+    }, 250);
+  });
+  if (!vv) return;
+  const resize = () => {
+    wrap.style.height = vv.height + "px";
+    wrap.style.top = vv.offsetTop + "px";
+    card.style.maxHeight = Math.round(vv.height * 0.92) + "px";
+    if (document.activeElement && card.contains(document.activeElement)) revealTail();
+  };
+  vv.addEventListener("resize", resize);
+  vv.addEventListener("scroll", resize);
+  resize();
 }
 
 /* ---------------- CUSTOM ALERT / CONFIRM ----------------
@@ -1366,9 +1960,559 @@ async function softDelete(table, id) {
 }
 async function restoreRecord(table, id) { await dbUpdate(table, id, { deleted_at: null }); }
 
+/* ===================================================================
+   PARENT PORTAL — a completely separate app shell for role:"parent"
+   accounts (see PARENT_PORTAL_SQL). Parents never see the staff
+   department/NAV system above; render() branches into renderParentApp()
+   as soon as it sees profile.role === "parent".
+   =================================================================== */
+/* Parents get exactly five menus — nothing else. Do not add extra tabs here
+   without also updating the restriction this list encodes. */
+const NAV_PARENT = [
+  { id:"pchildren", label:"My Children", icon:ic.student },
+  { id:"pfees", label:"Fees", icon:ic.fees },
+  { id:"pnotifications", label:"Notifications", icon:ic.megaphone },
+  { id:"pcontact", label:"Contact", icon:ic.phone },
+  { id:"psettings", label:"Settings", icon:ic.setup },
+];
+const PARENT_TAB_COLOR = { pchildren:"var(--sky)", pfees:"var(--red)", pnotifications:"#c2410c", pcontact:"var(--indigo)", psettings:"var(--slate)" };
+const PARENT_TAB_ANIM = { pchildren:"slideInLeft", pfees:"wiggleIn", pnotifications:"popScale", pcontact:"fadeSlideDown", psettings:"riseIn" };
+
+/* ---------------- PARENT NOTIFICATIONS (Meetings + Announcements) ----------------
+   Upcoming school_meetings + recent school_communications(type=announcement),
+   each read/unread per-parent locally on this device (there's no per-user
+   read-tracking table, so a small localStorage set — keyed by parent id and
+   "type:id" — is enough to know what's new and drives the red nav badge). */
+function parentReadKey() { return `novaReadNotifs_${profile?.id || "anon"}`; }
+function getReadNotifIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(parentReadKey()) || "[]")); }
+  catch (e) { return new Set(); }
+}
+function markNotifsRead(ids) {
+  if (!ids || !ids.length) return;
+  const read = getReadNotifIds();
+  ids.forEach(id => read.add(id));
+  try { localStorage.setItem(parentReadKey(), JSON.stringify([...read])); } catch (e) {}
+}
+function notifIdsFor(meetings, announcements) {
+  return [...meetings.map(m => `meeting:${m.id}`), ...announcements.map(a => `announcement:${a.id}`)];
+}
+const parentAudienceOk = (a) => !a || a === "Everyone" || a === "All parents";
+async function fetchParentMeetings() {
+  const rows = await dbSelectActive("school_meetings", { order:"meeting_date.asc" });
+  const now = Date.now();
+  return rows.filter(m => parentAudienceOk(m.audience) && new Date(m.meeting_date).getTime() >= now);
+}
+async function fetchParentAnnouncements(limit=20) {
+  const rows = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:String(limit) });
+  return rows.filter(c => parentAudienceOk(c.audience));
+}
+// Refreshes the red unread-count badge on the "Meetings" nav entry (sidebar +
+// bottom nav) in place, without a full re-render. Called after every parent
+// shell render, and again immediately after the Meetings page marks its
+// items as read so the badge disappears right away.
+async function refreshParentBadges() {
+  if (!profile || (profile.role !== "parent" && profile.department !== "parents")) return;
+  let count = 0;
+  try {
+    const [meetings, announcements] = await Promise.all([fetchParentMeetings().catch(()=>[]), fetchParentAnnouncements().catch(()=>[])]);
+    const read = getReadNotifIds();
+    count = notifIdsFor(meetings, announcements).filter(id => !read.has(id)).length;
+  } catch (e) { count = 0; }
+  document.querySelectorAll('[data-nav="pnotifications"]').forEach(node => {
+    let badge = node.querySelector(".nav-badge-count");
+    if (count > 0) {
+      if (!badge) {
+        badge = el(`<span class="nav-badge-count">${count}</span>`);
+        (node.querySelector(".bn-icon-wrap") || node).appendChild(badge);
+      } else badge.textContent = String(count);
+    } else if (badge) badge.remove();
+  });
+}
+
+// Generic "one more one-time setup step" card, shown wherever a parent-portal
+// table/RPC (see PARENT_PORTAL_SQL) hasn't been created in Supabase yet.
+function missingSetupHtml(message) {
+  return `<div class="card">
+    <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.setup}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>${message}</p></div></div>
+    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your school's administrator/developer to run this once in the Supabase SQL editor, then refresh.</p>
+    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${PARENT_PORTAL_SQL}</pre>
+  </div>`;
+}
+function renderMissingSetup(container, message, onRetry) {
+  container.innerHTML = missingSetupHtml(message) + `<button class="btn btn-primary" id="retrySetupBtn" style="width:100%;margin-top:10px;">I've run it — Refresh</button>`;
+  document.getElementById("retrySetupBtn").onclick = onRetry;
+}
+
+function renderParentApp() {
+  app().innerHTML = `
+    <div class="shell">
+      <div class="sidebar">
+        <div class="brand">${sidebarBrandHtml()}</div>
+        <div id="sidenav"></div>
+        <div style="margin-top:auto;padding-top:20px;">
+          <div class="nav-item" id="logoutBtnSide" style="cursor:pointer;">${ic.logout} Log out</div>
+        </div>
+      </div>
+      <div class="main">
+        ${mastheadHtml()}
+        <div class="topbar">
+          <h1 id="pageTitle"></h1>
+          <div class="row" style="gap:10px;">
+            <div class="who">${profile?.full_name || ""} · <b>${profile?.role === "parent" ? "Parent" : (DEPARTMENTS[profile?.department]?.label || "Parent")}</b></div>
+          </div>
+        </div>
+        <div class="content" id="content"></div>
+      </div>
+      <div class="bottomnav" id="bottomnav"></div>
+    </div>
+  `;
+  document.getElementById("logoutBtnSide").onclick = logout;
+  if (!NAV_PARENT.find(n=>n.id===tab)) tab = "pchildren";
+  const sidenav = document.getElementById("sidenav");
+  const bottomnav = document.getElementById("bottomnav");
+  NAV_PARENT.forEach(n => {
+    const sItem = el(`<div class="nav-item ${tab===n.id?'active':''}" data-nav="${n.id}" style="cursor:pointer">${n.icon}<span>${n.label}</span></div>`);
+    sItem.onclick = () => { tab = n.id; renderParentApp(); };
+    sidenav.appendChild(sItem);
+    const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}" data-nav="${n.id}"><span class="bn-icon-wrap">${n.icon}</span><span>${n.label}</span></div>`);
+    if (tab !== n.id) bItem.style.color = PARENT_TAB_COLOR[n.id] || "var(--ink-soft)";
+    bItem.onclick = () => { tab = n.id; renderParentApp(); };
+    bottomnav.appendChild(bItem);
+  });
+  const activeBn = bottomnav.querySelector(".bn-item.active");
+  if (activeBn) activeBn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+  refreshParentBadges();
+  const pageTitle = document.getElementById("pageTitle");
+  pageTitle.textContent = NAV_PARENT.find(n=>n.id===tab)?.label || "";
+  pageTitle.style.animation = "none";
+  void pageTitle.offsetWidth;
+  pageTitle.style.animation = `${PARENT_TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
+  const content = document.getElementById("content");
+  content.innerHTML = `<div class="center-loading">Loading…</div>`;
+  const renderers = { pchildren: renderParentChildren, pfees: renderParentFees, pnotifications: renderParentMeetings, pcontact: renderParentContact, psettings: renderParentSettings };
+  (renderers[tab] || renderParentChildren)(content).catch(errShow(content));
+}
+
+// All students linked to the signed-in parent, with class info embedded.
+async function getParentChildren() {
+  const links = await dbSelect("parent_students", { parent_id:`eq.${profile.id}`, select:"student_id,students(*,classes(name,section))" });
+  return links.map(l => l.students).filter(Boolean);
+}
+// Fee summary for one child — total ever assigned (across all terms for their
+// class) vs. total ever paid. The child detail page also shows a per-term
+// breakdown for more precision.
+async function computeChildFeeSummary(studentId, classId) {
+  const [structure, payments] = await Promise.all([
+    dbSelect("fee_structures", { class_id:`eq.${classId||'null'}`, select:"amount,term_id" }).catch(()=>[]),
+    dbSelect("fee_payments", { student_id:`eq.${studentId}`, select:"amount_paid,term_id" }).catch(()=>[]),
+  ]);
+  const totalAssigned = structure.reduce((a,b)=>a+Number(b.amount||0),0);
+  const totalPaid = payments.reduce((a,b)=>a+Number(b.amount_paid||0),0);
+  return { totalAssigned, totalPaid, totalDue: Math.max(totalAssigned-totalPaid,0) };
+}
+/* ---- School Meetings — upcoming meetings + announcements for parents ----
+   Opening this page marks everything currently shown as read, which clears
+   the red unread badge on the "Meetings" nav entry immediately (see
+   refreshParentBadges / markNotifsRead above). */
+async function renderParentMeetings(container) {
+  let meetings = [], announcements = [], meetingsMissing = false;
+  try { meetings = await fetchParentMeetings(); }
+  catch (e) { meetingsMissing = true; }
+  try { announcements = await fetchParentAnnouncements(); } catch (e) {}
+
+  markNotifsRead(notifIdsFor(meetings, announcements));
+  refreshParentBadges();
+
+  container.innerHTML = `
+    <div class="card">
+      <h3 style="color:#c2410c;margin-bottom:12px;">Upcoming meetings</h3>
+      <div id="meetingsList"></div>
+      ${meetingsMissing ? `<p style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-top:10px;">Meetings haven't been set up for this school yet — check back later.</p>` : ""}
+    </div>
+    <div class="card">
+      <h3 style="color:var(--indigo);margin-bottom:12px;">Announcements</h3>
+      <div id="announceList"></div>
+    </div>
+  `;
+
+  const meetingsList = document.getElementById("meetingsList");
+  meetingsList.innerHTML = meetings.length ? "" : (meetingsMissing ? "" : emptyState("No upcoming meetings."));
+  meetings.forEach(m => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.calendar}</div>
+      <div class="list-main"><div class="list-title">${m.title}</div>
+      <div class="list-sub">${formatDate(m.meeting_date)} · ${new Date(m.meeting_date).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}${m.location ? " · "+m.location : ""}</div></div></div>`);
+    row.onclick = () => openViewModal(m.title, [
+      ["Date & time", new Date(m.meeting_date).toLocaleString()], ["Location", m.location],
+      ["Audience", m.audience || "Everyone"], ["Details", m.description],
+    ]);
+    meetingsList.appendChild(row);
+  });
+
+  const announceList = document.getElementById("announceList");
+  announceList.innerHTML = announcements.length ? "" : emptyState("No announcements yet.");
+  announcements.forEach(a => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.megaphone}</div>
+      <div class="list-main"><div class="list-title">${a.title}</div><div class="list-sub">${formatDate(a.created_at)}</div></div></div>`);
+    row.onclick = () => openViewModal(a.title, [["Audience", a.audience||"Everyone"], ["Message", a.message], ["Sent on", new Date(a.created_at).toLocaleString()]]);
+    announceList.appendChild(row);
+  });
+}
+
+/* ---- My Children list ---- */
+async function renderParentChildren(container) {
+  let children = [];
+  try { children = await getParentChildren(); }
+  catch (e) { renderMissingSetup(container, "Your parent portal needs one more one-time setup step before it can load your children.", () => renderParentChildren(container)); return; }
+  container.innerHTML = `
+    <div class="section-head"><h3 style="color:var(--sky);">My Children</h3><button class="btn btn-primary btn-sm" id="addChildBtn">${ic.plus} Add a child</button></div>
+    <div class="card" id="list"></div>
+  `;
+  const list = document.getElementById("list");
+  list.innerHTML = children.length ? "" : emptyState('No children linked to your account yet. Tap "Add a child" and enter their Student ID and exact registered name.');
+  children.forEach(c => {
+    const className = c.classes ? (c.classes.name + (c.classes.section ? (' '+c.classes.section) : '')) : "Unassigned";
+    const row = el(`<div class="list-row">${avatarHtml(c.full_name, c.photo_url, 40)}
+      <div class="list-main"><div class="list-title">${c.full_name}</div><div class="list-sub">${c.admission_no} · ${className}</div></div>${ic.chevronRight}</div>`);
+    row.onclick = () => renderParentChildDetail(container, c);
+    list.appendChild(row);
+  });
+  document.getElementById("addChildBtn").onclick = () => openAddChildModal(container);
+}
+function openAddChildModal(container) {
+  openModal("Add a child", `
+    <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter the Student ID and the student's exact registered name — the school confirms the match before linking.</div>
+    <div class="field"><label>Student ID (admission no.)</label><input id="f_adm" placeholder="e.g. DF001"/></div>
+    <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder="Full name as registered at the school"/></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_adm","Student ID"], ["f_sname","Student's name"]]);
+    await linkParentChild(profile.id, val(ov,"f_adm"), val(ov,"f_sname"));
+    toast("Child linked successfully.", false);
+    renderParentChildren(container);
+  }, { saveLabel: "Link child" });
+}
+
+/* ---- Child detail (inside "My Children"): class info, attendance & academics ----
+   Fees intentionally live in their own top-level "Fees" tab (see
+   renderParentFees / renderParentChildFeeDetail below), not here. */
+async function renderParentChildDetail(container, child) {
+  const className = child.classes ? (child.classes.name + (child.classes.section ? (' '+child.classes.section) : '')) : "Unassigned";
+  container.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to My Children</button>
+    <div class="card row" style="align-items:center;gap:12px;">
+      ${avatarHtml(child.full_name, child.photo_url, 52)}
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
+    </div>
+    <div class="card"><h3 style="color:var(--amber-dark);margin-bottom:10px;">Attendance</h3><div id="attArea"><div class="center-loading">Loading…</div></div></div>
+    <div class="card"><h3 style="color:var(--indigo);margin-bottom:10px;">Report card &amp; academics</h3><div id="acadArea"><div class="center-loading">Loading…</div></div></div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderParentChildren(container);
+  renderChildAttendance(document.getElementById("attArea"), child);
+  renderChildAcademics(document.getElementById("acadArea"), child);
+}
+
+/* ---- Attendance history for one child ---- */
+async function renderChildAttendance(area, child) {
+  let rows = [];
+  try { rows = await dbSelect("attendance", { student_id:`eq.${child.id}`, order:"date.desc", limit:"60" }); }
+  catch (e) { area.innerHTML = emptyState("Attendance hasn't been set up yet — check back later."); return; }
+  if (!rows.length) { area.innerHTML = emptyState("No attendance recorded yet."); return; }
+  const present = rows.filter(r=>r.status==="present").length;
+  const rate = rows.length ? Math.round((present/rows.length)*100) : 0;
+  area.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:12px;">
+      <div class="stat"><div class="num">${rate}%</div><div class="lbl">Attendance rate (last ${rows.length})</div></div>
+      <div class="stat"><div class="num">${present}/${rows.length}</div><div class="lbl">Days present</div></div>
+    </div>
+    <div id="attList"></div>
+  `;
+  const list = document.getElementById("attList");
+  rows.slice(0, 15).forEach(r => {
+    const row = el(`<div class="view-row"><div class="vlabel">${formatDate(r.date)}</div><div class="vvalue">${r.status==='present' ? '<span style="color:var(--teal-dark);">Present</span>' : '<span style="color:var(--red);">Absent</span>'}</div></div>`);
+    list.appendChild(row);
+  });
+}
+
+/* ---- Report card / exam results for one child ---- */
+async function renderChildAcademics(area, child) {
+  let examsRaw = [];
+  try {
+    examsRaw = await dbSelect("exams", { class_id:`eq.${child.class_id||'null'}`, select:"*,terms(name),classes(name,section),exam_types(name)", order:"exam_date.desc" });
+  } catch (e) { area.innerHTML = emptyState("Academic records aren't available yet."); return; }
+  await loadGrades();
+  const exams = dedupeExams(examsRaw);
+  if (!exams.length) { area.innerHTML = emptyState("No exams published yet for this class."); return; }
+  area.innerHTML = `<div class="field"><label>Exam</label><select id="selChildExam">${exams.map(x=>`<option value="${x.id}">${examLabel(x)}</option>`).join("")}</select></div><div id="resultArea"></div>`;
+  const sel = document.getElementById("selChildExam");
+  const resultArea = document.getElementById("resultArea");
+  async function loadResults() {
+    const examId = sel.value;
+    const results = await dbSelect("exam_results", { select:"*,subjects(name)", exam_id:`eq.${examId}`, student_id:`eq.${child.id}` }).catch(()=>[]);
+    const total = results.reduce((a,r)=>a+Number(r.marks_obtained||0),0);
+    const maxTotal = results.reduce((a,r)=>a+Number(r.max_marks||0),0);
+    const avg = maxTotal ? (total/maxTotal*100) : 0;
+    resultArea.innerHTML = `
+      <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody>
+        ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained}</td><td>${r.max_marks}</td><td>${gradeLabel((r.marks_obtained/r.max_marks)*100)}</td><td>${r.remarks||''}</td></tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
+      </tbody></table></div>
+      ${results.length ? `<div class="row" style="margin-top:12px;font-weight:700;"><div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeLabel(avg)}</div></div>
+      <button class="btn btn-ghost" id="printReportBtn" style="width:100%;margin-top:10px;">Print report card</button>` : ""}
+    `;
+    const printBtn = document.getElementById("printReportBtn");
+    if (printBtn) printBtn.onclick = () => window.print();
+  }
+  sel.onchange = loadResults;
+  loadResults();
+}
+
+/* ---- Fees (top-level tab): all children's fee totals, tap through to balance
+   by term, payment history & receipts. ---- */
+async function renderParentFees(container) {
+  let children = [];
+  try { children = await getParentChildren(); }
+  catch (e) { renderMissingSetup(container, "Your parent portal needs one more one-time setup step before it can load fees.", () => renderParentFees(container)); return; }
+  if (!children.length) {
+    container.innerHTML = `<div class="card">${emptyState('No children linked yet. Go to "My Children" to link a child first.')}</div>`;
+    return;
+  }
+  const summaries = await Promise.all(children.map(c => computeChildFeeSummary(c.id, c.class_id)));
+  const totalPaid = summaries.reduce((a,s)=>a+s.totalPaid, 0);
+  const totalDue = summaries.reduce((a,s)=>a+s.totalDue, 0);
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total fees paid</div></div>
+      <div class="stat"><div class="num" style="color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Total balance due</div></div>
+    </div>
+    <div class="section-head"><h3 style="color:var(--red);">By child</h3></div>
+    <div class="card" id="list"></div>
+  `;
+  const list = document.getElementById("list");
+  children.forEach((c, i) => {
+    const s = summaries[i];
+    const className = c.classes ? (c.classes.name + (c.classes.section ? (' '+c.classes.section) : '')) : "Unassigned";
+    const row = el(`<div class="list-row">${avatarHtml(c.full_name, c.photo_url, 40)}
+      <div class="list-main"><div class="list-title">${c.full_name}</div><div class="list-sub">${className} · Paid ${currency()}${s.totalPaid.toLocaleString()}</div></div>
+      <div style="text-align:right;"><div style="font-weight:800;color:${s.totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${s.totalDue.toLocaleString()}</div><div class="tiny-note" style="margin:0;">due</div></div>${ic.chevronRight}</div>`);
+    row.onclick = () => renderParentChildFeeDetail(container, c);
+    list.appendChild(row);
+  });
+}
+
+/* ---- Fee balance by term, payment history & receipts for one child ---- */
+async function renderParentChildFeeDetail(container, child) {
+  container.innerHTML = `<div class="center-loading">Loading…</div>`;
+  const className = child.classes ? (child.classes.name + (child.classes.section ? (' '+child.classes.section) : '')) : "Unassigned";
+  const [structure, payments] = await Promise.all([
+    dbSelect("fee_structures", { class_id:`eq.${child.class_id||'null'}`, select:"*,terms(name)" }).catch(()=>[]),
+    dbSelect("fee_payments", { student_id:`eq.${child.id}`, select:"*,terms(name)", order:"payment_date.desc" }).catch(()=>[]),
+  ]);
+  const totalAssigned = structure.reduce((a,b)=>a+Number(b.amount||0),0);
+  const totalPaid = payments.reduce((a,b)=>a+Number(b.amount_paid||0),0);
+  const totalDue = Math.max(totalAssigned-totalPaid,0);
+  const termIds = [...new Set(structure.map(s=>s.term_id))];
+  const termRowsHtml = termIds.map(tid => {
+    const items = structure.filter(s=>s.term_id===tid);
+    const termName = items[0]?.terms?.name || "Term";
+    const due = items.reduce((a,b)=>a+Number(b.amount||0),0);
+    const paidForTerm = payments.filter(p=>p.term_id===tid).reduce((a,b)=>a+Number(b.amount_paid||0),0);
+    const bal = Math.max(due-paidForTerm,0);
+    return `<div class="view-row"><div class="vlabel">${termName}</div><div class="vvalue">${currency()}${paidForTerm.toLocaleString()} / ${currency()}${due.toLocaleString()} <span style="color:${bal>0?'var(--red)':'var(--teal-dark)'};">(${currency()}${bal.toLocaleString()} due)</span></div></div>`;
+  }).join("");
+  container.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees</button>
+    <div class="card row" style="align-items:center;gap:12px;">
+      ${avatarHtml(child.full_name, child.photo_url, 52)}
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
+      <div class="stat"><div class="num" style="color:${totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${totalDue.toLocaleString()}</div><div class="lbl">Balance due</div></div>
+    </div>
+    <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
+    <div class="card"><h3 style="color:var(--teal-dark);margin-bottom:10px;">Payment history &amp; receipts</h3><div id="payList"></div></div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderParentFees(container);
+  const payList = document.getElementById("payList");
+  payList.innerHTML = payments.length ? "" : emptyState("No payments recorded yet.");
+  payments.forEach(p => {
+    const row = el(`<div class="list-row" style="gap:10px;"><div class="avatar">${ic.fees}</div>
+      <div class="list-main"><div class="list-title">${currency()}${Number(p.amount_paid||0).toLocaleString()} · ${p.terms?.name||''}</div><div class="list-sub">${formatDate(p.payment_date)} · ${methodLabel(p.method)}</div></div>
+      <button class="btn btn-ghost btn-sm" id="rcpt${p.id}">Receipt</button></div>`);
+    row.querySelector(`#rcpt${p.id}`).onclick = (e) => { e.stopPropagation(); openReceiptModal(p, child); };
+    row.onclick = () => openReceiptModal(p, child);
+    payList.appendChild(row);
+  });
+}
+
+/* ---- Digital receipt ---- */
+async function openReceiptModal(payment, student) {
+  let receivedByName = "";
+  if (payment.received_by) {
+    try { const r = await dbSelect("profiles", { id:`eq.${payment.received_by}`, select:"full_name" }); receivedByName = r[0]?.full_name || ""; } catch(e) {}
+  }
+  const s = schoolSettings || {};
+  const receiptNo = `RCT-${String(payment.id).slice(0,8).toUpperCase()}`;
+  const overlay = el(`<div class="overlay"><div class="modal" style="max-width:420px;">
+    <button class="modal-close">&times;</button>
+    <div id="receiptArea" class="receipt-box">
+      <div class="receipt-head">
+        ${s.logo_url ? `<img src="${s.logo_url}" alt="" class="receipt-logo"/>` : ""}
+        <div class="receipt-school">${s.school_name || "Nova School"}</div>
+        <div class="receipt-sub">${[s.address, s.phone, s.email].filter(Boolean).join(" · ")}</div>
+        <div class="receipt-title">Official Payment Receipt</div>
+      </div>
+      <div class="view-row"><div class="vlabel">Receipt No.</div><div class="vvalue">${receiptNo}</div></div>
+      <div class="view-row"><div class="vlabel">Date</div><div class="vvalue">${formatDate(payment.payment_date)}</div></div>
+      <div class="view-row"><div class="vlabel">Student</div><div class="vvalue">${student?.full_name || ""}</div></div>
+      <div class="view-row"><div class="vlabel">Admission no.</div><div class="vvalue">${student?.admission_no || ""}</div></div>
+      <div class="view-row"><div class="vlabel">Term</div><div class="vvalue">${payment.terms?.name || "—"}</div></div>
+      <div class="view-row"><div class="vlabel">Payment method</div><div class="vvalue">${methodLabel(payment.method) || "—"}</div></div>
+      ${payment.note ? `<div class="view-row"><div class="vlabel">Note</div><div class="vvalue">${payment.note}</div></div>` : ""}
+      ${receivedByName ? `<div class="view-row"><div class="vlabel">Received by</div><div class="vvalue">${receivedByName}</div></div>` : ""}
+      <div class="receipt-amount">
+        <div>Amount paid</div>
+        <div>${currency()}${Number(payment.amount_paid||0).toLocaleString()}</div>
+      </div>
+      <div class="receipt-foot">This is a system-generated receipt. Keep it for your records.</div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Close</button>
+      <button class="btn btn-primary" id="receiptPrintBtn">Print / Save as PDF</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector("#receiptPrintBtn").onclick = () => window.print();
+}
+
+/* ---- Contact School ---- */
+async function renderParentContact(container) {
+  const s = schoolSettings || {};
+  container.innerHTML = `
+    <div class="card">
+      <h3 style="color:var(--navy);margin-bottom:12px;">${s.school_name || "Nova School"}</h3>
+      ${s.address ? `<div class="view-row"><div class="vlabel">Address</div><div class="vvalue">${s.address}</div></div>` : ""}
+      ${s.phone ? `<div class="view-row"><div class="vlabel">Phone</div><div class="vvalue">${s.phone}</div></div>` : ""}
+      ${s.email ? `<div class="view-row"><div class="vlabel">Email</div><div class="vvalue">${s.email}</div></div>` : ""}
+      ${(!s.address && !s.phone && !s.email) ? emptyState("The school hasn't added contact information yet.") : ""}
+      <div class="row" style="gap:10px;margin-top:16px;">
+        ${s.phone ? `<a class="btn btn-primary" style="flex:1;text-decoration:none;" href="tel:${String(s.phone).replace(/\s+/g,'')}">${ic.phone} Call school</a>` : ""}
+        ${s.email ? `<a class="btn btn-ghost" style="flex:1;text-decoration:none;" href="mailto:${s.email}">${ic.mail} Email school</a>` : ""}
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--indigo);margin-bottom:12px;">Send a message</h3>
+      <div class="field"><label>Subject</label><input id="f_subject" placeholder="e.g. Question about Term 2 fees"/></div>
+      <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder="Write your message…"></textarea></div>
+      <button class="btn btn-primary" id="sendMsgBtn" style="width:100%;">Send message</button>
+      <div id="msgStatus"></div>
+    </div>
+    <div class="card" id="sentMsgs"><div class="center-loading">Loading…</div></div>
+  `;
+  document.getElementById("sendMsgBtn").onclick = async () => {
+    const status = document.getElementById("msgStatus"); status.innerHTML = "";
+    const subject = document.getElementById("f_subject").value.trim();
+    const message = document.getElementById("f_message").value.trim();
+    if (!subject || !message) { status.innerHTML = `<div class="err">Please fill in both subject and message.</div>`; return; }
+    try {
+      await dbInsert("parent_messages", { parent_id: profile.id, parent_name: profile.full_name, subject, message });
+      status.innerHTML = `<div class="msg-ok">Message sent to the school office.</div>`;
+      document.getElementById("f_subject").value = ""; document.getElementById("f_message").value = "";
+      loadSentMessages();
+    } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
+  };
+  async function loadSentMessages() {
+    const wrap = document.getElementById("sentMsgs");
+    try {
+      const msgs = await dbSelect("parent_messages", { parent_id:`eq.${profile.id}`, order:"created_at.desc", limit:"20" });
+      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your messages</h3>` +
+        (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject}</div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No messages sent yet."));
+    } catch (e) {
+      wrap.innerHTML = missingSetupHtml("Messaging needs one more one-time setup step.");
+    }
+  }
+  loadSentMessages();
+}
+
+/* ---- Settings: account details, change password, log out ----
+   This is the only place a parent can manage their own account — there is
+   no access to any admin/staff settings from here. */
+async function renderParentSettings(container) {
+  container.innerHTML = `
+    <div class="card">
+      <div class="section-head"><h3 style="color:var(--navy-2);">My Account</h3><button class="btn btn-ghost btn-sm" id="editAcctBtn">${ic.edit} Edit</button></div>
+      <div class="list-row" style="flex-wrap:wrap;">
+        ${avatarHtml(profile?.full_name, profile?.photo_url)}
+        <div class="list-main">
+          <div class="list-title">${profile?.full_name || ""}</div>
+          <div class="list-sub">${profile?.phone || ""}${profile?.username ? ` · @${profile.username}` : ""}</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="color:var(--indigo);margin:0;">Change password</h3></div>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter your PIN to confirm it's you, then set a new password.</div>
+      <div class="field"><label>PIN</label><input id="f_cpin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN"/></div>
+      <div class="field"><label>New password</label><input id="f_cnewpass" type="password" placeholder="At least 6 characters"/></div>
+      <div class="field"><label>Confirm new password</label><input id="f_cnewpass2" type="password" placeholder="Repeat new password"/></div>
+      <button class="btn btn-primary" id="changePassBtn" style="width:100%;">Update password</button>
+      <div id="passStatus"></div>
+    </div>
+    <div class="card">
+      <button class="btn btn-ghost" id="logoutBtnSettings" style="width:100%;">${ic.logout} Log out</button>
+    </div>
+  `;
+  document.getElementById("editAcctBtn").onclick = () => openEditParentAccountModal(container);
+  document.getElementById("logoutBtnSettings").onclick = () => { if (confirm("Log out?")) logout(); };
+  document.getElementById("changePassBtn").onclick = async () => {
+    const status = document.getElementById("passStatus"); status.innerHTML = "";
+    const pin = document.getElementById("f_cpin").value.trim();
+    const new_password = document.getElementById("f_cnewpass").value;
+    const confirmPass = document.getElementById("f_cnewpass2").value;
+    if (!pin || !new_password || !confirmPass) { status.innerHTML = `<div class="err">Please fill in your PIN and new password.</div>`; return; }
+    if (new_password.length < 6) { status.innerHTML = `<div class="err">Password must be at least 6 characters.</div>`; return; }
+    if (new_password !== confirmPass) { status.innerHTML = `<div class="err">Passwords do not match.</div>`; return; }
+    try {
+      await resetPassword({ username: profile.username, pin, new_password });
+      status.innerHTML = `<div class="msg-ok">Password updated.</div>`;
+      document.getElementById("f_cpin").value = ""; document.getElementById("f_cnewpass").value = ""; document.getElementById("f_cnewpass2").value = "";
+    } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
+  };
+}
+function openEditParentAccountModal(container) {
+  openModal("Edit account", `
+    <div class="field" style="text-align:center;">
+      <label>Photo</label>
+      <div id="acctPhotoPreviewWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml(profile?.full_name, profile?.photo_url, 72)}</div>
+      <input id="f_acct_photo" type="file" accept="image/*"/>
+    </div>
+    <div class="field"><label>Full name</label><input id="f_acct_name" value="${profile?.full_name||''}" required/></div>
+    <div class="field"><label>Phone number</label><input id="f_acct_phone" value="${profile?.phone||''}"/></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_acct_name","Full name"]]);
+    const file = ov.querySelector("#f_acct_photo").files[0];
+    const photo_url = file ? await fileToDataURL(file) : (profile?.photo_url || null);
+    const payload = { full_name: val(ov,"f_acct_name"), phone: val(ov,"f_acct_phone")||null, photo_url };
+    await dbUpdate("profiles", profile.id, payload);
+    Object.assign(profile, payload);
+    toast("Account updated.", false);
+    renderParentApp();
+  }, { saveLabel: "Save changes" });
+  const photoInput = document.getElementById("f_acct_photo");
+  photoInput.onchange = async () => {
+    if (!photoInput.files[0]) return;
+    const dataUrl = await fileToDataURL(photoInput.files[0]);
+    if (dataUrl) document.getElementById("acctPhotoPreviewWrap").innerHTML = avatarHtml(profile?.full_name, dataUrl, 72);
+  };
+}
+
 /* ---------------- HEADER COLOR + ANIMATION PER TAB ---------------- */
 const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", comms:"#c2410c", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
-const TAB_ANIM = { dashboard:"riseIn", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
+const TAB_ANIM = { dashboard:"riseIn", health:"popScale", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
 
 /* ---------------- DASHBOARD ---------------- */
 async function renderDashboard(container) {
@@ -2285,6 +3429,159 @@ async function renderStaffAttendance(body, opts={}) {
   };
 }
 
+/* ---------------- SCHOOL HEALTH (admin-only overview) ----------------
+   A single at-a-glance dashboard combining fees, results, attendance and
+   staffing. Only visible to profiles with full ("all") access — see the
+   {id:"health",...} NAV entry above, which is deliberately left out of
+   every DEPARTMENTS access list except Administration's "all". */
+const LOW_ATTENDANCE_THRESHOLD = 75; // % present, below this a student is flagged
+const ATT_WINDOW_DAYS = 30;          // rolling window used for both student & teacher attendance rates
+function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+
+async function renderSchoolHealth(container) {
+  container.innerHTML = `<div class="center-loading">Loading…</div>`;
+  const today = new Date().toISOString().slice(0,10);
+  const windowStart = daysAgoISO(ATT_WINDOW_DAYS);
+
+  const [students, teachers, classesAll, feePayments, feeStructures, examsRaw, examResults, attWindow, staffAttWindow, staffAttToday] = await Promise.all([
+    dbSelectActive("students", { status:"eq.active", select:"id,full_name,admission_no,class_id,photo_url,classes(name,section)" }),
+    dbSelectActive("teachers", { status:"eq.active", select:"id,full_name,photo_url,specialty,staff_no" }),
+    dbSelectActive("classes", { select:"id,name,section" }),
+    dbSelect("fee_payments", { select:"student_id,amount_paid" }).catch(()=>[]),
+    dbSelect("fee_structures", { select:"class_id,amount" }).catch(()=>[]),
+    dbSelectActive("exams", { select:"id,class_id" }).catch(()=>[]),
+    dbSelect("exam_results", { select:"exam_id,marks_obtained,max_marks" }).catch(()=>[]),
+    dbSelect("attendance", { date:`gte.${windowStart}`, select:"student_id,status" }).catch(()=>[]),
+    dbSelect("staff_attendance", { date:`gte.${windowStart}`, select:"teacher_id,status" }).catch(()=>[]),
+    dbSelect("staff_attendance", { date:`eq.${today}`, select:"teacher_id,status" }).catch(()=>[]),
+  ]);
+
+  // ---- Fees: total collected & outstanding balances (assigned − paid, summed across all active students) ----
+  const totalCollected = feePayments.reduce((a,p)=>a+Number(p.amount_paid||0),0);
+  const classAssigned = {};
+  feeStructures.forEach(s => { classAssigned[s.class_id] = (classAssigned[s.class_id]||0) + Number(s.amount||0); });
+  const paidByStudent = {};
+  feePayments.forEach(p => { paidByStudent[p.student_id] = (paidByStudent[p.student_id]||0) + Number(p.amount_paid||0); });
+  const outstanding = students.reduce((sum,s) => {
+    const assigned = classAssigned[s.class_id] || 0;
+    const paid = paidByStudent[s.id] || 0;
+    return sum + Math.max(assigned - paid, 0);
+  }, 0);
+
+  // ---- Top performing class: highest weighted average score across all recorded exam results ----
+  const examClassMap = {}; examsRaw.forEach(x=>examClassMap[x.id]=x.class_id);
+  const classPerf = {};
+  examResults.forEach(r => {
+    const cid = examClassMap[r.exam_id];
+    if (!cid) return;
+    if (!classPerf[cid]) classPerf[cid] = { obtained:0, max:0 };
+    classPerf[cid].obtained += Number(r.marks_obtained||0);
+    classPerf[cid].max += Number(r.max_marks||0);
+  });
+  let topClassId = null, topPct = -1;
+  Object.entries(classPerf).forEach(([cid,v]) => {
+    if (!v.max) return;
+    const pct = v.obtained/v.max*100;
+    if (pct > topPct) { topPct = pct; topClassId = cid; }
+  });
+  const classMap = {}; classesAll.forEach(c=>classMap[c.id]=c);
+  const topClassName = topClassId && classMap[topClassId] ? (classMap[topClassId].name + (classMap[topClassId].section?(' '+classMap[topClassId].section):'')) : null;
+
+  // ---- Students with low attendance (rolling window) ----
+  const studentAttAgg = {};
+  attWindow.forEach(a => {
+    if (!studentAttAgg[a.student_id]) studentAttAgg[a.student_id] = { present:0, total:0 };
+    studentAttAgg[a.student_id].total++;
+    if (a.status === "present") studentAttAgg[a.student_id].present++;
+  });
+  const activeIds = new Set(students.map(s=>s.id));
+  const lowAttendanceStudents = Object.entries(studentAttAgg)
+    .filter(([sid,v]) => activeIds.has(sid) && v.total>0 && (v.present/v.total*100) < LOW_ATTENDANCE_THRESHOLD)
+    .map(([sid,v]) => ({ id:sid, rate:(v.present/v.total*100), present:v.present, total:v.total }));
+
+  // ---- Teacher attendance: today's snapshot + rolling-window performance ----
+  const presentToday = staffAttToday.filter(a=>a.status==="present").length;
+  const absentToday = staffAttToday.filter(a=>a.status==="absent").length;
+  const teacherAttAgg = {};
+  staffAttWindow.forEach(a => {
+    if (!teacherAttAgg[a.teacher_id]) teacherAttAgg[a.teacher_id] = { present:0, total:0 };
+    teacherAttAgg[a.teacher_id].total++;
+    if (a.status === "present") teacherAttAgg[a.teacher_id].present++;
+  });
+  const overallTeacherRate = staffAttWindow.length ? (staffAttWindow.filter(a=>a.status==="present").length/staffAttWindow.length*100) : null;
+
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${currency()}${totalCollected.toLocaleString()}</div><div class="lbl">Total fees collected</div></div>
+      <div class="stat"><div class="num" style="color:${outstanding>0?'var(--red)':'var(--teal-dark)'};">${currency()}${outstanding.toLocaleString()}</div><div class="lbl">Outstanding fee balances</div></div>
+      <div class="stat"><div class="num" style="font-size:17px;">${topClassName || "—"}</div><div class="lbl">Top performing class${topPct>=0?` · ${topPct.toFixed(1)}%`:""}</div></div>
+      <div class="stat"><div class="num">${students.length}</div><div class="lbl">Total students</div></div>
+      <div class="stat" id="lowAttStat" style="cursor:pointer;"><div class="num" style="color:${lowAttendanceStudents.length?'var(--red)':'var(--teal-dark)'};">${lowAttendanceStudents.length}</div><div class="lbl">Students with low attendance</div></div>
+      <div class="stat"><div class="num">${teachers.length}</div><div class="lbl">Total teachers</div></div>
+      <div class="stat"><div class="num" style="color:var(--teal-dark);">${presentToday}</div><div class="lbl">Teachers present today</div></div>
+      <div class="stat"><div class="num" style="color:${absentToday?'var(--red)':'var(--ink)'};">${absentToday}</div><div class="lbl">Teachers absent today</div></div>
+    </div>
+    <div class="card" id="teacherPerfPanel"><div class="center-loading">Loading…</div></div>
+  `;
+  document.getElementById("lowAttStat").onclick = () => renderLowAttendanceList(container, lowAttendanceStudents, students, windowStart);
+  renderTeacherAttendancePerformance(document.getElementById("teacherPerfPanel"), teachers, teacherAttAgg, overallTeacherRate);
+}
+
+/* ---- School Health panel: Teacher Attendance Performance (rolling window, worst first) ---- */
+function renderTeacherAttendancePerformance(body, teachers, teacherAttAgg, overallRate) {
+  const rows = teachers.map(t => {
+    const agg = teacherAttAgg[t.id] || { present:0, total:0 };
+    const pct = agg.total ? (agg.present/agg.total*100) : null;
+    return { teacher:t, pct, present:agg.present, total:agg.total };
+  }).sort((a,b) => (a.pct===null?101:a.pct) - (b.pct===null?101:b.pct));
+  const rowsHtml = rows.map(r => {
+    const barPct = r.pct===null ? 0 : r.pct;
+    const color = r.pct===null ? 'var(--slate)' : barPct>=90 ? 'var(--teal)' : barPct>=75 ? 'var(--amber)' : 'var(--red)';
+    const label = r.pct===null ? 'No records' : `${r.present}/${r.total} · ${barPct.toFixed(0)}%`;
+    return `<div style="margin-bottom:12px;">
+      <div class="row" style="margin-bottom:5px;font-size:13px;">
+        <div style="font-weight:700;color:var(--ink);">${r.teacher.full_name}</div>
+        <div style="color:var(--ink-soft);font-weight:600;">${label}</div>
+      </div>
+      <div style="background:var(--card-alt);border-radius:999px;height:9px;overflow:hidden;">
+        <div style="width:${barPct}%;height:100%;background:${color};border-radius:999px;"></div>
+      </div>
+    </div>`;
+  }).join("");
+  body.innerHTML = `<div class="section-head" style="margin-bottom:14px;">
+      <h3 style="color:var(--purple);margin:0;">Teacher Attendance Performance</h3>
+      ${overallRate!==null ? `<span class="badge ${overallRate>=90?'badge-green':overallRate>=75?'badge-amber':'badge-red'}">${overallRate.toFixed(0)}% overall · last ${ATT_WINDOW_DAYS}d</span>` : ""}
+    </div>
+    ${rows.length ? rowsHtml : emptyState("No teachers yet.")}`;
+}
+
+/* ---- School Health drill-down: full list of students under the attendance threshold ---- */
+function renderLowAttendanceList(container, lowList, students, windowStart) {
+  const studentMap = {}; students.forEach(s=>studentMap[s.id]=s);
+  const rows = lowList
+    .map(l => ({ ...l, student: studentMap[l.id] }))
+    .filter(l => l.student)
+    .sort((a,b) => a.rate - b.rate);
+  container.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to School Health</button>
+    <div class="section-head"><h3 style="color:var(--red);">Students with low attendance</h3></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Attendance below ${LOW_ATTENDANCE_THRESHOLD}% over the last ${ATT_WINDOW_DAYS} days (since ${formatDate(windowStart)}).</p>
+    <div class="card" id="lowAttList"></div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderSchoolHealth(container).catch(errShow(container));
+  const list = document.getElementById("lowAttList");
+  list.innerHTML = rows.length ? "" : emptyState("No students currently below the attendance threshold.");
+  rows.forEach(r => {
+    const s = r.student;
+    const className = s.classes ? (s.classes.name + (s.classes.section?(' '+s.classes.section):'')) : "Unassigned";
+    const row = el(`<div class="list-row">${avatarHtml(s.full_name, s.photo_url, 40)}
+      <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">${s.admission_no||''} · ${className}</div></div>
+      <div style="text-align:right;"><div style="font-weight:800;color:var(--red);">${r.rate.toFixed(0)}%</div><div style="font-size:11px;color:var(--ink-soft);">${r.present}/${r.total} days</div></div>
+    </div>`);
+    list.appendChild(row);
+  });
+}
+
 /* ---------------- FEES ---------------- */
 async function renderFees(container, sub="payments") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
@@ -2788,15 +4085,18 @@ async function renderResultsOverview(body, filters={}) {
     list.appendChild(row);
   });
 }
-/* ---------------- COMMS: Announcements / Reports / Notices ----------------
-   One page, three pill tabs, one small table (school_communications) told
-   apart by `type`. Administration always has this (via "all" access); the
-   Parents & Community department is the other one that sees it, for sending
-   things out to parents/guardians. */
+/* ---------------- COMMS: Announcements / Reports / Notices / Meetings ----------------
+   One page, four pill tabs. Announcements/Reports/Notices share one small
+   table (school_communications) told apart by `type`. Meetings gets its own
+   table (school_meetings, see MEETINGS_SQL) since it needs a date/location
+   instead of a free-text message. Administration always has this (via "all"
+   access); the Parents & Community department is the other one that sees it,
+   for sending things out to parents/guardians. */
 const COMMS_TYPES = [
   ["announcement","Announcements","Send announcement"],
   ["report","Reports","Send report"],
   ["notice","Notices","Deliver information"],
+  ["meeting","Meetings","Schedule meeting"],
 ];
 async function renderComms(container, sub="announcement") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
@@ -2806,7 +4106,9 @@ async function renderComms(container, sub="announcement") {
     p.onclick = () => renderComms(container, id);
     pills.appendChild(p);
   });
-  renderCommsList(document.getElementById("secBody"), container, sub);
+  const body = document.getElementById("secBody");
+  if (sub === "meeting") renderMeetingsAdminList(body, container);
+  else renderCommsList(body, container, sub);
 }
 async function renderCommsList(body, container, type) {
   const meta = COMMS_TYPES.find(t=>t[0]===type) || COMMS_TYPES[0];
@@ -2859,6 +4161,77 @@ function openCommsModal(body, container, type, c) {
     if (isEdit) await dbUpdate("school_communications", c.id, payload); else await dbInsert("school_communications", payload);
     renderCommsList(body, container, type);
   }, { saveLabel: isEdit ? "Save changes" : "Send" });
+}
+
+/* ---------------- COMMS: Meetings (admin side) ----------------
+   Same shape as the rest of Comms, but backed by school_meetings and with
+   a date/time + location instead of a plain message. Parents see these
+   (alongside Announcements) on their "School Meetings" page — see
+   NAV_PARENT / renderParentMeetings below. */
+async function renderMeetingsAdminList(body, container) {
+  let items = [];
+  let missingTable = false;
+  try { items = await dbSelectActive("school_meetings", { order:"meeting_date.asc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = `<div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.calendar}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Meetings needs a small table in your database before you can schedule anything.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${MEETINGS_SQL}</pre>
+      <button class="btn btn-primary" id="retryMeetingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
+    </div>`;
+    document.getElementById("retryMeetingsBtn").onclick = () => renderMeetingsAdminList(body, container);
+    return;
+  }
+
+  const now = Date.now();
+  const upcoming = items.filter(m => new Date(m.meeting_date).getTime() >= now);
+  const past = items.filter(m => new Date(m.meeting_date).getTime() < now);
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:#c2410c;">Meetings</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Schedule meeting</button></div>
+    <div class="card" id="list"></div>
+    ${past.length ? `<h3 style="color:var(--ink-soft);margin:18px 0 12px;">Past</h3><div class="card" id="pastList"></div>` : ""}`;
+  const list = document.getElementById("list");
+  list.innerHTML = upcoming.length ? "" : emptyState("No upcoming meetings scheduled.");
+  const renderRow = (m, container2) => {
+    const row = el(`<div class="list-row"><div class="avatar">${ic.calendar}</div>
+      <div class="list-main"><div class="list-title">${m.title}</div>
+      <div class="list-sub">${formatDate(m.meeting_date)} · ${new Date(m.meeting_date).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}${m.location ? " · "+m.location : ""}</div></div></div>`);
+    const view = () => openViewModal(m.title, [
+      ["Date & time", new Date(m.meeting_date).toLocaleString()], ["Location", m.location],
+      ["Audience", m.audience || "Everyone"], ["Details", m.description],
+      ["Scheduled by", m.created_by],
+    ], () => openMeetingModal(body, container, m));
+    const edit = () => openMeetingModal(body, container, m);
+    const del = async () => { if (await customConfirm(`Delete "${m.title}"?`, { danger:true, okLabel:"Delete" })) safe(async()=>{ await softDelete("school_meetings", m.id); renderMeetingsAdminList(body, container); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    container2.appendChild(row);
+  };
+  upcoming.forEach(m => renderRow(m, list));
+  if (past.length) { const pastList = document.getElementById("pastList"); past.forEach(m => renderRow(m, pastList)); }
+  document.getElementById("addBtn").onclick = () => openMeetingModal(body, container, null);
+}
+function openMeetingModal(body, container, m) {
+  const isEdit = !!m;
+  const audiences = ["Everyone","All parents","All staff","All students","Specific class"];
+  const dt = m?.meeting_date ? new Date(m.meeting_date) : null;
+  const dateVal = dt ? dt.toISOString().slice(0,10) : "";
+  const timeVal = dt ? dt.toTimeString().slice(0,5) : "";
+  openModal(isEdit ? "Edit meeting" : "Schedule meeting", `
+    <div class="field"><label>Title</label><input id="f_title" placeholder="e.g. Term 2 PTA meeting" value="${m?.title||''}"/></div>
+    <div class="field"><label>Date</label><input id="f_date" type="date" value="${dateVal}"/></div>
+    <div class="field"><label>Time</label><input id="f_time" type="time" value="${timeVal}"/></div>
+    <div class="field"><label>Location</label><input id="f_location" placeholder="e.g. School hall" value="${m?.location||''}"/></div>
+    <div class="field"><label>Audience</label><select id="f_audience">${audiences.map(a=>`<option ${m?.audience===a?'selected':''}>${a}</option>`).join("")}</select></div>
+    <div class="field"><label>Details</label><textarea id="f_description" rows="4" placeholder="Agenda, what to bring, etc.">${m?.description||''}</textarea></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_title","Title"], ["f_date","Date"], ["f_time","Time"]]);
+    const meeting_date = new Date(`${val(ov,"f_date")}T${val(ov,"f_time")}`).toISOString();
+    const payload = { title: val(ov,"f_title"), meeting_date, location: val(ov,"f_location"), audience: val(ov,"f_audience"), description: val(ov,"f_description"), created_by: profile?.full_name || null };
+    if (isEdit) await dbUpdate("school_meetings", m.id, payload); else await dbInsert("school_meetings", payload);
+    renderMeetingsAdminList(body, container);
+  }, { saveLabel: isEdit ? "Save changes" : "Schedule" });
 }
 
 // Admin-defined grade bands (Setup → Grades), cached after first load so report cards
@@ -3535,10 +4908,21 @@ function pwaOverlayShell(bodyHtml, opts) {
     <div class="pwa-card">
       <div class="pwa-icon"><img src="${PWA_ICON_URL}" alt=""/></div>
       <div class="pwa-title">${opts.title || "Install Nova School"}</div>
-      <div class="pwa-sub">${opts.sub || "Nova School Manager only runs as an installed app. Install it once to your device to continue — this only takes a moment."}</div>
+      <div class="pwa-sub">${opts.sub || "Nova School Manager runs best as an installed app. Install it once to your device for the full experience — this only takes a moment."}</div>
       <div class="pwa-body">${bodyHtml}</div>
+      ${opts.showSkip === false ? "" : `<div class="tiny-note" style="margin-top:14px;"><span class="link-btn" id="pwaSkipLink" style="cursor:pointer;">Continue in browser</span></div>`}
       ${DEV_MODE ? `<div class="tiny-note" style="margin-top:14px;"><button type="button" id="pwaDevSkip" class="btn btn-ghost btn-sm">Skip install (dev mode)</button></div>` : ""}
     </div>`;
+}
+// Dismisses the overlay for this visit only (does not mark the app as
+// "installed"), so it can still be a prompt rather than a hard gate.
+function pwaWireSkip(overlay) {
+  const skip = overlay.querySelector("#pwaSkipLink");
+  if (skip) skip.onclick = () => {
+    const app = document.getElementById("app");
+    if (app) app.classList.add("pwa-app-unlocked");
+    overlay.style.display = "none";
+  };
 }
 function pwaWireDevSkip(overlay) {
   if (!DEV_MODE) return;
@@ -3552,6 +4936,7 @@ function renderPwaChecking(overlay) {
     <div class="pwa-spinner"></div>
     <div class="pwa-status">Preparing installer…</div>
   `);
+  pwaWireSkip(overlay);
 }
 function renderPwaReady(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
@@ -3604,7 +4989,8 @@ function renderPwaInstalledSuccess(overlay) {
     <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
   `, {
     title: "Installed!",
-    sub: "Nova School Manager is on your device now. Open it from here, or from your home screen any time."
+    sub: "Nova School Manager is on your device now. Open it from here, or from your home screen any time.",
+    showSkip: false,
   });
   overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
 }
@@ -3613,17 +4999,35 @@ function renderPwaAlreadyInstalled(overlay) {
     <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
   `, {
     title: "Open the Nova School app",
-    sub: "You've already installed Nova School Manager. This browser tab can't show your data — open the installed app instead."
+    sub: "You've already installed Nova School Manager. This browser tab can't show your data — open the installed app instead.",
+    showSkip: false,
   });
   overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
 }
 
 function initPwaInstallOverlay() {
-  // The install-gate is disabled — the app opens directly to the login screen
-  // (or straight into the app, for a remembered session) whether or not it's
-  // installed to the home screen. The functions above are kept in case this
-  // gate is ever turned back on, but nothing calls into them anymore.
-  pwaShowApp();
+  const overlay = document.getElementById("pwaInstallOverlay");
+  if (!overlay) { pwaShowApp(); return; }
+  const { isStandalone, isIOS, isFirefox } = detectPwaPlatform();
+  // Already running as the installed app (or previously installed) — skip straight in.
+  if (isStandalone || pwaWasInstalled()) { pwaShowApp(); return; }
+  overlay.style.display = "flex";
+  renderPwaChecking(overlay);
+  // Give Chromium a brief moment to fire "beforeinstallprompt" before deciding
+  // which version of the prompt to show.
+  window.__pwaEventArrived = () => {
+    if (overlay.style.display === "flex" && overlay.querySelector(".pwa-spinner")) {
+      renderPwaReady(overlay); pwaWireDevSkip(overlay); pwaWireSkip(overlay);
+    }
+  };
+  setTimeout(() => {
+    if (isIOS) { renderPwaIOS(overlay); }
+    else if (isFirefox) { renderPwaFirefox(overlay); }
+    else if (deferredInstallPrompt) { renderPwaReady(overlay); }
+    else { renderPwaFallback(overlay); }
+    pwaWireDevSkip(overlay);
+    pwaWireSkip(overlay);
+  }, 700);
 }
 
 initPwaInstallOverlay();
