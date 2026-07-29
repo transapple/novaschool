@@ -365,11 +365,66 @@
   .pwa-footer-links{display:flex;justify-content:center;gap:18px;margin-top:14px;}
   .pwa-footer-links button{background:none;border:none;color:var(--ink-soft);font-weight:600;font-size:12.5px;padding:4px;}
   .pwa-footer-links button:hover{color:var(--ink);text-decoration:underline;}
+
+  /* ---- Portrait-only lock (CSS fallback for browsers/devices that ignore
+     the manifest/JS orientation lock, e.g. regular mobile Safari/Chrome tabs) ---- */
+  #rotateLockOverlay{
+    display:none;
+    position:fixed;inset:0;z-index:99999;
+    background:var(--navy);
+    color:#fff;
+    flex-direction:column;
+    align-items:center;justify-content:center;
+    text-align:center;
+    padding:32px;
+  }
+  #rotateLockOverlay .rl-icon{
+    width:64px;height:64px;margin-bottom:18px;
+    animation:rlSpin 1.6s ease-in-out infinite;
+  }
+  @keyframes rlSpin{
+    0%,100%{transform:rotate(0deg);}
+    50%{transform:rotate(-90deg);}
+  }
+  #rotateLockOverlay h2{font-size:18px;margin:0 0 8px;font-weight:700;}
+  #rotateLockOverlay p{font-size:14px;color:#C7D0E0;margin:0;max-width:280px;line-height:1.5;}
+  @media (orientation: landscape) and (max-device-width: 926px){
+    #rotateLockOverlay{display:flex;}
+    #app{display:none;}
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div id="pwaInstallOverlay" class="pwa-install-overlay"></div>
+
+<div id="rotateLockOverlay">
+  <svg class="rl-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="7" y="2" width="10" height="20" rx="2"></rect>
+    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+  </svg>
+  <h2>Please rotate your device</h2>
+  <p>This app is designed for portrait mode only. Turn your device back upright to continue.</p>
+</div>
+
+<script>
+/* Best-effort native orientation lock — only takes effect when the app is
+   running installed/fullscreen (PWA) on platforms that support the Screen
+   Orientation API. Regular browser tabs will silently ignore this, which is
+   why the CSS overlay above exists as the real cross-device fallback. */
+(function lockPortraitOrientation(){
+  function tryLock(){
+    try{
+      if (screen.orientation && screen.orientation.lock){
+        screen.orientation.lock('portrait').catch(function(){/* not supported in this context, CSS fallback handles it */});
+      }
+    }catch(e){/* no-op */}
+  }
+  tryLock();
+  document.addEventListener('fullscreenchange', tryLock);
+  window.addEventListener('load', tryLock);
+})();
+</script>
 
 <script>
 /* ---------------- PWA INSTALL PROMPT (captured immediately, top of script,
