@@ -405,6 +405,9 @@ window.addEventListener("appinstalled", () => {
 
 const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
+// Max time to wait on any single Supabase request before giving up and showing
+// an error instead of hanging indefinitely (see sb() below).
+const FETCH_TIMEOUT_MS = 8000;
 
 let DEV_MODE = false;  // ← must stay false in production: true lets anyone skip login entirely
 let auth = null;       // { access_token, user }
@@ -1408,13 +1411,20 @@ async function sb(path, opts = {}) {
     "Content-Type": "application/json",
   }, opts.headers || {});
   let res;
+  // Hard timeout so a stalled connection (slow/filtered mobile networks, a request
+  // that connects but never gets a response, etc.) can never hang forever — every
+  // caller either gets data or an error within FETCH_TIMEOUT_MS, no exceptions.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers }));
+    res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers, signal: controller.signal }));
   } catch (e) {
     // The browser throws a bare "Failed to fetch" for any network-level failure
-    // (offline, blocked request, DNS issue, server unreachable, CORS, etc).
-    // Surface something a user can actually act on instead of that raw message.
+    // (offline, blocked request, DNS issue, server unreachable, CORS, etc), and an
+    // AbortError once our own timeout above fires on a stalled request.
     throw new Error("Check your internet connection and try again. If this keeps happening, please contact the developer.");
+  } finally {
+    clearTimeout(timeoutId);
   }
   let data = null;
   try { data = await res.json(); } catch(e) { data = null; }
@@ -6125,7 +6135,15 @@ function openDateCalendar(inputEl) {
 document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 
-(async function boot() { await loadSchoolSettings(); await tryRestoreRememberedSession(); render(); })();
+(async function boot() {
+  // Paint the login/registration screen immediately — it needs no network data,
+  // so the user should never be staring at a blank screen while we wait on
+  // Supabase (which can now also never hang forever, see FETCH_TIMEOUT_MS above).
+  render();
+  await loadSchoolSettings();
+  await tryRestoreRememberedSession();
+  render();
+})();
 
 /* ---------------- PWA INSTALL SUPPORT + PUSH NOTIFICATIONS ----------------
    Registers a service worker (generated in-memory as a Blob, so no separate
