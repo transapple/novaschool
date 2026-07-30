@@ -174,6 +174,21 @@
   .nav-badge-count{position:absolute;top:-6px;right:-9px;background:var(--red);color:#fff;font-size:9.5px;font-weight:800;line-height:1;min-width:15px;height:15px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px #fff;animation:popScale .25s ease;}
   .nav-item .nav-badge-count{position:static;margin-left:auto;min-width:18px;height:18px;font-size:11px;box-shadow:none;}
 
+  /* ---- Notification bell (top-right corner, staff + parent shells) ---- */
+  .bell-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:none;background:rgba(22,39,74,.06);color:var(--navy);cursor:pointer;flex-shrink:0;}
+  .bell-btn svg{width:19px;height:19px;}
+  .bell-btn .nav-badge-count{position:absolute;top:1px;right:1px;box-shadow:0 0 0 2px #fff;}
+  .bell-panel{position:fixed;top:0;right:0;bottom:0;width:min(360px,100vw);background:#fff;box-shadow:-8px 0 30px rgba(22,39,74,.18);z-index:200;display:flex;flex-direction:column;animation:bellSlideIn .22s ease;}
+  @keyframes bellSlideIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
+  .bell-panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px;border-bottom:1px solid var(--line);}
+  .bell-panel-body{flex:1;overflow-y:auto;padding:8px 14px 20px;}
+  .bell-item{padding:11px 4px;border-bottom:1px solid var(--line);}
+  .bell-item:last-child{border-bottom:none;}
+  .bell-item .b-title{font-weight:700;font-size:13.5px;color:var(--navy);}
+  .bell-item .b-body{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .bell-item .b-meta{font-size:11px;color:var(--ink-soft);margin-top:4px;}
+  .bell-backdrop{position:fixed;inset:0;background:rgba(15,20,35,.35);z-index:190;}
+
   @media(min-width:860px){
     .sidebar{display:flex;}
     .main{margin-left:230px;}
@@ -402,7 +417,7 @@ let cache = {};        // simple in-memory cache per tab
 // needed elsewhere in the app. "schools" itself is never scoped (there's only
 // ever one row per school, looked up by id, not filtered by school_id).
 let CURRENT_SCHOOL_ID = null;
-const SCHOOL_SCOPE_EXEMPT = new Set(["schools"]);
+const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff"]);
 let tab = "dashboard";
 let loading = false;
 let pinLocked = false; // true when a remembered session was restored and is waiting on a PIN unlock
@@ -438,6 +453,7 @@ const ic = {
   phone:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
   calendar:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>`,
   clock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
+  bell:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
   pin:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
   pulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`
 };
@@ -903,6 +919,112 @@ create policy "Anyone can read account change requests" on account_change_reques
 create policy "Anyone can create account change requests" on account_change_requests for insert with check (true);
 create policy "Anyone can update account change requests" on account_change_requests for update using (true);
 alter publication supabase_realtime add table account_change_requests;`;
+
+// One-time setup for real push notifications to staff devices — ones that
+// arrive even with this app fully closed. One row per device/browser that
+// opts in from Settings → "Push notifications", scoped to the school and
+// (optionally) the staff member's department so a targeted Mother App
+// announcement or an incoming parent message only pushes to the right
+// people. Actually *sending* a push still needs the small Edge Function
+// shown in Settings — this SQL only stores subscriptions.
+const STAFF_PUSH_SQL = `create table if not exists push_subscriptions_staff (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid,
+  profile_id uuid references profiles(id) on delete cascade,
+  department text,
+  endpoint text unique not null,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+alter table push_subscriptions_staff enable row level security;
+drop policy if exists "Anyone can manage staff push subscriptions" on push_subscriptions_staff;
+create policy "Anyone can manage staff push subscriptions" on push_subscriptions_staff for all using (true) with check (true);`;
+
+// Edge Function template (see Settings → Push notifications → one-time setup
+// for exactly how to wire this up). Triggered by a Database Webhook on
+// INSERT into mother_announcements or parent_messages; sends a real Web
+// Push notification to every matching device, even fully closed.
+const STAFF_NOTIFY_FUNCTION_CODE = `// supabase/functions/staff-notify/index.ts
+//
+// Called by a Database Webhook whenever a new mother_announcements or
+// parent_messages row is inserted. Sends a Web Push notification to every
+// staff device subscribed via push_subscriptions_staff that should see it.
+//
+// Required secrets (Edge Functions -> staff-notify -> Secrets):
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY,
+//   VAPID_PRIVATE_KEY, VAPID_SUBJECT (e.g. "mailto:you@yourdomain.com")
+
+import { createClient } from "npm:@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
+const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
+const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT")!;
+
+webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+Deno.serve(async (req) => {
+  const payload = await req.json();
+  const table = payload.table;
+  const record = payload.record;
+  if (!table || !record) return new Response("ignored", { status: 200 });
+
+  let title = "New notification";
+  let body = "";
+  let query = supabase.from("push_subscriptions_staff").select("*");
+
+  if (table === "mother_announcements") {
+    title = record.title || "Announcement";
+    body = record.body || "";
+    // target_all -> every device. Otherwise only devices whose school_id is
+    // in target_school_ids. Department narrows it further, except
+    // Administration devices always get every department-targeted message.
+    if (!record.target_all && Array.isArray(record.target_school_ids)) {
+      query = query.in("school_id", record.target_school_ids);
+    }
+  } else if (table === "parent_messages") {
+    title = \`\${record.parent_name || "A parent"}: \${record.subject}\`;
+    body = record.message || "";
+    if (record.department) {
+      query = query.or(\`department.eq.\${record.department},department.eq.administration\`);
+    }
+  } else {
+    return new Response("ignored", { status: 200 });
+  }
+
+  const { data: subs, error } = await query;
+  if (error || !subs) return new Response("no subscriptions", { status: 200 });
+
+  // Department filter for department-targeted mother_announcements happens
+  // here (client-side, after the school filter above) so Administration
+  // devices — regardless of the target department — still get it.
+  const targetDept = table === "mother_announcements" ? record.target_department : null;
+  const filtered = subs.filter((s: any) => {
+    if (table !== "mother_announcements") return true;
+    if (!targetDept || targetDept === "all") return true;
+    if (s.department === "administration") return true;
+    return s.department === targetDept;
+  });
+
+  const payloadBody = JSON.stringify({ title, body });
+  let sent = 0;
+  for (const sub of filtered) {
+    const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+    try {
+      await webpush.sendNotification(pushSubscription, payloadBody);
+      sent++;
+    } catch (err: any) {
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+        await supabase.from("push_subscriptions_staff").delete().eq("endpoint", sub.endpoint);
+      }
+    }
+  }
+  return new Response(JSON.stringify({ sent }), { status: 200 });
+});`;
 
 /* ---------------- PARENT PORTAL ----------------
    Parents get their own login (role = 'parent', separate from the staff
@@ -1538,6 +1660,7 @@ function render() {
           <div class="row" style="gap:10px;">
             ${(DEV_MODE && !auth) ? `<span class="badge badge-amber" id="devBadge" style="cursor:pointer;" title="Click to test the real login screen">DEV MODE — no login</span>` : ""}
             <div class="who">${profile?.full_name || ""} · <b>${DEPARTMENTS[profile?.department]?.label || profile?.role || ""}</b>${profile?.position ? ` · ${profile.position}` : ""}</div>
+            <button class="bell-btn" id="staffBellBtn" data-bell="staff" title="Notifications">${ic.bell}</button>
           </div>
         </div>
         <div class="content" id="content"></div>
@@ -1546,6 +1669,9 @@ function render() {
     </div>
   `;
   document.getElementById("logoutBtnSide").onclick = logout;
+  const staffBellBtn = document.getElementById("staffBellBtn");
+  if (staffBellBtn) staffBellBtn.onclick = openStaffBellPanel;
+  refreshStaffBell();
   const mastheadEl = document.getElementById("mastheadClickable");
   if (mastheadEl) mastheadEl.onclick = () => { tab = "settings"; render(); };
   const devBadge = document.getElementById("devBadge");
@@ -2152,6 +2278,155 @@ async function softDelete(table, id) {
   catch (e) { if (await customConfirm("This item can't be trashed (no trash support on this table yet). Delete permanently instead?", { danger:true, okLabel:"Delete" })) { await dbDelete(table, id); } else { throw e; } }
 }
 async function restoreRecord(table, id) { await dbUpdate(table, id, { deleted_at: null }); }
+
+/* ---------------- STAFF NOTIFICATION BELL ----------------
+   Top-right bell for Administration/Academic/Finance staff. Combines two
+   sources so the one bell covers everything a staff member needs to see:
+     1. mother_announcements — sent from the Mother App's Comms tab, targeted
+        at "all", one department, or several. Read state has no per-staff
+        column in the DB, so (like the parent notif system below) it's
+        tracked locally per device.
+     2. parent_messages — messages parents send to a specific department from
+        their own Contact page. These DO have a real "unread"/"read" status
+        column, so opening the bell marks matching rows read server-side.
+   Administration always sees every department-targeted announcement (it
+   already has full access everywhere else), on top of "all" ones. */
+function staffReadKey() { return `novaStaffReadAnnouncements_${profile?.id || "anon"}`; }
+function getStaffReadIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(staffReadKey()) || "[]")); }
+  catch (e) { return new Set(); }
+}
+function markStaffReadIds(ids) {
+  if (!ids || !ids.length) return;
+  const read = getStaffReadIds();
+  ids.forEach(id => read.add(id));
+  try { localStorage.setItem(staffReadKey(), JSON.stringify([...read])); } catch (e) {}
+}
+function staffSeesAnnouncement(a, dept) {
+  if (!a.target_department || a.target_department === "all") return true;
+  if (dept === "administration") return true;
+  return a.target_department === dept;
+}
+async function fetchStaffAnnouncements(limit = 30) {
+  if (!CURRENT_SCHOOL_ID) return [];
+  const rows = await sb(`/rest/v1/mother_announcements?${qs({ order: "created_at.desc", limit: String(limit) })}`);
+  const dept = profile?.department;
+  return rows.filter(a => (a.target_all || (a.target_school_ids || []).includes(CURRENT_SCHOOL_ID)) && staffSeesAnnouncement(a, dept));
+}
+async function fetchStaffMessages(limit = 30) {
+  const dept = profile?.department;
+  if (!dept) return [];
+  const params = { order: "created_at.desc", limit: String(limit) };
+  if (dept !== "administration") params.department = `eq.${dept}`;
+  try { return await dbSelect("parent_messages", params); } catch (e) { return []; }
+}
+function staffNotifEligible() {
+  return !!(profile && profile.role !== "parent" && profile.department !== "parents" && profile.department);
+}
+// Refreshes the red badge on the bell button in place — called after every
+// staff shell render, and again as soon as the panel marks things read.
+async function refreshStaffBell() {
+  document.querySelectorAll('[data-bell="staff"]').forEach(btn => {
+    const badge = btn.querySelector(".nav-badge-count");
+    if (badge) badge.remove();
+  });
+  if (!staffNotifEligible()) return;
+  let announcements = [], messages = [];
+  try { announcements = await fetchStaffAnnouncements(); } catch (e) {}
+  try { messages = await fetchStaffMessages(); } catch (e) {}
+  const read = getStaffReadIds();
+  const unreadAnnCount = announcements.filter(a => !read.has(`ann:${a.id}`)).length;
+  const unreadMsgCount = messages.filter(m => m.status === "unread").length;
+  const count = unreadAnnCount + unreadMsgCount;
+  document.querySelectorAll('[data-bell="staff"]').forEach(btn => {
+    if (count > 0) btn.appendChild(el(`<span class="nav-badge-count">${count > 99 ? "99+" : count}</span>`));
+  });
+}
+function closeStaffBellPanel() {
+  document.getElementById("staffBellBackdrop")?.remove();
+  document.getElementById("staffBellPanel")?.remove();
+}
+async function openStaffBellPanel() {
+  if (!staffNotifEligible()) return;
+  closeStaffBellPanel();
+  const backdrop = el(`<div class="bell-backdrop" id="staffBellBackdrop"></div>`);
+  const panel = el(`
+    <div class="bell-panel" id="staffBellPanel">
+      <div class="bell-panel-head">
+        <div style="font-weight:800;font-size:15px;color:var(--navy);">Notifications</div>
+        <button class="bell-btn" id="staffBellClose">${ic.back}</button>
+      </div>
+      <div class="bell-panel-body" id="staffBellBody"><div class="center-loading">Loading…</div></div>
+    </div>`);
+  document.body.appendChild(backdrop);
+  document.body.appendChild(panel);
+  backdrop.onclick = closeStaffBellPanel;
+  document.getElementById("staffBellClose").onclick = closeStaffBellPanel;
+
+  let announcements = [], messages = [];
+  try { announcements = await fetchStaffAnnouncements(); } catch (e) {}
+  try { messages = await fetchStaffMessages(); } catch (e) {}
+  const body = document.getElementById("staffBellBody");
+  if (!body) return; // panel was closed while loading
+
+  const annItems = announcements.map(a => ({ kind: "Announcement", title: a.title, body: a.body, when: a.created_at }));
+  const msgItems = messages.map(m => ({ kind: "Message", title: `${m.parent_name || "A parent"} · ${m.subject}`, body: m.message, when: m.created_at, unread: m.status === "unread" }));
+  const items = [...annItems, ...msgItems].sort((a, b) => new Date(b.when) - new Date(a.when));
+
+  body.innerHTML = items.length ? items.map(i => `
+    <div class="bell-item">
+      <div class="b-title">${i.kind === "Message" ? "" : "📣 "}${i.title}</div>
+      <div class="b-body">${i.body}</div>
+      <div class="b-meta">${i.kind} · ${new Date(i.when).toLocaleString()}</div>
+    </div>`).join("") : `<div class="empty">No notifications yet.</div>`;
+
+  // Mark everything just shown as read/seen so the badge clears immediately.
+  markStaffReadIds(announcements.map(a => `ann:${a.id}`));
+  const unreadMsgIds = messages.filter(m => m.status === "unread").map(m => m.id);
+  await Promise.all(unreadMsgIds.map(id => dbUpdate("parent_messages", id, { status: "read" }).catch(() => {})));
+  refreshStaffBell();
+}
+
+/* ---------------- STAFF PUSH NOTIFICATIONS (works even with the app closed) ----------------
+   Same VAPID key pair as the Mother App (it's just a crypto keypair, not
+   tied to one table) so both apps' Edge Functions share one secret set.
+   This device registers a subscription in push_subscriptions_staff; a
+   separate Edge Function (shown in Settings, wired to a Database Webhook on
+   mother_announcements/parent_messages inserts) does the actual sending. */
+const VAPID_PUBLIC_KEY = "BN1vsx9nDlrhKcKHTHtTSFfj7Dpwbyc45d3JJwB0clU2NkP8RBkn95axxN4ETd9_47haCWHoebERdaU2oIFAf6I";
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+async function getExistingStaffPushSubscription() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+async function subscribeStaffPush() {
+  const reg = await navigator.serviceWorker.ready;
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error("Notification permission was not granted.");
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  });
+  const json = sub.toJSON();
+  await sb(`/rest/v1/push_subscriptions_staff`, { method: "POST", headers: { "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify({
+    endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+    school_id: CURRENT_SCHOOL_ID, profile_id: profile?.id || null, department: profile?.department || null,
+  }) });
+  return sub;
+}
+async function unsubscribeStaffPush() {
+  const sub = await getExistingStaffPushSubscription();
+  if (!sub) return;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe();
+  try { await sb(`/rest/v1/push_subscriptions_staff?endpoint=eq.${encodeURIComponent(endpoint)}`, { method: "DELETE" }); } catch (e) {}
+}
 
 /* ===================================================================
    PARENT PORTAL — a completely separate app shell for role:"parent"
@@ -5171,6 +5446,55 @@ async function renderUsers(container) {
 }
 
 /* ---------------- SCHOOL SETTINGS ---------------- */
+/* ---- Push notifications card — used on both the admin Settings page and
+   the read-only Settings page every other staff member sees, since this is
+   a per-device opt-in, not something only admins should control. ---- */
+function pushNotifCardHtml() {
+  const supported = "serviceWorker" in navigator && "PushManager" in window;
+  return `
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.bell}</div><div><h3 style="color:var(--navy);">Push notifications</h3><p>Get alerted for new head-office announcements and parent messages — even with the app fully closed.</p></div></div>
+      ${!supported ? `<div class="tiny-note">This browser doesn't support push notifications.</div>` : `
+        <div class="toggle-row" style="justify-content:space-between;">
+          <span style="font-size:13.5px;font-weight:600;">Notify this device</span>
+          <label class="toggle-switch"><input type="checkbox" id="staffPushToggle" /><span class="toggle-slider"></span></label>
+        </div>
+        <div id="staffPushMsg" style="margin-top:8px;"></div>
+        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database + server setup (needed before this can send real pushes)</summary>
+          <p class="tiny-note" style="margin-top:8px;">1. Run this once in Supabase → SQL Editor:</p>
+          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_PUSH_SQL}</pre>
+          <p class="tiny-note" style="margin-top:8px;">2. Create an Edge Function called <code>staff-notify</code> with this code:</p>
+          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_NOTIFY_FUNCTION_CODE}</pre>
+          <p class="tiny-note" style="margin-top:8px;">3. In Edge Functions → staff-notify → Secrets, add <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>VAPID_PUBLIC_KEY</code> (must match the one baked into this app, shown below), <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code> (e.g. <code>mailto:you@yourdomain.com</code>).</p>
+          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">VAPID_PUBLIC_KEY = ${VAPID_PUBLIC_KEY}</pre>
+          <p class="tiny-note" style="margin-top:8px;">4. In Database → Webhooks, add two webhooks: one on <code>mother_announcements</code> (Insert) and one on <code>parent_messages</code> (Insert), both calling the <code>staff-notify</code> Edge Function.</p>
+          <p class="tiny-note" style="margin-top:6px;">⚠️ Generate your own VAPID key pair for production (e.g. <code>npx web-push generate-vapid-keys</code>) and swap both the secret and the <code>VAPID_PUBLIC_KEY</code> constant in this file — the one above is a shared example key.</p>
+        </details>
+      `}
+    </div>`;
+}
+async function wirePushNotifCard(container) {
+  const toggle = container.querySelector("#staffPushToggle");
+  if (!toggle) return;
+  const msg = container.querySelector("#staffPushMsg");
+  try {
+    const existing = await getExistingStaffPushSubscription();
+    toggle.checked = !!existing;
+  } catch (e) {}
+  toggle.onchange = async () => {
+    msg.innerHTML = "";
+    toggle.disabled = true;
+    try {
+      if (toggle.checked) { await subscribeStaffPush(); msg.innerHTML = `<div class="msg-ok">Push notifications enabled on this device.</div>`; }
+      else { await unsubscribeStaffPush(); msg.innerHTML = `<div class="tiny-note">Push notifications turned off for this device.</div>`; }
+    } catch (e) {
+      toggle.checked = !toggle.checked;
+      msg.innerHTML = `<div class="err">${e.message}</div>`;
+    }
+    toggle.disabled = false;
+  };
+}
+
 async function renderSettings(container) {
   const isAdmin = hasFullAccess(profile);
   let row = null, missingTable = false;
@@ -5281,9 +5605,12 @@ async function renderSettings(container) {
       </div>
     </div>
 
+    ${pushNotifCardHtml()}
+
     <button class="btn btn-primary" id="saveSettingsBtn" style="width:100%;">Save changes</button>
     <div id="settingsMsg" style="margin-top:10px;"></div>
   `;
+  wirePushNotifCard(container);
 
   function updatePreview() {
     const name = val(container,"f_sname") || "Nova School";
@@ -5423,7 +5750,9 @@ function renderSettingsReadOnly(container, s) {
       ${s.address ? `<div class="about-row"><div class="lbl">Address</div><div class="val">${s.address}</div></div>` : ''}
     </div>` : ''}
     `}
+    ${pushNotifCardHtml()}
   `;
+  wirePushNotifCard(container);
 }
 
 /* ---------------- TRASH ---------------- */
@@ -5601,18 +5930,44 @@ document.addEventListener("click", (e) => { if (e.target.matches && e.target.mat
 
 (async function boot() { await loadSchoolSettings(); await tryRestoreRememberedSession(); render(); })();
 
-/* ---------------- PWA INSTALL SUPPORT ----------------
-   Registers a minimal service worker (generated in-memory as a Blob,
-   so no separate .js file is needed) purely so browsers consider this
-   app installable and it can open standalone from the home screen. */
+/* ---------------- PWA INSTALL SUPPORT + PUSH NOTIFICATIONS ----------------
+   Registers a service worker (generated in-memory as a Blob, so no separate
+   .js file is needed) that both makes this app installable AND handles
+   incoming Web Push events — this is what lets a staff device show a
+   notification for a new head-office announcement or parent message even
+   when the app is fully closed (see subscribeStaffPush() + the Edge
+   Function documented in Settings → Push notifications). */
 if ("serviceWorker" in navigator) {
   const swSource = `
-    const CACHE = "nova-school-cache-v1";
+    const CACHE = "nova-school-cache-v2";
     self.addEventListener("install", (e) => { self.skipWaiting(); });
     self.addEventListener("activate", (e) => { self.clients.claim(); });
     self.addEventListener("fetch", (e) => {
       e.respondWith(
         fetch(e.request).catch(() => caches.match(e.request))
+      );
+    });
+    self.addEventListener("push", (e) => {
+      let data = {};
+      try { data = e.data ? e.data.json() : {}; } catch (err) { data = { title: "Notification", body: e.data ? e.data.text() : "" }; }
+      const title = data.title || "Nova School App";
+      const options = {
+        body: data.body || "",
+        icon: "https://i.postimg.cc/hvy7NPrV/20260729-202128.png",
+        badge: "https://i.postimg.cc/hvy7NPrV/20260729-202128.png",
+        data: { url: data.url || "/" },
+      };
+      e.waitUntil(self.registration.showNotification(title, options));
+    });
+    self.addEventListener("notificationclick", (e) => {
+      e.notification.close();
+      const url = (e.notification.data && e.notification.data.url) || "/";
+      e.waitUntil(
+        self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsArr) => {
+          const existing = clientsArr.find((c) => "focus" in c);
+          if (existing) return existing.focus();
+          return self.clients.openWindow(url);
+        })
       );
     });
   `;
