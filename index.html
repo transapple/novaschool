@@ -356,30 +356,67 @@
     background-size:300% 300%;animation:gradientFlow 14s ease infinite;
   }
   .pwa-card{
-    background:var(--card);border-radius:22px;width:100%;max-width:400px;
-    padding:30px 26px 22px;box-shadow:0 24px 70px rgba(10,20,50,.4);
-    text-align:center;animation:popScale .22s ease;position:relative;
+    background:var(--card);border-radius:24px;width:100%;max-width:408px;max-height:calc(100vh - 40px);overflow-y:auto;
+    padding:32px 26px 24px;box-shadow:0 24px 70px rgba(10,20,50,.4);
+    text-align:center;animation:popScale .28s cubic-bezier(.2,.9,.3,1.3);position:relative;
   }
-  .pwa-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:9px;border:none;background:var(--card-alt);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-size:15px;}
-  .pwa-close:hover{background:var(--line);}
-  .pwa-icon{width:64px;height:64px;border-radius:18px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:var(--teal);color:#fff;font-weight:800;font-size:24px;box-shadow:0 10px 24px rgba(46,158,124,.35);overflow:hidden;}
-  .pwa-icon img{width:100%;height:100%;object-fit:cover;}
-  .pwa-title{font-size:18.5px;font-weight:800;color:var(--navy);margin-bottom:6px;}
-  .pwa-sub{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:20px;}
-  .pwa-body{margin-bottom:6px;}
+  /* Signature moment: the app icon "docking" into a home-screen slot, with a
+     soft breathing halo and a small download badge that gently bobs — this is
+     the one animated flourish the rest of the screen stays quiet around. */
+  .pwa-dock{position:relative;width:88px;height:88px;margin:0 auto 18px;}
+  .pwa-dock-halo{position:absolute;inset:-10px;border-radius:50%;background:radial-gradient(circle,var(--teal-tint) 0%,transparent 70%);animation:pwaHalo 2.6s ease-in-out infinite;}
+  .pwa-icon{position:relative;width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--teal);color:#fff;font-weight:800;font-size:28px;box-shadow:0 14px 30px rgba(46,158,124,.4);overflow:hidden;animation:pwaFloat 3.2s ease-in-out infinite;}
+  .pwa-icon img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
+  .pwa-icon svg{width:100%;height:100%;max-width:36px;max-height:36px;}
+  .pwa-dock-badge{position:absolute;bottom:-6px;right:-6px;width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(22,39,74,.45);border:3px solid var(--card);animation:pwaBadgeBob 2.6s ease-in-out infinite;}
+  .pwa-dock-badge svg{width:14px;height:14px;max-width:14px;max-height:14px;flex-shrink:0;animation:pwaArrowNudge 2.6s ease-in-out infinite;}
+  @keyframes pwaArrowNudge{0%,100%{transform:translateY(0);}50%{transform:translateY(2px);}}
+  @keyframes pwaFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}
+  @keyframes pwaHalo{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.08);}}
+  @keyframes pwaBadgeBob{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(2px) scale(1.08);}}
+  .pwa-title{font-size:19px;font-weight:800;color:var(--navy);margin-bottom:6px;letter-spacing:-.01em;}
+  .pwa-sub{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:14px;}
+  .pwa-platform-chip{display:inline-flex;align-items:center;gap:6px;background:var(--slate-tint);color:var(--ink-soft);font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:999px;margin-bottom:18px;animation:riseIn .3s ease .1s both;}
+  .pwa-platform-chip svg{width:13px;height:13px;}
+  .pwa-body{margin-bottom:4px;}
   .pwa-spinner{width:26px;height:26px;border-radius:50%;border:3px solid var(--teal-tint);border-top-color:var(--teal);margin:6px auto 14px;animation:pwaspin .8s linear infinite;}
   @keyframes pwaspin{to{transform:rotate(360deg);}}
   .pwa-status{font-size:13px;color:var(--ink-soft);margin-bottom:16px;}
-  .pwa-steps{text-align:left;background:var(--card-alt);border-radius:14px;padding:14px 16px;margin-bottom:18px;}
-  .pwa-step{display:flex;align-items:flex-start;gap:11px;font-size:13.5px;color:var(--ink);padding:8px 0;}
+  /* Primary one-tap install button: a slow glowing pulse invites the tap
+     without feeling frantic. */
+  .pwa-install-btn{position:relative;isolation:isolate;}
+  .pwa-install-btn::after{content:"";position:absolute;inset:0;border-radius:10px;box-shadow:0 0 0 0 rgba(46,158,124,.55);animation:pwaPulseRing 2.2s ease-out infinite;pointer-events:none;z-index:-1;}
+  .pwa-install-btn svg{width:18px;height:18px;max-width:18px;max-height:18px;flex-shrink:0;animation:pwaArrowNudge 1.8s ease-in-out infinite;}
+  .pwa-install-btn:disabled svg{animation:none;opacity:.6;}
+  .pwa-install-btn:disabled::after{animation:none;box-shadow:none;}
+  @keyframes pwaPulseRing{0%{box-shadow:0 0 0 0 rgba(46,158,124,.45);}70%{box-shadow:0 0 0 12px rgba(46,158,124,0);}100%{box-shadow:0 0 0 0 rgba(46,158,124,0);}}
+  .pwa-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink-soft);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+  .pwa-divider::before,.pwa-divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  .pwa-steps{text-align:left;background:var(--card-alt);border-radius:14px;padding:6px 16px;margin-bottom:16px;}
+  .pwa-step{display:flex;align-items:flex-start;gap:12px;font-size:13.5px;color:var(--ink);padding:11px 0;opacity:0;animation:slideInLeft .35s ease both;}
+  .pwa-step:nth-child(1){animation-delay:.05s;}
+  .pwa-step:nth-child(2){animation-delay:.15s;}
+  .pwa-step:nth-child(3){animation-delay:.25s;}
   .pwa-step:not(:last-child){border-bottom:1px dashed var(--line);}
-  .pwa-step-ic{width:26px;height:26px;border-radius:8px;background:var(--teal-tint);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .pwa-fallback-box{display:flex;align-items:flex-start;gap:11px;background:var(--sky-tint);color:var(--navy);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.55;text-align:left;margin-bottom:18px;}
+  .pwa-step-ic{width:27px;height:27px;border-radius:8px;background:var(--teal-tint);color:var(--teal-dark);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;animation:pwaStepIcPop .4s ease both;}
+  .pwa-step-ic svg{width:15px;height:15px;max-width:15px;max-height:15px;flex-shrink:0;}
+  @keyframes pwaStepIcPop{0%{transform:scale(.4);opacity:0;}65%{transform:scale(1.15);opacity:1;}100%{transform:scale(1);}}
+  .pwa-step:nth-child(1) .pwa-step-ic{animation-delay:.18s;}
+  .pwa-step:nth-child(2) .pwa-step-ic{animation-delay:.28s;}
+  .pwa-step:nth-child(3) .pwa-step-ic{animation-delay:.38s;}
+  .pwa-fallback-box{display:flex;align-items:flex-start;gap:11px;background:var(--sky-tint);color:var(--navy);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.55;text-align:left;margin-bottom:16px;animation:riseIn .3s ease both;}
   .pwa-fallback-box svg{flex-shrink:0;margin-top:1px;}
-  .pwa-actions{display:flex;flex-direction:column;gap:8px;}
+  .pwa-actions{display:flex;flex-direction:column;gap:10px;}
+  .pwa-continue-btn{width:100%;}
+  .pwa-open-note{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:10px;}
   .pwa-footer-links{display:flex;justify-content:center;gap:18px;margin-top:14px;}
   .pwa-footer-links button{background:none;border:none;color:var(--ink-soft);font-weight:600;font-size:12.5px;padding:4px;}
   .pwa-footer-links button:hover{color:var(--ink);text-decoration:underline;}
+  .pwa-highlight-pop{animation:pwaHighlightPop .5s ease;}
+  @keyframes pwaHighlightPop{0%{box-shadow:0 0 0 0 rgba(46,158,124,0);}30%{box-shadow:0 0 0 6px rgba(46,158,124,.25);}100%{box-shadow:0 0 0 0 rgba(46,158,124,0);}}
+  @media (prefers-reduced-motion: reduce){
+    .pwa-icon,.pwa-dock-halo,.pwa-dock-badge,.pwa-dock-badge svg,.pwa-install-btn::after,.pwa-install-btn svg,.pwa-step-ic,.pwa-step,.pwa-fallback-box,.pwa-platform-chip{animation:none !important;opacity:1;transform:none !important;}
+  }
 </style>
 </head>
 <body>
@@ -6212,12 +6249,36 @@ if ("serviceWorker" in navigator) {
 const PWA_ICON_URL = "https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png";
 const PWA_OPTOUT_DAYS = 21;
 
+// Small inline icons used only by this overlay (kept local rather than in the
+// shared `ic` set since nothing else in the app needs them).
+const PWA_ICONS = {
+  download: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>`,
+  checkBadge: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+  share: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>`,
+  addSquare: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>`,
+  menuDots: `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>`,
+  addressBar: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M12 9v6M9 12h6"/></svg>`,
+  smartphone: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>`,
+  monitor: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>`,
+};
+
 function detectPwaPlatform() {
   const ua = navigator.userAgent || "";
   const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
   const isFirefox = /Firefox|FxiOS/i.test(ua);
-  return { isStandalone, isIOS, isFirefox };
+  // Neither iOS Safari nor Firefox support the programmatic one-tap install
+  // prompt — both only ever get the manual "Add to Home Screen" steps.
+  const supportsAutoPrompt = !isIOS && !isFirefox;
+  return { isStandalone, isIOS, isAndroid, isFirefox, supportsAutoPrompt };
+}
+
+function pwaPlatformChip(platform) {
+  const device = platform.isIOS ? "iPhone / iPad" : platform.isAndroid ? "Android" : "Desktop";
+  const deviceIcon = platform.isIOS || platform.isAndroid ? PWA_ICONS.smartphone : PWA_ICONS.monitor;
+  const browser = platform.isIOS ? "Safari" : platform.isFirefox ? "Firefox" : "Chrome / Edge";
+  return `${deviceIcon}<span>${device} · ${browser}</span>`;
 }
 
 // Reveal the real app UI. This only ever runs once we're certain we're
@@ -6247,11 +6308,16 @@ function pwaOverlayShell(bodyHtml, opts) {
   opts = opts || {};
   return `
     <div class="pwa-card">
-      <div class="pwa-icon"><img src="${PWA_ICON_URL}" alt=""/></div>
+      <div class="pwa-dock">
+        <div class="pwa-dock-halo"></div>
+        <div class="pwa-icon"><img src="${PWA_ICON_URL}" alt=""/></div>
+        <div class="pwa-dock-badge">${opts.badgeIcon || PWA_ICONS.download}</div>
+      </div>
       <div class="pwa-title">${opts.title || "Install Nova School"}</div>
-      <div class="pwa-sub">${opts.sub || "Nova School Manager runs best as an installed app. Install it once to your device for the full experience — this only takes a moment."}</div>
+      <div class="pwa-sub">${opts.sub || "Get the full experience — install once, then open Nova School straight from your home screen, just like any other app."}</div>
+      ${opts.chip ? `<div class="pwa-platform-chip">${opts.chip}</div>` : ""}
       <div class="pwa-body">${bodyHtml}</div>
-      ${opts.showSkip === false ? "" : `<div class="tiny-note" style="margin-top:14px;"><span class="link-btn" id="pwaSkipLink" style="cursor:pointer;">Continue in browser</span></div>`}
+      ${opts.showSkip === false ? "" : `<div class="pwa-actions" style="margin-top:2px;"><button type="button" class="btn btn-ghost pwa-continue-btn" id="pwaSkipLink">Continue in Browser</button></div>`}
       ${DEV_MODE ? `<div class="tiny-note" style="margin-top:14px;"><button type="button" id="pwaDevSkip" class="btn btn-ghost btn-sm">Skip install (dev mode)</button></div>` : ""}
     </div>`;
 }
@@ -6276,71 +6342,108 @@ function renderPwaChecking(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
     <div class="pwa-spinner"></div>
     <div class="pwa-status">Preparing installer…</div>
-  `);
-  pwaWireSkip(overlay);
+  `, { showSkip: false });
 }
-function renderPwaReady(overlay) {
-  overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-actions"><button class="btn btn-primary" id="pwaInstallBtn">${ic.plus} Download &amp; Install</button></div>
-  `);
+
+// Numbered manual steps, tailored to the detected platform — shown
+// underneath the auto-install button (or as the main path on iOS/Firefox,
+// which have no programmatic install prompt at all).
+function pwaManualSteps(platform) {
+  if (platform.isIOS) {
+    return `<div class="pwa-steps">
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.share}</span><span>Tap the <b>Share</b> icon in Safari's toolbar</span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.addSquare}</span><span>Scroll down and choose <b>Add to Home Screen</b></span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.checkBadge}</span><span>Tap <b>Add</b>, then open Nova School from your Home Screen</span></div>
+    </div>`;
+  }
+  if (platform.isFirefox) {
+    return `<div class="pwa-steps">
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.menuDots}</span><span>Open Firefox's <b>⋮ menu</b></span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.addSquare}</span><span>Choose <b>Install</b> or <b>Add to Home Screen</b></span></div>
+      <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.checkBadge}</span><span>Open Nova School from your Home Screen</span></div>
+    </div>`;
+  }
+  // Android Chrome/Edge or desktop Chrome/Edge — shown as a backup in case the
+  // one-tap button above isn't available (e.g. install was dismissed before).
+  return `<div class="pwa-steps">
+    <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.addressBar}</span><span>Tap the <b>install icon</b> in your address bar, or open the browser <b>menu</b></span></div>
+    <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.addSquare}</span><span>Choose <b>Install Nova School Manager</b> (or <b>Add to Home Screen</b>)</span></div>
+    <div class="pwa-step"><span class="pwa-step-ic">${PWA_ICONS.checkBadge}</span><span>Open Nova School from your Home Screen or App List</span></div>
+  </div>`;
+}
+
+function pwaInstallBtnHtml(canPromptNow) {
+  return `<div class="pwa-actions" style="margin-bottom:6px;">
+    <button type="button" class="btn btn-primary pwa-install-btn" id="pwaInstallBtn" ${canPromptNow ? "" : "disabled"}>
+      ${PWA_ICONS.download} <span id="pwaInstallBtnLabel">${canPromptNow ? "Install App" : "Preparing install…"}</span>
+    </button>
+  </div>`;
+}
+function pwaWireInstallBtn(overlay) {
   const btn = overlay.querySelector("#pwaInstallBtn");
+  if (!btn) return;
   btn.onclick = async () => {
-    if (!deferredInstallPrompt) { renderPwaFallback(overlay); return; }
-    btn.disabled = true; btn.textContent = "Installing…";
+    if (!deferredInstallPrompt) return;
+    const label = btn.querySelector("#pwaInstallBtnLabel");
+    btn.disabled = true; if (label) label.textContent = "Installing…";
     deferredInstallPrompt.prompt();
     try {
       const choice = await deferredInstallPrompt.userChoice;
       deferredInstallPrompt = null;
-      if (choice.outcome !== "accepted") { btn.disabled = false; btn.innerHTML = `${ic.plus} Download & Install`; }
+      if (choice.outcome !== "accepted") { btn.disabled = false; if (label) label.textContent = "Install App"; }
       // if accepted, the "appinstalled" event takes over from here
-    } catch (e) { btn.disabled = false; btn.innerHTML = `${ic.plus} Download & Install`; }
+    } catch (e) { btn.disabled = false; if (label) label.textContent = "Install App"; }
   };
 }
-function renderPwaFallback(overlay) {
-  overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-fallback-box">
-      ${ic.settings}
-      <div>Look for the install icon in your address bar, or open your browser's menu and choose <b>"Install Nova School Manager"</b> (or <b>"Add to Home Screen"</b>). The app opens once it's installed.</div>
-    </div>
-  `);
+
+// The single unified install screen: one-tap install button (where the
+// platform supports it) plus manual steps and "Continue in Browser" together,
+// so nobody is ever stuck not knowing what to do next.
+function renderPwaMain(overlay) {
+  const platform = detectPwaPlatform();
+  const canPromptNow = platform.supportsAutoPrompt && !!deferredInstallPrompt;
+  const body = `
+    ${platform.supportsAutoPrompt ? pwaInstallBtnHtml(canPromptNow) : ""}
+    <div class="pwa-divider">${platform.supportsAutoPrompt ? "or add it manually" : "add it in a few taps"}</div>
+    ${pwaManualSteps(platform)}
+  `;
+  overlay.innerHTML = pwaOverlayShell(body, { chip: pwaPlatformChip(platform) });
+  pwaWireInstallBtn(overlay);
+  pwaWireDevSkip(overlay);
+  pwaWireSkip(overlay);
+
+  // If the browser fires "beforeinstallprompt" a little late, light the
+  // button up live instead of yanking the whole screen out from under them.
+  window.__pwaEventArrived = () => {
+    const liveBtn = document.getElementById("pwaInstallBtn");
+    if (!liveBtn || !deferredInstallPrompt) return;
+    liveBtn.disabled = false;
+    const label = liveBtn.querySelector("#pwaInstallBtnLabel");
+    if (label) label.textContent = "Install App";
+    liveBtn.classList.add("pwa-highlight-pop");
+    pwaWireInstallBtn(overlay);
+  };
 }
-function renderPwaIOS(overlay) {
-  const shareIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>`;
-  const plusIcon = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>`;
-  overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-steps">
-      <div class="pwa-step"><span class="pwa-step-ic">${shareIcon}</span><span>Tap the <b>Share</b> icon in your browser's toolbar</span></div>
-      <div class="pwa-step"><span class="pwa-step-ic">${plusIcon}</span><span>Scroll down and choose <b>Add to Home Screen</b></span></div>
-      <div class="pwa-step"><span class="pwa-step-ic">✓</span><span>Tap <b>Add</b>, then open Nova School from your Home Screen</span></div>
-    </div>
-    <div class="pwa-open-note">This page will stay on the install screen until you open the app from your Home Screen.</div>
-  `);
-}
-function renderPwaFirefox(overlay) {
-  overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-fallback-box">
-      ${ic.settings}
-      <div>Firefox doesn't support one-tap install yet. Open the <b>⋮ menu</b> and choose <b>"Install"</b> or <b>"Add to Home Screen"</b>, then launch Nova School from there — or open this link in Chrome/Edge for one-tap install.</div>
-    </div>
-  `);
-}
+
 function renderPwaInstalledSuccess(overlay) {
   overlay.style.display = "flex";
   overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
+    <div class="pwa-actions"><button type="button" class="btn btn-primary" id="pwaOpenBtn">${PWA_ICONS.checkBadge} Open Nova School</button></div>
   `, {
     title: "Installed!",
     sub: "Nova School Manager is on your device now. Open it from here, or from your home screen any time.",
+    badgeIcon: PWA_ICONS.checkBadge,
     showSkip: false,
   });
   overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
 }
 function renderPwaAlreadyInstalled(overlay) {
   overlay.innerHTML = pwaOverlayShell(`
-    <div class="pwa-actions"><button class="btn btn-primary" id="pwaOpenBtn">${ic.plus} Open Nova School</button></div>
+    <div class="pwa-actions"><button type="button" class="btn btn-primary" id="pwaOpenBtn">${PWA_ICONS.checkBadge} Open Nova School</button></div>
   `, {
     title: "Open the Nova School app",
     sub: "You've already installed Nova School Manager. This browser tab can't show your data — open the installed app instead.",
+    badgeIcon: PWA_ICONS.checkBadge,
     showSkip: false,
   });
   overlay.querySelector("#pwaOpenBtn").onclick = pwaTryOpenInstalledApp;
@@ -6349,26 +6452,14 @@ function renderPwaAlreadyInstalled(overlay) {
 function initPwaInstallOverlay() {
   const overlay = document.getElementById("pwaInstallOverlay");
   if (!overlay) { pwaShowApp(); return; }
-  const { isStandalone, isIOS, isFirefox } = detectPwaPlatform();
+  const platform = detectPwaPlatform();
   // Already running as the installed app (or previously installed) — skip straight in.
-  if (isStandalone || pwaWasInstalled()) { pwaShowApp(); return; }
+  if (platform.isStandalone || pwaWasInstalled()) { pwaShowApp(); return; }
   overlay.style.display = "flex";
   renderPwaChecking(overlay);
-  // Give Chromium a brief moment to fire "beforeinstallprompt" before deciding
-  // which version of the prompt to show.
-  window.__pwaEventArrived = () => {
-    if (overlay.style.display === "flex" && overlay.querySelector(".pwa-spinner")) {
-      renderPwaReady(overlay); pwaWireDevSkip(overlay); pwaWireSkip(overlay);
-    }
-  };
-  setTimeout(() => {
-    if (isIOS) { renderPwaIOS(overlay); }
-    else if (isFirefox) { renderPwaFirefox(overlay); }
-    else if (deferredInstallPrompt) { renderPwaReady(overlay); }
-    else { renderPwaFallback(overlay); }
-    pwaWireDevSkip(overlay);
-    pwaWireSkip(overlay);
-  }, 700);
+  // Give Chromium a brief moment to fire "beforeinstallprompt" before painting
+  // the real screen, so the install button can appear already-enabled.
+  setTimeout(() => renderPwaMain(overlay), 700);
 }
 
 initPwaInstallOverlay();
