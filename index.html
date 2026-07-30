@@ -909,6 +909,7 @@ grant execute on function reset_password(text,text,text) to anon, authenticated;
 // up for Administration to action on the same page.
 const ACCOUNT_REQUESTS_SQL = `create table if not exists account_change_requests (
   id uuid primary key default gen_random_uuid(),
+  school_id uuid references schools(id) on delete cascade,
   profile_id uuid references profiles(id) on delete cascade,
   full_name text,
   department text,
@@ -917,9 +918,13 @@ const ACCOUNT_REQUESTS_SQL = `create table if not exists account_change_requests
   created_at timestamptz not null default now(),
   resolved_at timestamptz
 );
+alter table account_change_requests add column if not exists school_id uuid references schools(id) on delete cascade;
 alter table account_change_requests enable row level security;
+drop policy if exists "Anyone can read account change requests" on account_change_requests;
 create policy "Anyone can read account change requests" on account_change_requests for select using (true);
+drop policy if exists "Anyone can create account change requests" on account_change_requests;
 create policy "Anyone can create account change requests" on account_change_requests for insert with check (true);
+drop policy if exists "Anyone can update account change requests" on account_change_requests;
 create policy "Anyone can update account change requests" on account_change_requests for update using (true);
 alter publication supabase_realtime add table account_change_requests;`;
 
