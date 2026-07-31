@@ -1593,8 +1593,8 @@ alter table schools add column if not exists size_range text;
 alter table schools add column if not exists password_hash text;
 
 -- The human-facing School ID — letters, numbers, and underscores only. Generated
--- automatically inside register_school() below (from the school's name plus a
--- random suffix, retried until unique), shown to Administrators under Settings,
+-- automatically inside register_school() below (TATNOVA followed by 7
+-- random digits, retried until unique), shown to Administrators under Settings,
 -- and never editable afterwards. Staff/parents key this in on the "Create your
 -- account" screen so their account lands in the right school — this is the code
 -- the TransApple Mother System uses to identify the school everywhere.
@@ -1627,7 +1627,7 @@ create function register_school(
   p_admin_password text, p_admin_pin text default null, p_admin_photo_url text default null
 ) returns profiles
 language plpgsql security definer as $register_school$
-declare new_school schools; new_admin profiles; candidate_code text; base_code text;
+declare new_school schools; new_admin profiles; candidate_code text;
 begin
   if p_school_name is null or trim(p_school_name) = '' then
     raise exception 'School name is required.';
@@ -1648,12 +1648,10 @@ begin
     raise exception 'Administrator password must be at least 6 characters.';
   end if;
 
-  -- Build the School ID from the school's name (letters/numbers only, max 12
-  -- chars) plus a random 5-character suffix, retrying until it's unique.
-  base_code := upper(substr(regexp_replace(coalesce(p_school_name,'SCHOOL'), '[^A-Za-z0-9]+', '', 'g'), 1, 12));
-  if base_code = '' then base_code := 'SCHOOL'; end if;
+  -- Build the School ID as TATNOVA followed by 7 random digits, retrying
+  -- until it's unique.
   loop
-    candidate_code := base_code || '_' || upper(substr(md5(random()::text), 1, 5));
+    candidate_code := 'TATNOVA' || lpad(floor(random() * 10000000)::text, 7, '0');
     exit when not exists (select 1 from schools where school_code = candidate_code);
   end loop;
 
