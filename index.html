@@ -2657,6 +2657,21 @@ function markStaffReadIds(ids) {
   ids.forEach(id => read.add(id));
   try { localStorage.setItem(staffReadKey(), JSON.stringify([...read])); } catch (e) {}
 }
+// Notifications the person long-pressed → Delete on, in the staff bell panel.
+// Tracked per device/profile, same as read state — deleting just hides an
+// item from this list, it never touches the underlying announcement/message/
+// changelog row.
+function bellDismissKey() { return `novaStaffDismissedNotifs_${profile?.id || "anon"}`; }
+function getBellDismissedIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(bellDismissKey()) || "[]")); }
+  catch (e) { return new Set(); }
+}
+function markBellDismissed(id) {
+  if (id == null) return;
+  const dismissed = getBellDismissedIds();
+  dismissed.add(id);
+  try { localStorage.setItem(bellDismissKey(), JSON.stringify([...dismissed])); } catch (e) {}
+}
 function staffSeesAnnouncement(a, dept) {
   if (!a.target_department || a.target_department === "all") return true;
   if (dept === "administration") return true;
@@ -2691,9 +2706,10 @@ async function refreshStaffBell() {
   try { messages = await fetchStaffMessages(); } catch (e) {}
   try { latestChangelog = await fetchLatestChangelog(); } catch (e) {}
   const read = getStaffReadIds();
-  const unreadAnnCount = announcements.filter(a => !read.has(`ann:${a.id}`)).length;
-  const unreadMsgCount = messages.filter(m => m.status === "unread").length;
-  const updateUnseen = latestChangelog && String(latestChangelog.id) !== getSeenChangelogId();
+  const dismissed = getBellDismissedIds();
+  const unreadAnnCount = announcements.filter(a => !read.has(`ann:${a.id}`) && !dismissed.has(`ann:${a.id}`)).length;
+  const unreadMsgCount = messages.filter(m => m.status === "unread" && !dismissed.has(`msg:${m.id}`)).length;
+  const updateUnseen = latestChangelog && String(latestChangelog.id) !== getSeenChangelogId() && !dismissed.has(`upd:${latestChangelog.id}`);
   const count = unreadAnnCount + unreadMsgCount + (updateUnseen ? 1 : 0);
   document.querySelectorAll('[data-bell="staff"]').forEach(btn => {
     if (count > 0) btn.appendChild(el(`<span class="nav-badge-count">${count > 99 ? "99+" : count}</span>`));
@@ -2727,32 +2743,61 @@ async function openStaffBellPanel() {
   const body = document.getElementById("staffBellBody");
   if (!body) return; // panel was closed while loading
 
-  const annItems = announcements.map(a => ({ kind: "Announcement", title: a.title, body: a.body, when: a.created_at }));
-  const msgItems = messages.map(m => ({ kind: "Message", title: `${m.parent_name || "A parent"} · ${m.subject}`, body: m.message, when: m.created_at, unread: m.status === "unread" }));
-  const items = [...annItems, ...msgItems].sort((a, b) => new Date(b.when) - new Date(a.when));
+  const annItems = announcements.map(a => ({ id: `ann:${a.id}`, kind: "Announcement", title: a.title, body: a.body, when: a.created_at }));
+  const msgItems = messages.map(m => ({ id: `msg:${m.id}`, kind: "Message", title: `${m.parent_name || "A parent"} · ${m.subject}`, body: m.message, when: m.created_at, unread: m.status === "unread" }));
+  const dismissed = getBellDismissedIds();
+  const items = [...annItems, ...msgItems].filter(i => !dismissed.has(i.id)).sort((a, b) => new Date(b.when) - new Date(a.when));
   const updateUnseen = latestChangelog && String(latestChangelog.id) !== getSeenChangelogId();
+  const updateDismissed = latestChangelog && getBellDismissedIds().has(`upd:${latestChangelog.id}`);
 
-  const updateItemHtml = latestChangelog ? `
-    <div class="bell-item${updateUnseen ? "" : ""}" id="bellUpdateItem" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;">
+  const updateItemHtml = (latestChangelog && !updateDismissed) ? `
+    <div class="bell-item" id="bellUpdateItem" style="border:1px solid var(--line);border-radius:10px;">
       <div class="b-title">🚀 New version available${updateUnseen ? " <span class=\"nav-badge-count\" style=\"position:static;display:inline-block;vertical-align:middle;margin-left:6px;\">1</span>" : ""}</div>
       <div class="b-body"><strong>${latestChangelog.title}</strong>${latestChangelog.description ? ` — ${latestChangelog.description}` : ""}</div>
       <div class="b-meta">Update · ${new Date(latestChangelog.created_at).toLocaleString()}</div>
       <button class="btn btn-primary btn-sm" id="bellUpdateBtn" style="margin-top:8px;width:100%;">${ic.download} Update to New Version</button>
     </div>` : "";
 
-  body.innerHTML = (updateItemHtml || items.length) ? `${updateItemHtml}${items.map(i => `
-    <div class="bell-item">
+  const itemsHtml = items.map(i => `
+    <div class="bell-item" data-id="${i.id}">
       <div class="b-title">${i.kind === "Message" ? "" : "📣 "}${i.title}</div>
       <div class="b-body">${i.body}</div>
       <div class="b-meta">${i.kind} · ${new Date(i.when).toLocaleString()}</div>
-    </div>`).join("")}` : `<div class="empty">No notifications yet.</div>`;
+    </div>`).join("");
 
+  function renderBellBody() {
+    body.innerHTML = (updateItemHtml || itemsHtml) ? `${updateItemHtml}${itemsHtml}` : `<div class="empty">No notifications yet.</div>`;
+  }
+  function showEmptyIfNothingLeft() {
+    if (!body.querySelector(".bell-item")) body.innerHTML = `<div class="empty">No notifications yet.</div>`;
+  }
+  renderBellBody();
+
+  // Update card: clicking the button opens the update site AND clears the
+  // card + button from the panel — it's a one-shot action, not something to
+  // long-press-delete like the other notification types below.
   const updateBtn = document.getElementById("bellUpdateBtn");
   if (updateBtn) updateBtn.onclick = () => {
     markChangelogSeen(latestChangelog.id);
+    markBellDismissed(`upd:${latestChangelog.id}`);
     openUpdateSite();
+    document.getElementById("bellUpdateItem")?.remove();
+    showEmptyIfNothingLeft();
     refreshStaffBell();
   };
+
+  // Announcements & messages stay put on tap — long-press opens a Delete
+  // action that removes just that notification from the list.
+  body.querySelectorAll(".bell-item[data-id]").forEach(rowEl => {
+    bindRowGestures(rowEl, {
+      onDelete: () => {
+        markBellDismissed(rowEl.dataset.id);
+        rowEl.remove();
+        showEmptyIfNothingLeft();
+        refreshStaffBell();
+      },
+    });
+  });
 
   // Mark everything just shown as read/seen so the badge clears immediately.
   markStaffReadIds(announcements.map(a => `ann:${a.id}`));
