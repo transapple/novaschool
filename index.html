@@ -839,7 +839,7 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
-    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,features" });
+    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at" });
     CURRENT_SCHOOL = rows[0] || null;
   } catch (e) { CURRENT_SCHOOL = null; }
 }
@@ -884,6 +884,80 @@ function startSchoolSync() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
 }
 function stopSchoolSync() { if (__schoolSyncTimer) { clearInterval(__schoolSyncTimer); __schoolSyncTimer = null; } }
+
+/* ---------------- MOTHER SYSTEM: SETTINGS DISPLAY HELPERS ----------------
+   Everything below reads (never writes) the same `schools`/`profiles` data
+   the Mother System itself manages, so that a school's own Settings page can
+   show — as a synced mirror, not a separate copy — the registration status,
+   school information and administrator list that TransApple's Mother System
+   owns. school_code (School ID) is the permanent join key used throughout:
+   it's generated once at registration, never changes, and is what ties this
+   school's row in this app's database to its row in the Mother System. */
+function schoolStatusInfo(status) {
+  switch (status) {
+    case "active": return { label: "Active", cls: "badge-green", note: "Your school is approved and fully active with TransApple." };
+    case "pending": return { label: "Pending approval", cls: "badge-amber", note: "Awaiting approval from TransApple. Some features may be limited until then." };
+    case "suspended": return { label: "Suspended", cls: "badge-red", note: "Access has been suspended by TransApple. Contact TransApple support to resolve this." };
+    case "rejected": return { label: "Rejected", cls: "badge-red", note: "This registration was not approved. Contact TransApple for more information." };
+    case "deactivated": return { label: "Deactivated", cls: "badge-grey", note: "This school's account has been deactivated by TransApple." };
+    default: return { label: "Unknown", cls: "badge-grey", note: "Registration status hasn't synced from TransApple yet." };
+  }
+}
+function schoolLocationLine(s) {
+  return [s?.village, s?.subcounty, s?.district].filter(Boolean).join(", ");
+}
+// Administrators are the profiles TransApple's Mother System can see and act
+// on (reset password, grant/revoke admin) for this school — department is
+// always "administration" for these accounts (see register_school()/create_account()).
+async function fetchSchoolAdministrators() {
+  try {
+    return await dbSelect("profiles", {
+      department: "eq.administration", deleted_at: "is.null",
+      select: "id,full_name,position,phone,whatsapp,email,username,suspended_at",
+      order: "full_name.asc",
+    });
+  } catch (e) { return []; }
+}
+function motherSystemCardHtml(admins) {
+  const s = CURRENT_SCHOOL;
+  if (!s) {
+    return `<div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">TransApple Mother System</h3><p>Couldn't reach your school's registration record right now.</p></div></div>
+    </div>`;
+  }
+  const st = schoolStatusInfo(s.status);
+  const loc = schoolLocationLine(s);
+  return `
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">TransApple Mother System</h3><p>Your school's official registration record, synchronized from TransApple. These details are managed by TransApple — contact them to make changes.</p></div></div>
+
+      <div class="view-row"><div class="vlabel">Registration status</div><div class="vvalue"><span class="badge ${st.cls}">${st.label}</span></div></div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:6px 0 12px;line-height:1.5;">${st.note}</p>
+
+      <div class="view-row"><div class="vlabel">School ID</div><div class="vvalue" style="font-family:monospace;">${s.school_code || "—"}</div></div>
+      <div class="view-row"><div class="vlabel">Registered name</div><div class="vvalue">${s.name || "—"}</div></div>
+      ${s.motto ? `<div class="view-row"><div class="vlabel">Motto</div><div class="vvalue">${s.motto}</div></div>` : ""}
+      ${loc ? `<div class="view-row"><div class="vlabel">Location</div><div class="vvalue">${loc}</div></div>` : ""}
+      ${s.size_range ? `<div class="view-row"><div class="vlabel">School size</div><div class="vvalue">${s.size_range}</div></div>` : ""}
+      ${s.plan ? `<div class="view-row"><div class="vlabel">Plan</div><div class="vvalue">${s.plan}${s.billing_cycle ? ` (${s.billing_cycle})` : ""}</div></div>` : ""}
+      ${s.approved_at ? `<div class="view-row"><div class="vlabel">Approved on</div><div class="vvalue">${new Date(s.approved_at).toLocaleDateString()}</div></div>` : ""}
+      ${s.created_at ? `<div class="view-row"><div class="vlabel">Registered on</div><div class="vvalue">${new Date(s.created_at).toLocaleDateString()}</div></div>` : ""}
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
+        <div style="font-weight:700;font-size:12.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px;">Administrator information</div>
+        ${!admins || !admins.length ? `<div style="font-size:13px;color:var(--ink-soft);">No administrator accounts found.</div>` : admins.map(a => `
+          <div class="view-row" style="align-items:flex-start;">
+            <div class="vlabel" style="flex-shrink:0;">${a.full_name || a.username}${a.suspended_at ? ` <span class="badge badge-red">Suspended</span>` : ""}</div>
+            <div class="vvalue" style="font-weight:500;">
+              ${a.position ? `${a.position}<br/>` : ""}
+              ${a.phone ? `${a.phone}<br/>` : ""}
+              ${a.whatsapp ? `WhatsApp: ${a.whatsapp}<br/>` : ""}
+              ${a.email ? `${a.email}` : ""}
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
 
 /* ---------------- DEPARTMENTS & ACCESS CONTROL ----------------
    Mirrors the school's org chart. Each department lists the job
@@ -1506,28 +1580,48 @@ grant execute on function create_account(text,text,text,text,text,text,text,uuid
 const SCHOOL_SELF_REGISTRATION_SQL = `-- Extra fields the registration screen collects about the school itself —
 -- these live on the mother system's own \`schools\` table, not in this app's data.
 alter table schools add column if not exists motto text;
-alter table schools add column if not exists location text;
+alter table schools add column if not exists village text;
+alter table schools add column if not exists subcounty text;
+alter table schools add column if not exists district text;
 alter table schools add column if not exists size_range text;
 alter table schools add column if not exists password_hash text;
 
--- Extra contact fields for the first Administrator account.
+-- The human-facing School ID — letters, numbers, and underscores only. Generated
+-- automatically inside register_school() below (from the school's name plus a
+-- random suffix, retried until unique), shown to Administrators under Settings,
+-- and never editable afterwards. Staff/parents key this in on the "Create your
+-- account" screen so their account lands in the right school — this is the code
+-- the TransApple Mother System uses to identify the school everywhere.
+alter table schools add column if not exists school_code text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'schools_school_code_key') then
+    alter table schools add constraint schools_school_code_key unique (school_code);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'schools_school_code_format') then
+    alter table schools add constraint schools_school_code_format check (school_code ~ '^[A-Za-z0-9_]+$');
+  end if;
+end $$;
+
+-- Extra contact fields for the first Administrator account. photo_url already
+-- exists from the base PROFILES_MIGRATION_SQL.
 alter table profiles add column if not exists whatsapp text;
 alter table profiles add column if not exists email text;
-alter table profiles add column if not exists location text;
 
 -- Registers a brand-new school (written to the mother system's \`schools\`
 -- table) AND creates its first Administrator account together, atomically —
 -- if either half fails, nothing is created.
 drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text);
+drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text,text);
 create function register_school(
-  p_school_name text, p_school_motto text, p_school_location text,
+  p_school_name text, p_school_motto text,
+  p_school_village text, p_school_subcounty text, p_school_district text,
   p_school_password text, p_school_size_range text,
   p_admin_full_name text, p_admin_username text, p_admin_phone text,
-  p_admin_whatsapp text, p_admin_email text, p_admin_location text,
-  p_admin_password text, p_admin_pin text default null
+  p_admin_whatsapp text, p_admin_email text,
+  p_admin_password text, p_admin_pin text default null, p_admin_photo_url text default null
 ) returns profiles
 language plpgsql security definer as $register_school$
-declare new_school schools; new_admin profiles;
+declare new_school schools; new_admin profiles; candidate_code text; base_code text;
 begin
   if p_school_name is null or trim(p_school_name) = '' then
     raise exception 'School name is required.';
@@ -1548,28 +1642,245 @@ begin
     raise exception 'Administrator password must be at least 6 characters.';
   end if;
 
+  -- Build the School ID from the school's name (letters/numbers only, max 12
+  -- chars) plus a random 5-character suffix, retrying until it's unique.
+  base_code := upper(substr(regexp_replace(coalesce(p_school_name,'SCHOOL'), '[^A-Za-z0-9]+', '', 'g'), 1, 12));
+  if base_code = '' then base_code := 'SCHOOL'; end if;
+  loop
+    candidate_code := base_code || '_' || upper(substr(md5(random()::text), 1, 5));
+    exit when not exists (select 1 from schools where school_code = candidate_code);
+  end loop;
+
   -- School record: owned by the mother system, not this app's own tables.
-  insert into schools (name, motto, location, size_range, password_hash, status)
+  insert into schools (name, motto, village, subcounty, district, size_range, password_hash, status, school_code)
   values (
-    trim(p_school_name), nullif(trim(p_school_motto),''), nullif(trim(p_school_location),''),
-    nullif(p_school_size_range,''), crypt(p_school_password, gen_salt('bf')), 'active'
+    trim(p_school_name), nullif(trim(p_school_motto),''),
+    nullif(trim(p_school_village),''), nullif(trim(p_school_subcounty),''), nullif(trim(p_school_district),''),
+    nullif(p_school_size_range,''), crypt(p_school_password, gen_salt('bf')), 'active', candidate_code
   ) returning * into new_school;
 
   -- First Administrator — Administration department = full access to everything.
   insert into profiles (
-    full_name, username, department, phone, whatsapp, email, location,
-    pin, password_hash, role, school_id
+    full_name, username, department, phone, whatsapp, email,
+    pin, password_hash, role, photo_url, school_id
   ) values (
     trim(p_admin_full_name), p_admin_username, 'administration',
-    nullif(p_admin_phone,''), nullif(p_admin_whatsapp,''), nullif(p_admin_email,''), nullif(p_admin_location,''),
-    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', new_school.id
+    nullif(p_admin_phone,''), nullif(p_admin_whatsapp,''), nullif(p_admin_email,''),
+    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', p_admin_photo_url, new_school.id
   ) returning * into new_admin;
 
   new_admin.password_hash := null;
   return new_admin;
 end;
 $register_school$;
-grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;`;
+grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;`;
+
+/* ---------------- REGISTRATION APPROVAL ----------------
+   Run this ONCE in Supabase → SQL Editor, after everything above (including
+   whichever verify_login upgrade from the Mother System's setup SQL you've
+   already run — this redefines verify_login one more time, on top of the
+   most recent version, so run this LAST).
+
+   Every account created through the self-signup screen (create_account for
+   staff, create_parent_account for parents) now starts 'pending' instead of
+   being able to log in immediately. Only a school Administrator can approve
+   or reject it — see approve_registration()/reject_registration() below,
+   wired up from the "Pending Registrations" card on Users & Roles. Pending
+   or rejected accounts are blocked at verify_login(), the same way a
+   suspended account or a school awaiting Mother System approval is blocked.
+
+   The school's founding Administrator (created inside register_school(), at
+   the same moment the school itself is registered) is the one exception —
+   there's no other Administrator yet to approve them, so that account keeps
+   the column's default of 'approved'. Every account created afterwards goes
+   through this workflow. */
+const REGISTRATION_APPROVAL_SQL = `alter table profiles add column if not exists approval_status text not null default 'approved';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_approval_status_check') then
+    alter table profiles add constraint profiles_approval_status_check check (approval_status in ('pending','approved','rejected'));
+  end if;
+end $$;
+
+-- Self-signup staff accounts now start pending.
+drop function if exists create_account(text, text, text, text, text, text, text, uuid);
+create function create_account(
+  p_full_name text, p_username text, p_department text,
+  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_account$
+declare new_row profiles; locked jsonb;
+begin
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  if p_department is not null and p_department <> '' then
+    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
+    if locked is not null and (locked ->> p_department) = 'true' then
+      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
+    end if;
+  end if;
+  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id, approval_status)
+  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id, 'pending')
+  returning * into new_row;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_account$;
+grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
+
+-- Self-signup parent accounts now start pending too.
+drop function if exists create_parent_account(text, text, text, text, text, text, text, text, uuid);
+create function create_parent_account(
+  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
+  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_parent_account$
+declare new_row profiles; found_student students;
+begin
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and school_id = p_school_id
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
+  end if;
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id, approval_status)
+  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id, 'pending')
+  returning * into new_row;
+  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
+    on conflict (parent_id, student_id) do nothing;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_parent_account$;
+grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;
+
+-- Approves a pending registration. Must be called by an existing Administrator
+-- at the same school as the account being approved.
+drop function if exists approve_registration(uuid, uuid);
+create function approve_registration(p_admin_id uuid, p_profile_id uuid)
+returns profiles language plpgsql security definer as $$
+declare admin_row profiles; target_row profiles;
+begin
+  select * into admin_row from profiles where id = p_admin_id and department = 'administration' and deleted_at is null;
+  if admin_row.id is null then
+    raise exception 'Only a school Administrator can approve registrations.';
+  end if;
+  select * into target_row from profiles where id = p_profile_id and school_id = admin_row.school_id;
+  if target_row.id is null then
+    raise exception 'That registration was not found at this school.';
+  end if;
+  update profiles set approval_status = 'approved' where id = p_profile_id returning * into target_row;
+  target_row.password_hash := null;
+  return target_row;
+end;
+$$;
+grant execute on function approve_registration(uuid,uuid) to anon, authenticated;
+
+-- Rejects a pending registration (kept on file, marked 'rejected', blocked at login).
+drop function if exists reject_registration(uuid, uuid);
+create function reject_registration(p_admin_id uuid, p_profile_id uuid)
+returns profiles language plpgsql security definer as $$
+declare admin_row profiles; target_row profiles;
+begin
+  select * into admin_row from profiles where id = p_admin_id and department = 'administration' and deleted_at is null;
+  if admin_row.id is null then
+    raise exception 'Only a school Administrator can reject registrations.';
+  end if;
+  select * into target_row from profiles where id = p_profile_id and school_id = admin_row.school_id;
+  if target_row.id is null then
+    raise exception 'That registration was not found at this school.';
+  end if;
+  update profiles set approval_status = 'rejected' where id = p_profile_id returning * into target_row;
+  target_row.password_hash := null;
+  return target_row;
+end;
+$$;
+grant execute on function reject_registration(uuid,uuid) to anon, authenticated;
+
+-- Final verify_login: builds on every prior upgrade (deleted/suspended checks,
+-- school-status checks, last_login_at, school_login_log) and adds the new
+-- approval_status gate. Blocks a login before it ever reaches the app shell.
+drop function if exists verify_login(text, text);
+create function verify_login(p_username text, p_password text) returns profiles
+language plpgsql security definer as $verify_login$
+declare found_row profiles; school_row schools;
+begin
+  select * into found_row from profiles where username = p_username;
+  if found_row.id is null or found_row.password_hash is null
+     or crypt(p_password, found_row.password_hash) <> found_row.password_hash then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception 'Incorrect username or password.';
+  end if;
+  if found_row.deleted_at is not null then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception 'This account has been deleted. Contact Administration.';
+  end if;
+  if found_row.suspended_at is not null then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception 'This account is suspended. Contact Administration.';
+  end if;
+  if found_row.approval_status = 'pending' then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception 'Your registration is awaiting approval from your school Administrator.';
+  end if;
+  if found_row.approval_status = 'rejected' then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception 'Your registration was not approved. Contact your school Administrator for more information.';
+  end if;
+  if found_row.school_id is not null then
+    select * into school_row from schools where id = found_row.school_id;
+    if school_row.status = 'pending' then
+      raise exception 'Your school is still awaiting approval by TransApple. Please check back soon.';
+    elsif school_row.status = 'rejected' then
+      raise exception 'Your school''s registration was not approved. Contact TransApple for more information.';
+    elsif school_row.status = 'suspended' then
+      raise exception 'Your school''s account is suspended. Contact TransApple to resolve this.';
+    elsif school_row.status = 'deactivated' then
+      raise exception 'Your school''s account has been deactivated. Contact TransApple for help.';
+    end if;
+  end if;
+  if to_regclass('profiles') is not null then
+    begin
+      update profiles set last_login_at = now() where id = found_row.id;
+    exception when undefined_column then null;
+    end;
+  end if;
+  if to_regclass('school_login_log') is not null then
+    insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, true);
+  end if;
+  found_row.password_hash := null;
+  return found_row;
+end;
+$verify_login$;
+grant execute on function verify_login(text,text) to anon, authenticated;`;
 
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
@@ -1724,10 +2035,11 @@ async function tryRestoreRememberedSession() {
   const username = getRememberedSession();
   if (!username) return false;
   try {
-    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id" });
+    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id,approval_status" });
     const row = rows[0];
     if (!row) { clearRememberedSession(); return false; }
     if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
+    if (row.approval_status && row.approval_status !== "approved") { clearRememberedSession(); return false; }
     profile = scrubProfile(row);
     setCurrentSchool(profile.school_id);
     await loadCurrentSchool();
@@ -1750,22 +2062,19 @@ async function signup({ full_name, username, department, phone, password, pin, p
     p_school_id: school_id,
   }) });
 }
-// Schools shown in the signup school picker — only active ones, id+name only.
-async function listActiveSchools() {
-  return dbSelect("schools", { select:"id,name", status:"eq.active", order:"name.asc" });
-}
 // Options for the "School Size Range" field on the registration screen.
 const SCHOOL_SIZE_RANGES = ["1–100 students","101–300 students","301–600 students","601–1000 students","1000+ students"];
 // Registers a brand-new school (stored in the mother system's `schools` table —
 // see SCHOOL_SELF_REGISTRATION_SQL) and creates its first Administrator account
 // in one atomic call. Returns the new Administrator's profile.
-async function registerSchool({ schoolName, schoolMotto, schoolLocation, schoolPassword, schoolSizeRange, adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminLocation, adminPassword, adminPin }) {
+async function registerSchool({ schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolPassword, schoolSizeRange, adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl }) {
   const rows = await sb(`/rest/v1/rpc/register_school`, { method:"POST", body: JSON.stringify({
-    p_school_name: schoolName, p_school_motto: schoolMotto || null, p_school_location: schoolLocation || null,
+    p_school_name: schoolName, p_school_motto: schoolMotto || null,
+    p_school_village: schoolVillage || null, p_school_subcounty: schoolSubcounty || null, p_school_district: schoolDistrict || null,
     p_school_password: schoolPassword, p_school_size_range: schoolSizeRange || null,
     p_admin_full_name: adminFullName, p_admin_username: adminUsername, p_admin_phone: adminPhone || null,
-    p_admin_whatsapp: adminWhatsapp || null, p_admin_email: adminEmail || null, p_admin_location: adminLocation || null,
-    p_admin_password: adminPassword, p_admin_pin: adminPin || null,
+    p_admin_whatsapp: adminWhatsapp || null, p_admin_email: adminEmail || null,
+    p_admin_password: adminPassword, p_admin_pin: adminPin || null, p_admin_photo_url: adminPhotoUrl || null,
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
@@ -1783,6 +2092,22 @@ async function createParentAccount({ full_name, username, phone, password, pin, 
 async function linkParentChild(parentId, admission_no, student_name) {
   const rows = await sb(`/rest/v1/rpc/link_parent_child`, { method:"POST", body: JSON.stringify({
     p_parent_id: parentId, p_admission_no: admission_no, p_student_name: student_name,
+  }) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+// Registration Approval — only an Administrator can approve or reject a
+// pending self-signup (see approve_registration()/reject_registration() in
+// REGISTRATION_APPROVAL_SQL). The acting admin's own id is passed as proof,
+// checked server-side, same trust model as the rest of this app's auth.
+async function approveRegistration(profileId) {
+  const rows = await sb(`/rest/v1/rpc/approve_registration`, { method:"POST", body: JSON.stringify({
+    p_admin_id: profile.id, p_profile_id: profileId,
+  }) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+async function rejectRegistration(profileId) {
+  const rows = await sb(`/rest/v1/rpc/reject_registration`, { method:"POST", body: JSON.stringify({
+    p_admin_id: profile.id, p_profile_id: profileId,
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
@@ -2073,39 +2398,78 @@ function errShow(container) {
    in and drops them on Users & Roles to start creating accounts for the rest
    of their team, each with their own role. */
 function renderSchoolRegistration() {
+  let regPhotoDataUrl = null;
   app().innerHTML = `
     <div class="login-wrap"><div class="login-card" style="max-width:420px;">
       <div class="brand">${sidebarBrandHtml()}</div>
       <div class="tiny-note" style="font-size:16px;font-weight:800;color:var(--ink);margin-bottom:2px;">Register Your School to Use This System</div>
       <div class="tiny-note" style="margin-bottom:14px;">A few details about your school, then set up your Administrator account.</div>
       <div id="regMsg"></div>
+      <div class="field" style="font-weight:700;color:var(--navy-2);">School Information</div>
       <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="e.g. Meridian Academy" /></div>
       <div class="field"><label>School Motto</label><input id="r_motto" placeholder="e.g. Knowledge, Character, Service" /></div>
-      <div class="field"><label>School Location</label><input id="r_location" placeholder="e.g. Ntinda, Kampala" /></div>
+      <div class="field"><label>Village</label><input id="r_village" placeholder="e.g. Ntinda" /></div>
+      <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="e.g. Nakawa" /></div>
+      <div class="field"><label>District</label><input id="r_district" placeholder="e.g. Kampala" /></div>
+      <div class="field"><label>School Size</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
       <div class="field"><label>School Password</label><input id="r_schoolPassword" type="password" placeholder="At least 6 characters" /></div>
-      <div class="field"><label>School Size Range</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
+      <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;">Your School ID is generated automatically once you register, and can't be changed afterwards. It'll be visible to Administrators under Settings, and is how the TransApple Mother System identifies your school.</div>
 
-      <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:14px;">First Administrator Details</div>
-      <div class="field"><label>Full Name</label><input id="r_adminName" placeholder="Jane Okafor" /></div>
+      <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">First Administrator</div>
+      <div class="field" style="text-align:center;">
+        <label>Profile Photo</label>
+        <div id="regPhotoWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml("", null, 64)}</div>
+        <div class="row" style="justify-content:center;gap:8px;">
+          <button type="button" class="btn btn-ghost btn-sm" id="r_photoLiveBtn">Live</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="r_photoPickBtn">Pick</button>
+        </div>
+        <input id="r_photoLive" type="file" accept="image/*" capture="user" style="display:none;"/>
+        <input id="r_photoPick" type="file" accept="image/*" style="display:none;"/>
+      </div>
+      <div class="field"><label>Full Names</label><input id="r_adminName" placeholder="Jane Okafor" /></div>
       <div class="field"><label>Username</label><input id="r_adminUsername" autocapitalize="none" placeholder="jane.okafor" /></div>
       <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="+256 700 000 000" /></div>
       <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="+256 700 000 000" /></div>
-      <div class="field"><label>Email</label><input id="r_adminEmail" type="email" placeholder="jane@school.edu" /></div>
+      <div class="field"><label>Email Address</label><input id="r_adminEmail" type="email" placeholder="jane@school.edu" /></div>
       <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;">Only an Administrator can register a new school — everyone else is added afterwards from Users &amp; Roles.</div></div>
-      <div class="field"><label>Location</label><input id="r_adminLocation" placeholder="e.g. Kampala" /></div>
       <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="At least 6 characters" /></div>
-      <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+      <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="Re-enter password" /></div>
+      <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
 
       <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
       <div class="tiny-note" style="text-align:center;margin-top:12px;">Already registered? <span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
     </div></div>
   `;
   document.getElementById("toLoginFromReg").onclick = () => renderLogin();
+  const setRegPhotoPreview = (dataUrl) => { document.getElementById("regPhotoWrap").innerHTML = avatarHtml("", dataUrl, 64); };
+  const regPhotoLiveInput = document.getElementById("r_photoLive");
+  const regPhotoPickInput = document.getElementById("r_photoPick");
+  document.getElementById("r_photoLiveBtn").onclick = () => {
+    openCameraCapture(
+      (dataUrl) => { regPhotoDataUrl = dataUrl; regPhotoLiveInput.value = ""; regPhotoPickInput.value = ""; setRegPhotoPreview(dataUrl); },
+      () => { toast("In-page camera isn't available here — opening the picker instead.", false); regPhotoLiveInput.click(); }
+    );
+  };
+  document.getElementById("r_photoPickBtn").onclick = () => regPhotoPickInput.click();
+  regPhotoLiveInput.onchange = async () => {
+    if (!regPhotoLiveInput.files[0]) return;
+    regPhotoDataUrl = null; regPhotoPickInput.value = "";
+    const dataUrl = await fileToDataURL(regPhotoLiveInput.files[0]);
+    if (dataUrl) { regPhotoDataUrl = dataUrl; setRegPhotoPreview(dataUrl); }
+  };
+  regPhotoPickInput.onchange = async () => {
+    if (!regPhotoPickInput.files[0]) return;
+    regPhotoDataUrl = null; regPhotoLiveInput.value = "";
+    const dataUrl = await fileToDataURL(regPhotoPickInput.files[0]);
+    if (dataUrl) { regPhotoDataUrl = dataUrl; setRegPhotoPreview(dataUrl); }
+  };
   document.getElementById("registerSchoolBtn").onclick = async () => {
     const msg = document.getElementById("regMsg"); msg.innerHTML = "";
     const schoolName = document.getElementById("r_schoolName").value.trim();
     const schoolMotto = document.getElementById("r_motto").value.trim();
-    const schoolLocation = document.getElementById("r_location").value.trim();
+    const schoolVillage = document.getElementById("r_village").value.trim();
+    const schoolSubcounty = document.getElementById("r_subcounty").value.trim();
+    const schoolDistrict = document.getElementById("r_district").value.trim();
     const schoolPassword = document.getElementById("r_schoolPassword").value;
     const schoolSizeRange = document.getElementById("r_sizeRange").value;
     const adminFullName = document.getElementById("r_adminName").value.trim();
@@ -2113,19 +2477,20 @@ function renderSchoolRegistration() {
     const adminPhone = document.getElementById("r_adminPhone").value.trim();
     const adminWhatsapp = document.getElementById("r_adminWhatsapp").value.trim();
     const adminEmail = document.getElementById("r_adminEmail").value.trim();
-    const adminLocation = document.getElementById("r_adminLocation").value.trim();
     const adminPassword = document.getElementById("r_adminPassword").value;
+    const adminPassword2 = document.getElementById("r_adminPassword2").value;
     const adminPin = document.getElementById("r_adminPin").value.trim();
     const btn = document.getElementById("registerSchoolBtn");
     try {
       if (!schoolName) throw new Error("Enter your school's name.");
       if (!schoolPassword || schoolPassword.length < 6) throw new Error("School password must be at least 6 characters.");
-      if (!adminFullName || !adminUsername) throw new Error("The Administrator's full name and username are required.");
+      if (!adminFullName || !adminUsername) throw new Error("The Administrator's full names and username are required.");
       if (!adminPassword || adminPassword.length < 6) throw new Error("The Administrator's password must be at least 6 characters.");
+      if (adminPassword !== adminPassword2) throw new Error("Administrator passwords don't match.");
       btn.disabled = true; btn.textContent = "Registering…";
       const newAdmin = await registerSchool({
-        schoolName, schoolMotto, schoolLocation, schoolPassword, schoolSizeRange,
-        adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminLocation, adminPassword, adminPin,
+        schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolPassword, schoolSizeRange,
+        adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl: regPhotoDataUrl,
       });
       profile = scrubProfile(newAdmin);
       setCurrentSchool(profile.school_id);
@@ -2135,7 +2500,8 @@ function renderSchoolRegistration() {
       pinLocked = false;
       tab = "users";
       startSchoolSync();
-      toast(`${schoolName} registered! Add the rest of your team from Users & Roles.`, false);
+      const codeNote = CURRENT_SCHOOL?.school_code ? ` Your School ID is ${CURRENT_SCHOOL.school_code} — share it with staff and parents so they can create their own accounts (also visible any time under Settings).` : "";
+      toast(`${schoolName} registered!${codeNote} Add the rest of your team from Users & Roles.`, false);
       render();
     } catch (e) {
       msg.innerHTML = `<div class="err">${e.message}</div>`;
@@ -2227,6 +2593,7 @@ function renderLogin() {
       document.getElementById("toLogin2").onclick = () => { mode = "login"; draw(); };
     } else {
       let signupPhotoDataUrl = null;
+      let resolvedSchoolId = null; // set once the typed School ID is confirmed to exist
       formDiv.innerHTML = `
         <div class="row" style="gap:8px;margin-bottom:16px;">
           <button type="button" class="btn ${signupAccountType==='staff'?'btn-primary':'btn-ghost'} btn-sm" id="acctStaffBtn" style="flex:1;">Staff account</button>
@@ -2239,7 +2606,7 @@ function renderLogin() {
       const fieldsWrap = document.getElementById("signupFields");
       const photoBlockHtml = `
         <div class="field" style="text-align:center;">
-          <label>Photo (optional)</label>
+          <label>Profile Photo</label>
           <div id="signupPhotoWrap" style="display:flex;justify-content:center;margin-bottom:8px;">${avatarHtml("", null, 64)}</div>
           <div class="row" style="justify-content:center;gap:8px;">
             <button type="button" class="btn btn-ghost btn-sm" id="signupLiveBtn">Live</button>
@@ -2248,30 +2615,37 @@ function renderLogin() {
           <input id="signupPhotoLive" type="file" accept="image/*" capture="user" style="display:none;"/>
           <input id="signupPhotoPick" type="file" accept="image/*" style="display:none;"/>
         </div>`;
-      const schoolFieldHtml = `<div class="field"><label>School</label><select id="school_id"><option value="">Loading schools…</option></select></div>`;
+      const schoolFieldHtml = `
+        <div class="field">
+          <label>School ID</label>
+          <input id="school_code" autocapitalize="none" style="text-transform:uppercase;font-family:monospace;letter-spacing:.03em;" placeholder="e.g. MERIDIAN_A1B2C" />
+          <div id="schoolCodeNote" class="tiny-note" style="margin-top:2px;">Ask your school's Administrator for this — it's shown to them under Settings.</div>
+        </div>`;
       if (signupAccountType === "staff") {
         fieldsWrap.innerHTML = `
           ${photoBlockHtml}
           ${schoolFieldHtml}
-          <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
+          <div class="field"><label>Full Names</label><input id="fname" placeholder="Jane Okafor" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
           <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select>
             <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
           </div>
-          <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Phone Number</label><input id="phone" placeholder="+256 700 000 000" /></div>
           <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
         `;
       } else {
         fieldsWrap.innerHTML = `
           ${photoBlockHtml}
           ${schoolFieldHtml}
-          <div class="field"><label>Your full name</label><input id="fname" placeholder="Amaka Obi" /></div>
+          <div class="field"><label>Full Names</label><input id="fname" placeholder="Amaka Obi" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="amaka.obi" /></div>
-          <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Phone Number</label><input id="phone" placeholder="+256 700 000 000" /></div>
           <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
           <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Link your child</div>
           <div class="tiny-note" style="margin:0 0 6px;text-align:left;">We match your child's Student ID with their exact registered name before your account is created — nothing is created until that match succeeds.</div>
           <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="e.g. DF001" /></div>
@@ -2279,25 +2653,43 @@ function renderLogin() {
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
         `;
       }
-      listActiveSchools().then(schools => {
-        const sel = document.getElementById("school_id");
-        if (!sel) return;
-        if (!schools.length) { sel.innerHTML = `<option value="">No schools available</option>`; return; }
-        sel.innerHTML = `<option value="">Select your school…</option>` + schools.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
-        sel.onchange = refreshDeptOptionsForSelectedSchool;
-      }).catch(() => {
-        const sel = document.getElementById("school_id");
-        if (sel) sel.innerHTML = `<option value="">Couldn't load schools</option>`;
-      });
+      const SCHOOL_CODE_FORMAT = /^[A-Za-z0-9_]+$/;
+      const schoolCodeInput = document.getElementById("school_code");
+      const schoolCodeNote = document.getElementById("schoolCodeNote");
+      // Looks the typed School ID up against schools.school_code (case-insensitive —
+      // codes are generated uppercase, but we're forgiving of how it's typed) and,
+      // for the staff form, refreshes Department options for whichever school matched
+      // so a closed department never even shows up as an option.
+      async function resolveSchoolCode() {
+        resolvedSchoolId = null;
+        const raw = schoolCodeInput.value.trim();
+        if (!raw) { schoolCodeNote.textContent = "Ask your school's Administrator for this — it's shown to them under Settings."; schoolCodeNote.className = "tiny-note"; return null; }
+        if (!SCHOOL_CODE_FORMAT.test(raw)) {
+          schoolCodeNote.textContent = "School ID can only contain letters, numbers, and underscores.";
+          schoolCodeNote.className = "tiny-note err"; return null;
+        }
+        schoolCodeNote.textContent = "Checking…"; schoolCodeNote.className = "tiny-note";
+        try {
+          const rows = await sb(`/rest/v1/schools?school_code=eq.${encodeURIComponent(raw.toUpperCase())}&select=id,name,status`);
+          const school = rows[0];
+          if (!school) { schoolCodeNote.textContent = "No school found with that School ID — check with your Administrator."; schoolCodeNote.className = "tiny-note err"; return null; }
+          resolvedSchoolId = school.id;
+          schoolCodeNote.textContent = `Registering for: ${school.name}`; schoolCodeNote.className = "tiny-note msg-ok";
+          if (signupAccountType === "staff") await refreshDeptOptionsForSelectedSchool(school.id);
+          return school.id;
+        } catch (e) {
+          schoolCodeNote.textContent = "Couldn't verify that School ID — check your connection and try again.";
+          schoolCodeNote.className = "tiny-note err"; return null;
+        }
+      }
+      schoolCodeInput.onblur = resolveSchoolCode;
       // Only relevant for the staff signup form (parents have no department field).
-      // Re-fetches locked_departments for whichever school was just picked and
-      // rebuilds the Department dropdown so a closed department never even shows
-      // up as an option — on top of the same check enforced server-side.
-      async function refreshDeptOptionsForSelectedSchool() {
+      // Re-fetches locked_departments for whichever school matched and rebuilds the
+      // Department dropdown so a closed department never even shows up as an option —
+      // on top of the same check enforced server-side.
+      async function refreshDeptOptionsForSelectedSchool(schoolId) {
         const deptSel = document.getElementById("department");
-        const schoolSel = document.getElementById("school_id");
-        if (!deptSel || !schoolSel) return;
-        const schoolId = schoolSel.value;
+        if (!deptSel) return;
         deptSel.disabled = true;
         const locked = await fetchLockedDepartments(schoolId);
         deptSel.innerHTML = departmentSelectOptions("", locked);
@@ -2333,13 +2725,15 @@ function renderLogin() {
         const username = document.getElementById("username").value.trim();
         const phone = document.getElementById("phone").value.trim();
         const password = document.getElementById("password").value;
+        const password2 = document.getElementById("password2").value;
         const pin = document.getElementById("pin").value.trim();
         const msg = document.getElementById("loginMsg");
         msg.innerHTML = "";
         try {
-          const school_id = document.getElementById("school_id").value;
-          if (!school_id) throw new Error("Select your school.");
-          if (!full_name || !username || !password) throw new Error("Full name, username and password are required.");
+          const school_id = resolvedSchoolId || await resolveSchoolCode();
+          if (!school_id) throw new Error("Enter a valid School ID.");
+          if (!full_name || !username || !password) throw new Error("Full names, username and password are required.");
+          if (password !== password2) throw new Error("Passwords don't match.");
           if (signupAccountType === "staff") {
             const department = document.getElementById("department").value;
             await signup({ full_name, username, department, phone, password, pin, photo_url: signupPhotoDataUrl, school_id });
@@ -2349,7 +2743,7 @@ function renderLogin() {
             if (!admission_no || !student_name) throw new Error("Enter your child's Student ID and exact registered name.");
             await createParentAccount({ full_name, username, phone, password, pin, photo_url: signupPhotoDataUrl, admission_no, student_name, school_id });
           }
-          msg.innerHTML = `<div class="msg-ok">Account created. You can log in now.</div>`; mode="login"; draw();
+          msg.innerHTML = `<div class="msg-ok">Account created. It's now pending approval from your school Administrator — you'll be able to log in once approved.</div>`; mode="login"; draw();
         }
         catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
       };
@@ -6002,9 +6396,13 @@ async function renderUsers(container) {
     return;
   }
 
-  const profiles = await dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at" });
+  const profiles = await dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,approval_status" });
+  const pendingRegs = profiles.filter(p => p.approval_status === "pending" && !p.deleted_at);
   container.innerHTML = meCard +
-    `<div class="section-head"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
+    `<div class="section-head"><h3 style="color:var(--navy-2);">Pending Registrations</h3></div>
+    <div class="tiny-note" style="margin-bottom:10px;">New accounts created from the sign-in screen's "Create account" link stay Pending Approval and can't log in until you approve them here.</div>
+    <div class="card" id="pendingRegList"></div>
+    <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
     <div class="tiny-note" style="margin-bottom:10px;">Department controls which sections of the app someone can open. Administration gets full access to everything, including this page. New staff create their own login from the sign-in screen's "Create one" link — set their department and position here afterwards. Suspend or delete an account to block its login instantly; both can be reversed any time from this list.</div>
     <div class="card" id="list"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
@@ -6014,6 +6412,33 @@ async function renderUsers(container) {
     <div class="tiny-note" style="margin-bottom:10px;">Close a department to stop new self-signups for it from the sign-in screen's "Create account" flow — useful once a department has all the staff it needs, or to keep a sensitive department (like Administration) invite-only. This never touches existing accounts, and you can still hand-assign any department to an account above regardless of this setting.</div>
     <div class="card" id="deptLockCard"></div>`;
   renderDeptLockCard();
+  const pendingRegList = document.getElementById("pendingRegList");
+  const renderPendingRegList = () => {
+    pendingRegList.innerHTML = !pendingRegs.length ? `<div class="tiny-note">No pending registrations.</div>` :
+      pendingRegs.map(p => `<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;">
+        ${avatarHtml(p.full_name, p.photo_url)}
+        <div class="list-main">
+          <div class="list-title">${p.full_name} <span class="badge badge-amber">${p.role === "parent" ? "Parent" : (DEPARTMENTS[p.department]?.label || "No department")}</span></div>
+          <div class="list-sub">${p.phone || ""}${p.username ? ` · @${p.username}` : ""}</div>
+        </div>
+        <button class="btn btn-danger btn-sm rejectRegBtn" data-id="${p.id}">Reject</button>
+        <button class="btn btn-primary btn-sm approveRegBtn" data-id="${p.id}">${ic.check} Approve</button>
+      </div>`).join("");
+    pendingRegList.querySelectorAll(".approveRegBtn").forEach(btn => btn.onclick = safe(async () => {
+      await approveRegistration(btn.dataset.id);
+      toast("Registration approved — they can now log in.", false);
+      renderUsers(container);
+    }));
+    pendingRegList.querySelectorAll(".rejectRegBtn").forEach(btn => btn.onclick = async () => {
+      if (!(await customConfirm("Reject this registration? They won't be able to log in.", { danger:true, okLabel:"Reject" }))) return;
+      safe(async () => {
+        await rejectRegistration(btn.dataset.id);
+        toast("Registration rejected.", false);
+        renderUsers(container);
+      })();
+    });
+  };
+  renderPendingRegList();
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) logoutBtn.onclick = async () => {
     if (await customConfirm("Log out?")) logout();
@@ -6032,7 +6457,7 @@ async function renderUsers(container) {
     const isDeleted = !!p.deleted_at;
     const isSuspended = !!p.suspended_at;
     const roleLabel = p.position || DEPARTMENTS[p.department]?.label || (p.role ? p.role.charAt(0).toUpperCase()+p.role.slice(1) : "No role set");
-    const badges = `${isSelf ? `<span class="badge badge-green">This is You</span>` : ""}${isDeleted ? `<span class="badge badge-grey">Deleted</span>` : isSuspended ? `<span class="badge badge-amber">Suspended</span>` : ""}`;
+    const badges = `${isSelf ? `<span class="badge badge-green">This is You</span>` : ""}${isDeleted ? `<span class="badge badge-grey">Deleted</span>` : isSuspended ? `<span class="badge badge-amber">Suspended</span>` : ""}${!isDeleted && p.approval_status === "pending" ? ` <span class="badge badge-amber">Pending Approval</span>` : ""}${!isDeleted && p.approval_status === "rejected" ? ` <span class="badge badge-red">Rejected</span>` : ""}`;
     const row = el(`<div class="list-row" style="flex-wrap:wrap;${isDeleted?'opacity:.6;':''}${isSelf?'':'cursor:pointer;'}">
       ${avatarHtml(p.full_name, p.photo_url)}
       <div class="list-main">
@@ -6247,7 +6672,8 @@ async function renderSettings(container) {
   }
 
   const s = row || {};
-  if (!isAdmin) { renderSettingsReadOnly(container, s); return; }
+  const motherAdmins = await fetchSchoolAdministrators();
+  if (!isAdmin) { renderSettingsReadOnly(container, s, motherAdmins); return; }
   const latestChangelog = await fetchLatestChangelog();
 
   const colorKey = s.brand_color && BRAND_PRESETS[s.brand_color] ? s.brand_color : "teal";
@@ -6259,6 +6685,17 @@ async function renderSettings(container) {
   container.innerHTML = `
     <h3 style="color:var(--navy);margin-bottom:4px;">School Settings</h3>
     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Your school's identity — shown across the whole app, including the header everyone sees.</p>
+
+    ${motherSystemCardHtml(motherAdmins)}
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">School ID</h3><p>Generated automatically at registration. Can't be edited. Give this to staff and parents so they can create their own accounts — it's the permanent identifier the TransApple Mother System uses to identify your school.</p></div></div>
+      <div class="field" style="margin-bottom:0;">
+        <div class="row" style="gap:8px;align-items:center;">
+          <input value="${CURRENT_SCHOOL?.school_code || ''}" disabled style="background:var(--card-alt);color:var(--ink-soft);font-family:monospace;font-weight:700;letter-spacing:.03em;flex:1;"/>
+          <button type="button" class="btn btn-ghost btn-sm" id="copySchoolIdBtn">Copy</button>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
@@ -6360,6 +6797,11 @@ async function renderSettings(container) {
   }
   container.querySelector("#f_sname").oninput = updatePreview;
   container.querySelector("#f_motto").oninput = updatePreview;
+  const copySchoolIdBtn = document.getElementById("copySchoolIdBtn");
+  if (copySchoolIdBtn) copySchoolIdBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText(CURRENT_SCHOOL?.school_code || ""); toast("School ID copied.", false); }
+    catch (e) { toast("Couldn't copy — long-press the field to copy manually.", true); }
+  };
   container.querySelector("#logoUpload").onclick = () => document.getElementById("logoFile").click();
   document.getElementById("logoFile").onchange = async (e) => {
     const file = e.target.files[0];
@@ -6462,12 +6904,13 @@ async function renderSettings(container) {
     }
   };
 }
-async function renderSettingsReadOnly(container, s) {
+async function renderSettingsReadOnly(container, s, motherAdmins) {
   const latestChangelog = await fetchLatestChangelog();
   const hasAny = s.school_name || s.motto || s.mission || s.vision || s.phone || s.email || s.address;
   container.innerHTML = `
     <h3 style="color:var(--navy);margin-bottom:4px;">About ${s.school_name || "this school"}</h3>
     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Only admins can edit school settings.</p>
+    ${motherSystemCardHtml(motherAdmins)}
     ${!hasAny ? `<div class="card">${emptyState("Your school hasn't set up its profile yet. Ask an admin to fill it in from Settings.")}</div>` : `
     <div class="card">
       <div class="row" style="align-items:center;gap:14px;margin-bottom:6px;">
