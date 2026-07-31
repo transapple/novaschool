@@ -173,6 +173,13 @@
   .bn-icon-wrap{position:relative;display:inline-flex;}
   .nav-badge-count{position:absolute;top:-6px;right:-9px;background:var(--red);color:#fff;font-size:9.5px;font-weight:800;line-height:1;min-width:15px;height:15px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px #fff;animation:popScale .25s ease;}
   .nav-item .nav-badge-count{position:static;margin-left:auto;min-width:18px;height:18px;font-size:11px;box-shadow:none;}
+  /* Rows inside the mobile "More" sheet (openMoreSheet) — same shape as .nav-item,
+     but for a light modal card instead of the dark sidebar, so hover/active states
+     don't turn the text white-on-white. */
+  .more-sheet-item{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:10px;color:var(--navy-2);font-size:14.5px;font-weight:600;margin-bottom:3px;cursor:pointer;transition:background .15s ease;}
+  .more-sheet-item svg{opacity:.85;flex-shrink:0;color:var(--ink-soft);}
+  .more-sheet-item:hover{background:var(--surface-2);}
+  .more-sheet-item:active{background:var(--slate-tint);}
 
   /* ---- Notification bell (top-right corner, staff + parent shells) ---- */
   .bell-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:none;background:rgba(22,39,74,.06);color:var(--navy);cursor:pointer;flex-shrink:0;}
@@ -709,21 +716,32 @@ function sidebarBrandHtml() {
     <div><div class="brand-name">${name}</div><div class="brand-sub">${sub}</div></div>`;
 }
 
+// Order here drives both the sidebar (desktop, shows everything) and the
+// mobile bottom nav (shows BOTTOMNAV_PRIMARY_IDS directly, everything else
+// behind the "More" sheet — see wireMoreSheet()). Core day-to-day sections
+// come first; account/utility sections that are opened far less often sit
+// at the end since that's the set that moves into "More" on mobile.
 const NAV = [
   {id:"dashboard", label:"Home", icon:ic.home},
-  {id:"health", label:"School Health", icon:ic.pulse},
   {id:"students", label:"Students", icon:ic.student},
-  {id:"teachers", label:"Staff", icon:ic.teacher},
   {id:"attendance", label:"Attendance", icon:ic.attendance},
   {id:"fees", label:"Fees", icon:ic.fees},
   {id:"exams", label:"Exams", icon:ic.exam},
-  {id:"academic", label:"Setup", icon:ic.settings},
+  {id:"teachers", label:"Staff", icon:ic.teacher},
+  {id:"academic", label:"Setup", icon:ic.sliders},
+  {id:"health", label:"School Health", icon:ic.pulse},
   {id:"comms", label:"Comms", icon:ic.megaphone},
   {id:"users", label:"Account", icon:ic.users},
   {id:"contact", label:"Contact TransApple", icon:ic.lifebuoy},
   {id:"settings", label:"Settings", icon:ic.settings},
   {id:"trash", label:"Trash", icon:ic.trash},
 ];
+// The mobile bottom nav only has room for a handful of icons before it turns
+// into an illegible, endlessly-scrolling strip. These five are the ones a
+// staff member reaches for constantly; everything else in NAV — Staff,
+// Setup, School Health, Comms, Account, Contact, Settings, Trash — is one
+// tap away behind the final "More" icon instead of sitting in the main row.
+const BOTTOMNAV_PRIMARY_IDS = ["dashboard","students","attendance","fees","exams"];
 // Distinct icon tint per section in the bottom nav (inactive state only — the active
 // tab keeps the standard teal highlight from the .bn-item.active CSS class).
 const NAV_ICON_COLOR = {
@@ -731,6 +749,7 @@ const NAV_ICON_COLOR = {
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
   academic:"#0e9488", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
 };
+
 
 /* ---------------- MOTHER SYSTEM: REMOTE FEATURE CONTROL ----------------
    NAV ids in this list can be switched on/off per-school from the TransApple
@@ -741,9 +760,14 @@ const NAV_ICON_COLOR = {
    is treated as ENABLED unless the Mother System has explicitly set it to
    false (so schools created before this system existed, or with no features
    configured yet, are unaffected).
-   This id list must be kept in sync with FEATURE_MODULES in the Mother App. */
+   This id list must be kept in sync with FEATURE_MODULES in the Mother App.
+   "parent_portal" is a special case: it isn't a NAV tab at all — it gates the
+   entire parent-facing app shell (renderParentApp), checked separately at the
+   top of render() rather than via hasNavAccess(). It's still driven by the
+   same schools.features jsonb column and the same isFeatureEnabled() helper. */
 const CORE_NAV_IDS = new Set(["dashboard","users","contact","settings","trash"]);
 const GATABLE_NAV_IDS = ["health","students","teachers","attendance","fees","exams","academic","comms"];
+const PARENT_PORTAL_FEATURE_ID = "parent_portal";
 
 // The full school row from the Mother System's `schools` table (status, plan,
 // features, name/motto). Kept separate from `schoolSettings` (this app's own
@@ -1356,6 +1380,52 @@ end;
 $link_parent_child$;
 grant execute on function link_parent_child(uuid,text,text) to anon, authenticated;`;
 
+/* ---------------- DEPARTMENT REGISTRATION LOCK ----------------
+   Run this ONCE in Supabase → SQL Editor, after MULTI_SCHOOL_SQL (it redefines
+   create_account() again, adding one more check on top of the multi-school
+   version). Lets Administration close a department to new self-signups —
+   e.g. lock "Administration" itself once a school has all the admins it
+   needs, so a stray "Create account" doesn't hand out full access. This only
+   affects the sign-in screen's self-signup flow: existing accounts already
+   in a closed department are unaffected, and an admin can still hand-assign
+   any department to an existing account from Users & Roles regardless of
+   this setting — see openAccountControls. The check is enforced here in the
+   database (not just hidden from the dropdown client-side) so it can't be
+   bypassed by someone posting straight to the API. */
+const DEPARTMENT_LOCK_SQL = `alter table school_settings add column if not exists locked_departments jsonb not null default '{}'::jsonb;
+
+drop function if exists create_account(text, text, text, text, text, text, text, uuid);
+create function create_account(
+  p_full_name text, p_username text, p_department text,
+  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_account$
+declare new_row profiles; locked jsonb;
+begin
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  if p_department is not null and p_department <> '' then
+    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
+    if locked is not null and (locked ->> p_department) = 'true' then
+      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
+    end if;
+  end if;
+  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id)
+  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id)
+  returning * into new_row;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_account$;
+grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;`;
+
 /* ---------------- SCHOOL SELF-REGISTRATION (TransApple mother system) ----------------
    Run this ONCE in Supabase → SQL Editor, after MULTI_SCHOOL_SQL. It powers the
    "Register Your School" screen shown the first time this app is opened on a
@@ -1761,7 +1831,13 @@ function render() {
     renderSchoolBlocked(); return;
   }
   showSupportPortal = false; // no longer needed once the school is active again
-  if (profile?.role === "parent" || profile?.department === "parents") { renderParentApp(); return; }
+  if (profile?.role === "parent" || profile?.department === "parents") {
+    // Mother System kill-switch: a school can have its Parent Portal turned off
+    // (e.g. not on their plan, or temporarily disabled) without touching any
+    // staff-side access at all — parents just see a clear disabled screen.
+    if (!isFeatureEnabled(PARENT_PORTAL_FEATURE_ID)) { renderParentPortalDisabled(); return; }
+    renderParentApp(); return;
+  }
   app().innerHTML = `
     <div class="shell">
       <div class="sidebar">
@@ -1804,14 +1880,25 @@ function render() {
     sItem.onclick = () => { tab = n.id; render(); };
     sidenav.appendChild(sItem);
   });
-  // The sidebar (desktop) shows every accessible section. The bottom nav (mobile) shows the
-  // same set, as a single horizontally-scrollable row (no "More" overflow menu), each with its own icon tint.
-  visibleNav.forEach(n => {
+  // The sidebar (desktop) shows every accessible section, in NAV order.
+  // The bottom nav (mobile) only shows BOTTOMNAV_PRIMARY_IDS directly; the
+  // rest live behind one "More" icon (see wireMoreSheet) so mobile users
+  // aren't scrolling through a dozen icons to find Settings or Trash.
+  const primaryNav = visibleNav.filter(n => BOTTOMNAV_PRIMARY_IDS.includes(n.id));
+  const overflowNav = visibleNav.filter(n => !BOTTOMNAV_PRIMARY_IDS.includes(n.id));
+  primaryNav.forEach(n => {
     const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}">${n.icon}<span>${n.label}</span></div>`);
     if (tab !== n.id) bItem.style.color = NAV_ICON_COLOR[n.id] || "var(--ink-soft)";
     bItem.onclick = () => { tab = n.id; render(); };
     bottomnav.appendChild(bItem);
   });
+  if (overflowNav.length) {
+    const isOverflowActive = overflowNav.some(n => n.id === tab);
+    const moreItem = el(`<div class="bn-item ${isOverflowActive?'active':''}">${ic.more}<span>More</span></div>`);
+    if (!isOverflowActive) moreItem.style.color = "var(--ink-soft)";
+    moreItem.onclick = () => openMoreSheet(overflowNav);
+    bottomnav.appendChild(moreItem);
+  }
   const activeBn = bottomnav.querySelector(".bn-item.active");
   if (activeBn) activeBn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
   const pageTitle = document.getElementById("pageTitle");
@@ -1823,6 +1910,29 @@ function render() {
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
   const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
   (renderers[tab] || renderDashboard)(content).catch(errShow(content));
+}
+// Bottom-sheet shown when the mobile "More" nav icon is tapped — lists
+// whatever didn't fit in BOTTOMNAV_PRIMARY_IDS (Staff, Setup, School Health,
+// Comms, Account, Contact, Settings, Trash for a full-access profile; fewer
+// for a restricted department, same as everywhere else in this app). Tapping
+// a row switches tab and closes the sheet in one go.
+function openMoreSheet(items) {
+  const overlay = el(`<div class="overlay" style="align-items:flex-end;padding:0;">
+    <div class="modal" style="width:100%;max-width:720px;margin:0 auto;border-radius:16px 16px 0 0;max-height:80vh;overflow-y:auto;">
+      <button class="modal-close">&times;</button>
+      <h3>More</h3>
+      <div style="margin-top:8px;">
+        ${items.map(n => `<div class="more-sheet-item" data-more="${n.id}">${n.icon}<span>${n.label}</span></div>`).join("")}
+      </div>
+    </div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelectorAll("[data-more]").forEach(row => {
+    row.onclick = () => { tab = row.dataset.more; close(); render(); };
+  });
 }
 function errShow(container) {
   return (e) => {
@@ -1917,9 +2027,20 @@ function renderSchoolRegistration() {
 }
 
 /* ---------------- LOGIN SCREEN ---------------- */
-function departmentSelectOptions(selected) {
+function departmentSelectOptions(selected, lockedMap) {
+  const locked = lockedMap || {};
   return `<option value="" ${!selected?'selected':''}>— Select department —</option>` +
-    Object.entries(DEPARTMENTS).map(([key,d])=>`<option value="${key}" ${selected===key?'selected':''}>${d.label}</option>`).join("");
+    Object.entries(DEPARTMENTS).filter(([key]) => locked[key] !== true).map(([key,d])=>`<option value="${key}" ${selected===key?'selected':''}>${d.label}</option>`).join("");
+}
+// Reads just one school's locked_departments, by explicit school_id — used on the
+// self-signup screen, before login, when CURRENT_SCHOOL_ID (and so the usual
+// dbSelect auto-scoping) isn't set yet.
+async function fetchLockedDepartments(schoolId) {
+  if (!schoolId) return {};
+  try {
+    const rows = await sb(`/rest/v1/school_settings?school_id=eq.${schoolId}&select=locked_departments`);
+    return (rows[0] && rows[0].locked_departments) || {};
+  } catch (e) { return {}; }
 }
 function renderLogin() {
   let mode = "login";
@@ -2016,7 +2137,9 @@ function renderLogin() {
           ${schoolFieldHtml}
           <div class="field"><label>Full name</label><input id="fname" placeholder="Jane Okafor" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
-          <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select></div>
+          <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select>
+            <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
+          </div>
           <div class="field"><label>Phone number</label><input id="phone" placeholder="+256 700 000 000" /></div>
           <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
           <div class="field"><label>PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
@@ -2043,10 +2166,28 @@ function renderLogin() {
         if (!sel) return;
         if (!schools.length) { sel.innerHTML = `<option value="">No schools available</option>`; return; }
         sel.innerHTML = `<option value="">Select your school…</option>` + schools.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+        sel.onchange = refreshDeptOptionsForSelectedSchool;
       }).catch(() => {
         const sel = document.getElementById("school_id");
         if (sel) sel.innerHTML = `<option value="">Couldn't load schools</option>`;
       });
+      // Only relevant for the staff signup form (parents have no department field).
+      // Re-fetches locked_departments for whichever school was just picked and
+      // rebuilds the Department dropdown so a closed department never even shows
+      // up as an option — on top of the same check enforced server-side.
+      async function refreshDeptOptionsForSelectedSchool() {
+        const deptSel = document.getElementById("department");
+        const schoolSel = document.getElementById("school_id");
+        if (!deptSel || !schoolSel) return;
+        const schoolId = schoolSel.value;
+        deptSel.disabled = true;
+        const locked = await fetchLockedDepartments(schoolId);
+        deptSel.innerHTML = departmentSelectOptions("", locked);
+        deptSel.disabled = false;
+        const note = document.getElementById("deptLockNote");
+        const anyLocked = Object.values(locked).some(v => v === true);
+        if (note) note.style.display = anyLocked ? "" : "none";
+      }
       const signupLiveInput = document.getElementById("signupPhotoLive");
       const signupPickInput = document.getElementById("signupPhotoPick");
       const setSignupPreview = (dataUrl) => { document.getElementById("signupPhotoWrap").innerHTML = avatarHtml("", dataUrl, 64); };
@@ -2124,6 +2265,26 @@ function renderSchoolBlocked() {
   document.getElementById("blockedLogout").onclick = logout;
   document.getElementById("blockedRetry").onclick = async () => { await loadCurrentSchool(); render(); };
   document.getElementById("blockedContact").onclick = () => { showSupportPortal = true; render(); };
+}
+// Shown to a parent account when the school's Mother-System features flag has
+// parent_portal switched off. Distinct from renderSchoolBlocked(): the school
+// itself is fine and staff can log in as normal — only the parent-facing shell
+// is unavailable, so the messaging and the log-out-only action set reflect that.
+function renderParentPortalDisabled() {
+  app().innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <div class="brand" style="justify-content:center;">
+          <div class="brand-badge">${ic.lock || "🔒"}</div>
+        </div>
+        <h2 style="margin-bottom:10px;">Parent Portal unavailable</h2>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">The Parent Portal isn't currently enabled for this school. Please contact the school office for the latest updates on your child.</div>
+        <button class="btn btn-ghost" id="parentDisabledLogout" style="width:100%;">Log out</button>
+        <button class="btn btn-primary" id="parentDisabledRetry" style="width:100%;margin-top:8px;">Check again</button>
+      </div>
+    </div>`;
+  document.getElementById("parentDisabledLogout").onclick = logout;
+  document.getElementById("parentDisabledRetry").onclick = async () => { await loadCurrentSchool(); render(); };
 }
 // Reuses the normal Contact TransApple page (renderContactTransApple), just wrapped
 // in the same simple centered card used for login/blocked screens — this is how a
@@ -5462,6 +5623,64 @@ async function openSupportThread(ticket, container) {
    including themselves. Academic, Finance and Parents accounts can't change those
    details directly — they submit a request here, which Administration
    sees and actions further down this same page. */
+// Registration Controls card on Users & Roles (admin-only) — lets Administration
+// close individual departments to new self-signups. Reads/writes the same
+// school_settings.locked_departments jsonb column checked server-side in
+// create_account() (see DEPARTMENT_LOCK_SQL), so this is a genuine lock, not
+// just a hidden dropdown option.
+async function renderDeptLockCard() {
+  const card = document.getElementById("deptLockCard");
+  if (!card) return;
+  let locked = {};
+  let missingCol = false;
+  try {
+    const rows = await dbSelect("school_settings", { id:"eq.1", select:"locked_departments" });
+    locked = (rows[0] && rows[0].locked_departments) || {};
+  } catch (e) { missingCol = true; }
+  if (missingCol) {
+    card.innerHTML = `<div class="tiny-note">Registration Controls needs a one-time setup before it can save anything.</div>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${DEPARTMENT_LOCK_SQL}</pre>
+      <button class="btn btn-primary btn-sm" id="retryDeptLockBtn" style="margin-top:10px;">I've run it — Refresh</button>`;
+    const retry = document.getElementById("retryDeptLockBtn");
+    if (retry) retry.onclick = renderDeptLockCard;
+    return;
+  }
+  card.innerHTML = `
+    ${Object.entries(DEPARTMENTS).map(([key,d]) => `
+      <div class="list-row" data-dept-row="${key}">
+        <div class="list-main">
+          <div class="list-title">${d.label}${key==="administration" ? ` <span class="badge badge-amber">Full access</span>` : ""}</div>
+          <div class="list-sub">${locked[key]===true ? "Closed to new self-registrations" : "Open — anyone can self-register into this department"}</div>
+        </div>
+        <label class="row" style="gap:6px;align-items:center;cursor:pointer;">
+          <input type="checkbox" data-dept-lock="${key}" ${locked[key]===true?'checked':''} style="width:18px;height:18px;"/>
+        </label>
+      </div>`).join("")}
+    <button class="btn btn-primary btn-sm" id="saveDeptLocksBtn" style="margin-top:10px;">Save registration controls</button>
+    <div id="deptLockMsg" style="margin-top:8px;"></div>`;
+  card.querySelectorAll("[data-dept-lock]").forEach(cb => {
+    cb.onchange = () => {
+      const row = cb.closest("[data-dept-row]");
+      row.querySelector(".list-sub").textContent = cb.checked ? "Closed to new self-registrations" : "Open — anyone can self-register into this department";
+    };
+  });
+  document.getElementById("saveDeptLocksBtn").onclick = async () => {
+    const msg = document.getElementById("deptLockMsg"); msg.innerHTML = "";
+    const btn = document.getElementById("saveDeptLocksBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const newLocked = {};
+    card.querySelectorAll("[data-dept-lock]").forEach(cb => { newLocked[cb.dataset.deptLock] = cb.checked; });
+    try {
+      await dbUpsert("school_settings", { id: 1, locked_departments: newLocked }, "id");
+      await loadSchoolSettings();
+      msg.innerHTML = `<div class="msg-ok">Saved — the self-signup screen picks this up automatically.</div>`;
+      toast("Registration controls saved.", false);
+    } catch (e) {
+      msg.innerHTML = `<div class="err">${e.message}</div>`;
+    }
+    btn.disabled = false; btn.textContent = "Save registration controls";
+  };
+}
 async function renderUsers(container) {
   const isAdmin = hasFullAccess(profile);
   const restrictedDept = profile?.department === "academic" || profile?.department === "finance" || profile?.department === "parents";
@@ -5523,7 +5742,11 @@ async function renderUsers(container) {
     <div class="card" id="list"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
     <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
-    <div class="card" id="reqList"></div>`;
+    <div class="card" id="reqList"></div>
+    <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Registration Controls</h3></div>
+    <div class="tiny-note" style="margin-bottom:10px;">Close a department to stop new self-signups for it from the sign-in screen's "Create account" flow — useful once a department has all the staff it needs, or to keep a sensitive department (like Administration) invite-only. This never touches existing accounts, and you can still hand-assign any department to an account above regardless of this setting.</div>
+    <div class="card" id="deptLockCard"></div>`;
+  renderDeptLockCard();
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) logoutBtn.onclick = async () => {
     if (await customConfirm("Log out?")) logout();
