@@ -441,7 +441,7 @@
   html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
   input,textarea,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;-webkit-touch-callout:default;}
 
-  /* ---- Launch / loading splash screen — shown for a fixed 3s on every
+  /* ---- Launch / loading splash screen — shown for a fixed 6s on every
      cold load while boot() fetches school settings + restores the session
      underneath it, then fades out on its own. See #splashScreen JS below. ---- */
   #splashScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 45%,var(--teal-dark) 100%);background-size:220% 220%;animation:gradientFlow 6s ease infinite;transition:opacity .5s ease;}
@@ -701,6 +701,9 @@ const FEE_REMINDERS_SQL = `create table if not exists fee_reminders (
   created_at timestamptz default now()
 );
 alter table fee_reminders enable row level security;
+drop policy if exists "Anyone can read fee_reminders" on fee_reminders;
+drop policy if exists "Anyone can create fee_reminders" on fee_reminders;
+drop policy if exists "Anyone can update fee_reminders" on fee_reminders;
 create policy "Anyone can read fee_reminders" on fee_reminders for select using (true);
 create policy "Anyone can create fee_reminders" on fee_reminders for insert with check (true);
 create policy "Anyone can update fee_reminders" on fee_reminders for update using (true);`;
@@ -6663,12 +6666,12 @@ document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.m
 document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 
 /* ---------------- LAUNCH SPLASH SCREEN ----------------
-   Purely cosmetic gate: always shown for a fixed 3s on cold load with a
+   Purely cosmetic gate: always shown for a fixed 6s on cold load with a
    simple letter-by-letter reveal of "Powered by TransApple Technologies",
    then fades out and reveals whatever render() has already painted
    underneath (login screen, restored session, etc.). The real data
    loading below runs in parallel with the timer, not after it, so the
-   3s is a floor, not extra wait time on top of the network calls. */
+   6s is a floor, not extra wait time on top of the network calls. */
 function playSplashScreen() {
   const textEl = document.getElementById("splashText");
   const lead = "Powered by ";
@@ -6697,7 +6700,7 @@ function playSplashScreen() {
         setTimeout(() => splash.remove(), 550);
       }
       resolve();
-    }, 3000);
+    }, 6000);
   });
 }
 
@@ -6711,7 +6714,7 @@ function playSplashScreen() {
   await tryRestoreRememberedSession();
   render();
   // The app underneath is already ready by now; the splash just waits out
-  // its own 3s minimum before stepping aside and "opening" the app.
+  // its own 6s minimum before stepping aside and "opening" the app.
   await splashDone;
 })();
 
