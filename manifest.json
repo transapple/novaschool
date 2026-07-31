@@ -1,0 +1,31 @@
+{
+  "name": "Nova School Manager",
+  "short_name": "Nova School",
+  "description": "Nova School Manager",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF2F9",
+  "theme_color": "#16274A",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/Qddq11JN/20260731-074502.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.postimg.cc/Qddq11JN/20260731-074502.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.postimg.cc/Qddq11JN/20260731-074502.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
