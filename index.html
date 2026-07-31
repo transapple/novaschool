@@ -504,7 +504,8 @@ const ic = {
   bell:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
   pin:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
   pulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
-  lifebuoy:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M19.07 4.93l-4.24 4.24M9.17 14.83l-4.24 4.24"/></svg>`
+  lifebuoy:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M19.07 4.93l-4.24 4.24M9.17 14.83l-4.24 4.24"/></svg>`,
+  download:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`
 };
 
 /* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
@@ -2630,13 +2631,15 @@ async function refreshStaffBell() {
     if (badge) badge.remove();
   });
   if (!staffNotifEligible()) return;
-  let announcements = [], messages = [];
+  let announcements = [], messages = [], latestChangelog = null;
   try { announcements = await fetchStaffAnnouncements(); } catch (e) {}
   try { messages = await fetchStaffMessages(); } catch (e) {}
+  try { latestChangelog = await fetchLatestChangelog(); } catch (e) {}
   const read = getStaffReadIds();
   const unreadAnnCount = announcements.filter(a => !read.has(`ann:${a.id}`)).length;
   const unreadMsgCount = messages.filter(m => m.status === "unread").length;
-  const count = unreadAnnCount + unreadMsgCount;
+  const updateUnseen = latestChangelog && String(latestChangelog.id) !== getSeenChangelogId();
+  const count = unreadAnnCount + unreadMsgCount + (updateUnseen ? 1 : 0);
   document.querySelectorAll('[data-bell="staff"]').forEach(btn => {
     if (count > 0) btn.appendChild(el(`<span class="nav-badge-count">${count > 99 ? "99+" : count}</span>`));
   });
@@ -2662,22 +2665,39 @@ async function openStaffBellPanel() {
   backdrop.onclick = closeStaffBellPanel;
   document.getElementById("staffBellClose").onclick = closeStaffBellPanel;
 
-  let announcements = [], messages = [];
+  let announcements = [], messages = [], latestChangelog = null;
   try { announcements = await fetchStaffAnnouncements(); } catch (e) {}
   try { messages = await fetchStaffMessages(); } catch (e) {}
+  try { latestChangelog = await fetchLatestChangelog(); } catch (e) {}
   const body = document.getElementById("staffBellBody");
   if (!body) return; // panel was closed while loading
 
   const annItems = announcements.map(a => ({ kind: "Announcement", title: a.title, body: a.body, when: a.created_at }));
   const msgItems = messages.map(m => ({ kind: "Message", title: `${m.parent_name || "A parent"} · ${m.subject}`, body: m.message, when: m.created_at, unread: m.status === "unread" }));
   const items = [...annItems, ...msgItems].sort((a, b) => new Date(b.when) - new Date(a.when));
+  const updateUnseen = latestChangelog && String(latestChangelog.id) !== getSeenChangelogId();
 
-  body.innerHTML = items.length ? items.map(i => `
+  const updateItemHtml = latestChangelog ? `
+    <div class="bell-item${updateUnseen ? "" : ""}" id="bellUpdateItem" style="cursor:pointer;border:1px solid var(--line);border-radius:10px;">
+      <div class="b-title">🚀 New version available${updateUnseen ? " <span class=\"nav-badge-count\" style=\"position:static;display:inline-block;vertical-align:middle;margin-left:6px;\">1</span>" : ""}</div>
+      <div class="b-body"><strong>${latestChangelog.title}</strong>${latestChangelog.description ? ` — ${latestChangelog.description}` : ""}</div>
+      <div class="b-meta">Update · ${new Date(latestChangelog.created_at).toLocaleString()}</div>
+      <button class="btn btn-primary btn-sm" id="bellUpdateBtn" style="margin-top:8px;width:100%;">${ic.download} Update to New Version</button>
+    </div>` : "";
+
+  body.innerHTML = (updateItemHtml || items.length) ? `${updateItemHtml}${items.map(i => `
     <div class="bell-item">
       <div class="b-title">${i.kind === "Message" ? "" : "📣 "}${i.title}</div>
       <div class="b-body">${i.body}</div>
       <div class="b-meta">${i.kind} · ${new Date(i.when).toLocaleString()}</div>
-    </div>`).join("") : `<div class="empty">No notifications yet.</div>`;
+    </div>`).join("")}` : `<div class="empty">No notifications yet.</div>`;
+
+  const updateBtn = document.getElementById("bellUpdateBtn");
+  if (updateBtn) updateBtn.onclick = () => {
+    markChangelogSeen(latestChangelog.id);
+    openUpdateSite();
+    refreshStaffBell();
+  };
 
   // Mark everything just shown as read/seen so the badge clears immediately.
   markStaffReadIds(announcements.map(a => `ann:${a.id}`));
@@ -2726,6 +2746,26 @@ async function unsubscribeStaffPush() {
   await sub.unsubscribe();
   try { await sb(`/rest/v1/push_subscriptions_staff?endpoint=eq.${encodeURIComponent(endpoint)}`, { method: "DELETE" }); } catch (e) {}
 }
+
+/* ---------------- SOFTWARE UPDATES ----------------
+   Reads platform_changelog — populated from the Mother App's Updates &
+   Maintenance → Changelog tab whenever a new version is released. That
+   table already exists with a permissive read policy, so no extra setup
+   is needed here. The bell shows an "Update available" item the moment a
+   changelog row is newer than the one this device last saw; tapping it
+   (or the button in Settings) opens the update site, where the new
+   version is downloaded from. */
+const UPDATE_SITE_URL = "https://transapple.github.io/novaschool/";
+async function fetchLatestChangelog() {
+  try {
+    const rows = await sb(`/rest/v1/platform_changelog?${qs({ select: "*", order: "created_at.desc", limit: "1" })}`);
+    return rows[0] || null;
+  } catch (e) { return null; }
+}
+function updateSeenKey() { return `novaSeenChangelogId_${CURRENT_SCHOOL_ID || "anon"}`; }
+function getSeenChangelogId() { try { return localStorage.getItem(updateSeenKey()); } catch (e) { return null; } }
+function markChangelogSeen(id) { if (id == null) return; try { localStorage.setItem(updateSeenKey(), String(id)); } catch (e) {} }
+function openUpdateSite() { window.open(UPDATE_SITE_URL, "_blank", "noopener"); }
 
 /* ===================================================================
    PARENT PORTAL — a completely separate app shell for role:"parent"
@@ -5930,6 +5970,35 @@ async function wirePushNotifCard(container) {
   };
 }
 
+/* ---- Software updates card — shown on both the admin Settings page and the
+   read-only Settings page every other staff member sees. Sources the latest
+   release from platform_changelog (Mother App → Updates & Maintenance) and
+   links out to the update site to download the new version. ---- */
+function updateCardHtml(changelog) {
+  return `
+    <div class="card">
+      <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.download}</div><div><h3 style="color:var(--navy);">Software updates</h3><p>New versions are published by TransApple and show up here first.</p></div></div>
+      ${changelog ? `
+        <div class="about-row" style="margin-bottom:14px;">
+          <div class="lbl">Latest release</div>
+          <div class="val" style="font-weight:700;">${changelog.title}</div>
+          ${changelog.description ? `<div class="val" style="margin-top:2px;">${changelog.description}</div>` : ""}
+        </div>
+        <div class="tiny-note" style="margin-bottom:14px;">Released ${new Date(changelog.created_at).toLocaleString()}</div>
+      ` : `<div class="tiny-note" style="margin-bottom:14px;">No update notes have been published yet.</div>`}
+      <button class="btn btn-primary" id="updateSiteBtn" style="width:100%;">${ic.download} Update to New Version</button>
+    </div>`;
+}
+function wireUpdateCard(container, changelog) {
+  const btn = container.querySelector("#updateSiteBtn");
+  if (!btn) return;
+  btn.onclick = () => {
+    if (changelog) markChangelogSeen(changelog.id);
+    openUpdateSite();
+    refreshStaffBell();
+  };
+}
+
 async function renderSettings(container) {
   const isAdmin = hasFullAccess(profile);
   let row = null, missingTable = false;
@@ -5952,6 +6021,7 @@ async function renderSettings(container) {
 
   const s = row || {};
   if (!isAdmin) { renderSettingsReadOnly(container, s); return; }
+  const latestChangelog = await fetchLatestChangelog();
 
   const colorKey = s.brand_color && BRAND_PRESETS[s.brand_color] ? s.brand_color : "teal";
   let logoDataUrl = s.logo_url || null;
@@ -6041,11 +6111,13 @@ async function renderSettings(container) {
     </div>
 
     ${pushNotifCardHtml()}
+    ${updateCardHtml(latestChangelog)}
 
     <button class="btn btn-primary" id="saveSettingsBtn" style="width:100%;">Save changes</button>
     <div id="settingsMsg" style="margin-top:10px;"></div>
   `;
   wirePushNotifCard(container);
+  wireUpdateCard(container, latestChangelog);
 
   function updatePreview() {
     const name = val(container,"f_sname") || "Nova School";
@@ -6163,7 +6235,8 @@ async function renderSettings(container) {
     }
   };
 }
-function renderSettingsReadOnly(container, s) {
+async function renderSettingsReadOnly(container, s) {
+  const latestChangelog = await fetchLatestChangelog();
   const hasAny = s.school_name || s.motto || s.mission || s.vision || s.phone || s.email || s.address;
   container.innerHTML = `
     <h3 style="color:var(--navy);margin-bottom:4px;">About ${s.school_name || "this school"}</h3>
@@ -6186,8 +6259,10 @@ function renderSettingsReadOnly(container, s) {
     </div>` : ''}
     `}
     ${pushNotifCardHtml()}
+    ${updateCardHtml(latestChangelog)}
   `;
   wirePushNotifCard(container);
+  wireUpdateCard(container, latestChangelog);
 }
 
 /* ---------------- TRASH ---------------- */
