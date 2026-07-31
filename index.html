@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Nova School">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/png" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
-<link rel="apple-touch-icon" href="https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png">
+<link rel="icon" type="image/png" href="https://i.postimg.cc/Qddq11JN/20260731-074502.png">
+<link rel="apple-touch-icon" href="https://i.postimg.cc/Qddq11JN/20260731-074502.png">
 <style>
   :root{
     --navy:#16274A;
@@ -2650,7 +2650,7 @@ async function refreshParentBadges() {
 function missingSetupHtml(message) {
   return `<div class="card">
     <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>${message}</p></div></div>
-    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your school's administrator/developer to run this once in the Supabase SQL editor, then refresh.</p>
+    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your school's administrator/developer to complete the one-time setup, then refresh.</p>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${PARENT_PORTAL_SQL}</pre>
   </div>`;
 }
@@ -2740,51 +2740,31 @@ async function renderParentMeetings(container) {
   markNotifsRead(notifIdsFor(meetings, announcements, reminders));
   refreshParentBadges();
 
+  const items = [
+    ...meetings.map(m => ({ date: m.meeting_date, icon: ic.calendar, title: m.title,
+      sub: `Meeting · ${formatDate(m.meeting_date)} · ${new Date(m.meeting_date).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}${m.location ? " · "+m.location : ""}`,
+      view: () => openViewModal(m.title, [["Date & time", new Date(m.meeting_date).toLocaleString()], ["Location", m.location], ["Audience", m.audience || "Everyone"], ["Details", m.description]]) })),
+    ...reminders.map(r => ({ date: r.created_at, icon: ic.fees, title: r.title,
+      sub: `Fee reminder · ${r.students ? `About ${r.students.full_name}` : "To all parents"} · ${formatDate(r.created_at)}`,
+      view: () => openViewModal(r.title, [["About", r.students ? r.students.full_name : "All parents"], ["Message", r.message], ["Sent on", new Date(r.created_at).toLocaleString()]]) })),
+    ...announcements.map(a => ({ date: a.created_at, icon: ic.megaphone, title: a.title,
+      sub: `Announcement · ${formatDate(a.created_at)}`,
+      view: () => openViewModal(a.title, [["Audience", a.audience||"Everyone"], ["Message", a.message], ["Sent on", new Date(a.created_at).toLocaleString()]]) })),
+  ].sort((x,y) => new Date(y.date) - new Date(x.date));
+
   container.innerHTML = `
-    <div class="card">
-      <h3 style="color:#c2410c;margin-bottom:12px;">Upcoming meetings</h3>
-      <div id="meetingsList"></div>
-      ${meetingsMissing ? `<p style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-top:10px;">Meetings haven't been set up for this school yet — check back later.</p>` : ""}
-    </div>
-    <div class="card">
-      <h3 style="color:var(--red);margin-bottom:12px;">Fee reminders</h3>
-      <div id="reminderList"></div>
-    </div>
-    <div class="card">
-      <h3 style="color:var(--indigo);margin-bottom:12px;">Announcements</h3>
-      <div id="announceList"></div>
-    </div>
+    <div class="section-head"><h3 style="color:var(--indigo);">Notifications</h3></div>
+    <div class="card" id="notifList"></div>
+    ${meetingsMissing ? `<p style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-top:10px;">Meetings haven't been set up for this school yet — check back later.</p>` : ""}
   `;
 
-  const meetingsList = document.getElementById("meetingsList");
-  meetingsList.innerHTML = meetings.length ? "" : (meetingsMissing ? "" : emptyState("No upcoming meetings."));
-  meetings.forEach(m => {
-    const row = el(`<div class="list-row"><div class="avatar">${ic.calendar}</div>
-      <div class="list-main"><div class="list-title">${m.title}</div>
-      <div class="list-sub">${formatDate(m.meeting_date)} · ${new Date(m.meeting_date).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}${m.location ? " · "+m.location : ""}</div></div></div>`);
-    row.onclick = () => openViewModal(m.title, [
-      ["Date & time", new Date(m.meeting_date).toLocaleString()], ["Location", m.location],
-      ["Audience", m.audience || "Everyone"], ["Details", m.description],
-    ]);
-    meetingsList.appendChild(row);
-  });
-
-  const reminderList = document.getElementById("reminderList");
-  reminderList.innerHTML = reminders.length ? "" : emptyState("No fee reminders right now.");
-  reminders.forEach(r => {
-    const row = el(`<div class="list-row"><div class="avatar">${ic.fees}</div>
-      <div class="list-main"><div class="list-title">${r.title}</div><div class="list-sub">${r.students ? `About ${r.students.full_name}` : "To all parents"} · ${formatDate(r.created_at)}</div></div></div>`);
-    row.onclick = () => openViewModal(r.title, [["About", r.students ? r.students.full_name : "All parents"], ["Message", r.message], ["Sent on", new Date(r.created_at).toLocaleString()]]);
-    reminderList.appendChild(row);
-  });
-
-  const announceList = document.getElementById("announceList");
-  announceList.innerHTML = announcements.length ? "" : emptyState("No announcements yet.");
-  announcements.forEach(a => {
-    const row = el(`<div class="list-row"><div class="avatar">${ic.megaphone}</div>
-      <div class="list-main"><div class="list-title">${a.title}</div><div class="list-sub">${formatDate(a.created_at)}</div></div></div>`);
-    row.onclick = () => openViewModal(a.title, [["Audience", a.audience||"Everyone"], ["Message", a.message], ["Sent on", new Date(a.created_at).toLocaleString()]]);
-    announceList.appendChild(row);
+  const list = document.getElementById("notifList");
+  list.innerHTML = items.length ? "" : emptyState("Nothing here yet.");
+  items.forEach(it => {
+    const row = el(`<div class="list-row"><div class="avatar">${it.icon}</div>
+      <div class="list-main"><div class="list-title">${it.title}</div><div class="list-sub">${it.sub}</div></div></div>`);
+    row.onclick = it.view;
+    list.appendChild(row);
   });
 }
 
@@ -3436,7 +3416,7 @@ function openExamTypeModal(body, t) {
   const isEdit = !!t;
   openModal(isEdit ? "Edit exam type" : "New exam type", `
     <div class="field"><label>Exam type name</label><input id="f_name" placeholder="Mid-Term Exam" value="${t?.name||''}"/></div>
-    <div class="field"><label>Maximum score</label><input id="f_max" type="number" min="1" step="1" placeholder="100" value="${t?.max_score??100}"/></div>
+    <div class="field"><label>Maximum score</label><input id="f_max" type="number" min="1" step="1" placeholder="100" value="${t?.max_score??''}"/></div>
   `, async (ov) => {
     const payload = { name: val(ov,"f_name"), max_score: Number(val(ov,"f_max")) || 100 };
     if (isEdit) await dbUpdate("exam_types", t.id, payload); else await dbInsert("exam_types", payload);
@@ -3453,8 +3433,8 @@ async function renderGrades(body) {
 
   if (missingTable) {
     body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Grades need a small table in your database before you can define them.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Grades need a one-time setup before you can define them.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
       <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${GRADES_SETUP_SQL}</pre>
       <button class="btn btn-primary" id="retryGradesBtn" style="margin-top:12px;">I've run it — Refresh</button>
     </div>`;
@@ -3513,18 +3493,18 @@ async function renderIdFormat(body) {
   body.innerHTML = `
     <div class="section-head"><h3 style="color:var(--teal-dark);">ID Format</h3></div>
     <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.6;">Set a prefix once and every new registration gets a unique ID automatically — prefix + gender (M/F) + year + a running number, e.g. <b>DFM25000</b>. The number keeps counting up with every new registration, whatever the gender.</p>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving fails)</summary>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving fails)</summary>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ID_FORMAT_SQL}</pre></details>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup — Grade field (run once)</summary>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup — Grade field (run once)</summary>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${GRADE_FIELD_SQL}</pre></details>
 
     <div class="card">
       <h4 style="margin-bottom:10px;color:var(--navy);">Student IDs</h4>
       <div class="grid2">
         <div class="field"><label>Prefix</label><input id="f_s_prefix" placeholder="DF" value="${s.student_id_prefix||''}"/></div>
-        <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" value="${s.student_id_digits??3}"/></div>
+        <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" placeholder="3" value="${s.student_id_digits??''}"/></div>
       </div>
-      <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" value="${s.student_id_seq??0}"/></div>
+      <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" placeholder="0" value="${s.student_id_seq??''}"/></div>
       <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevSM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevSF">—</b></div>
     </div>
 
@@ -3532,9 +3512,9 @@ async function renderIdFormat(body) {
       <h4 style="margin-bottom:10px;color:var(--navy);">Teacher IDs</h4>
       <div class="grid2">
         <div class="field"><label>Prefix</label><input id="f_t_prefix" placeholder="DF" value="${s.teacher_id_prefix||''}"/></div>
-        <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" value="${s.teacher_id_digits??3}"/></div>
+        <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" placeholder="3" value="${s.teacher_id_digits??''}"/></div>
       </div>
-      <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" value="${s.teacher_id_seq??0}"/></div>
+      <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" placeholder="0" value="${s.teacher_id_seq??''}"/></div>
       <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevTM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevTF">—</b></div>
     </div>
 
@@ -4560,97 +4540,83 @@ async function renderFeeReminders(body) {
   const students = await dbSelect("students", { status:"eq.active", select:"id,full_name,admission_no", order:"full_name.asc" }).catch(()=>[]);
   body.innerHTML = `
     <div class="card">
-      <h3 style="color:var(--red);margin-bottom:4px;">Send a fee reminder</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Send to every parent, or target the parent(s) of one specific student (e.g. to chase an outstanding balance).</div>
-      <div class="field"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
+      <h3 style="color:var(--red);margin-bottom:4px;">Send a message</h3>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Send a fee reminder to specific parents, or a finance announcement to everyone.</div>
+      <div class="field"><label>Type</label><select id="f_msgType"><option value="reminder">Fee reminder</option><option value="announcement">Finance announcement</option></select></div>
+      <div class="field" id="f_remTargetWrap"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
       <div class="field" id="f_remStudentWrap" style="display:none;"><label>Student</label><select id="f_remStudent"><option value="">— Select student —</option>${students.map(s=>`<option value="${s.id}">${s.full_name} (${s.admission_no})</option>`).join("")}</select></div>
-      <div class="field"><label>Title</label><input id="f_remTitle" placeholder="e.g. Term 2 balance reminder"/></div>
-      <div class="field"><label>Message</label><textarea id="f_remMessage" rows="4" placeholder="Write your reminder…"></textarea></div>
-      <button class="btn btn-primary" id="sendRemBtn" style="width:100%;">Send reminder</button>
-      <div id="remStatus"></div>
+      <div class="field" id="f_annAudienceWrap" style="display:none;"><label>Audience</label><select id="f_annAudience"><option>Everyone</option><option>All parents</option></select></div>
+      <div class="field"><label>Title</label><input id="f_msgTitle" placeholder="e.g. Term 2 balance reminder"/></div>
+      <div class="field"><label>Message</label><textarea id="f_msgMessage" rows="4" placeholder="Write your message…"></textarea></div>
+      <button class="btn btn-primary" id="sendMsgBtn" style="width:100%;">Send</button>
+      <div id="msgStatus"></div>
     </div>
-    <div class="card" id="remList"><div class="center-loading">Loading…</div></div>
-    <div class="card">
-      <h3 style="color:var(--indigo);margin-bottom:4px;">Send a finance announcement</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Broadcasts to everyone the same way the school's Announcements page does.</div>
-      <div class="field"><label>Audience</label><select id="f_annAudience"><option>Everyone</option><option>All parents</option></select></div>
-      <div class="field"><label>Title</label><input id="f_annTitle" placeholder="e.g. New payment method accepted"/></div>
-      <div class="field"><label>Message</label><textarea id="f_annMessage" rows="4" placeholder="Write the announcement…"></textarea></div>
-      <button class="btn btn-primary" id="sendAnnBtn" style="width:100%;">Send announcement</button>
-      <div id="annStatus"></div>
-    </div>
-    <div class="card" id="annList"><div class="center-loading">Loading…</div></div>
+    <div class="card" id="msgList"><div class="center-loading">Loading…</div></div>
   `;
+  const typeSel = document.getElementById("f_msgType");
   const targetSel = document.getElementById("f_remTarget");
   const studentWrap = document.getElementById("f_remStudentWrap");
+  const remTargetWrap = document.getElementById("f_remTargetWrap");
+  const annAudienceWrap = document.getElementById("f_annAudienceWrap");
   targetSel.onchange = () => { studentWrap.style.display = targetSel.value==="student" ? "" : "none"; };
+  typeSel.onchange = () => {
+    const isReminder = typeSel.value === "reminder";
+    remTargetWrap.style.display = isReminder ? "" : "none";
+    studentWrap.style.display = (isReminder && targetSel.value==="student") ? "" : "none";
+    annAudienceWrap.style.display = isReminder ? "none" : "";
+  };
 
-  async function loadReminders() {
-    const wrap = document.getElementById("remList");
-    try {
-      const rows = await dbSelectActive("fee_reminders", { order:"created_at.desc", limit:"20", select:"*,students(full_name,admission_no)" });
-      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Recent reminders</h3>` +
-        (rows.length ? rows.map(r => `<div class="list-row"><div class="list-main"><div class="list-title">${r.title}</div><div class="list-sub">${r.students ? `To ${r.students.full_name} (${r.students.admission_no||''})` : "To all parents"} · ${formatDate(r.created_at)}</div></div>
-          <button class="btn btn-ghost btn-sm" data-delrem="${r.id}">${ic.trash||"Delete"}</button></div>`).join("") : emptyState("No reminders sent yet."));
-      wrap.querySelectorAll("[data-delrem]").forEach(btn => {
-        btn.onclick = async () => { if (await customConfirm("Delete this reminder?", { danger:true, okLabel:"Delete" })) safe(async()=>{ await dbUpdate("fee_reminders", btn.dataset.delrem, { deleted_at:new Date().toISOString() }); loadReminders(); })(); };
-      });
-    } catch (e) {
+  async function loadRecent() {
+    const wrap = document.getElementById("msgList");
+    let reminders = [], announcements = [], missing = null;
+    try { reminders = await dbSelectActive("fee_reminders", { order:"created_at.desc", limit:"20", select:"*,students(full_name,admission_no)" }); } catch (e) { missing = "reminders"; }
+    try { announcements = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:"20" }); } catch (e) { if (!missing) missing = "announcements"; }
+
+    if (missing) {
       wrap.innerHTML = `<div class="card">
-        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>Fee Reminders needs a small table in your database before you can send anything.</p></div></div>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${FEE_REMINDERS_SQL}</pre>
-        <button class="btn btn-primary" id="retryRemBtn" style="margin-top:12px;">I've run it — Refresh</button>
+        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>This needs a one-time setup before you can send anything.</p></div></div>
+        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${missing === "reminders" ? FEE_REMINDERS_SQL : COMMUNICATIONS_SQL}</pre>
+        <button class="btn btn-primary" id="retryMsgBtn" style="margin-top:12px;">I've run it — Refresh</button>
       </div>`;
-      const retryBtn = document.getElementById("retryRemBtn");
-      if (retryBtn) retryBtn.onclick = loadReminders;
+      document.getElementById("retryMsgBtn").onclick = loadRecent;
+      return;
     }
+
+    const items = [
+      ...reminders.map(r => ({ date: r.created_at, kind: "Reminder", title: r.title, sub: r.students ? `To ${r.students.full_name} (${r.students.admission_no||''})` : "To all parents", del: async () => { await dbUpdate("fee_reminders", r.id, { deleted_at:new Date().toISOString() }); loadRecent(); } })),
+      ...announcements.map(c => ({ date: c.created_at, kind: "Announcement", title: c.title, sub: c.audience || "Everyone", del: async () => { await softDelete("school_communications", c.id); loadRecent(); } })),
+    ].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Recent messages</h3>` +
+      (items.length ? items.map(it => `<div class="list-row"><div class="list-main"><div class="list-title">${it.title}</div><div class="list-sub">${it.kind} · ${it.sub} · ${formatDate(it.date)}</div></div>
+        <button class="btn btn-ghost btn-sm" data-delmsg>${ic.trash||"Delete"}</button></div>`).join("") : emptyState("No messages sent yet."));
+    [...wrap.querySelectorAll("[data-delmsg]")].forEach((btn, i) => {
+      btn.onclick = async () => { if (await customConfirm(`Delete "${items[i].title}"?`, { danger:true, okLabel:"Delete" })) safe(items[i].del)(); };
+    });
   }
-  document.getElementById("sendRemBtn").onclick = async () => {
-    const status = document.getElementById("remStatus"); status.innerHTML = "";
-    const title = document.getElementById("f_remTitle").value.trim();
-    const message = document.getElementById("f_remMessage").value.trim();
-    const target = targetSel.value;
-    const studentId = document.getElementById("f_remStudent").value;
+
+  document.getElementById("sendMsgBtn").onclick = async () => {
+    const status = document.getElementById("msgStatus"); status.innerHTML = "";
+    const title = document.getElementById("f_msgTitle").value.trim();
+    const message = document.getElementById("f_msgMessage").value.trim();
     if (!title || !message) { status.innerHTML = `<div class="err">Please fill in both title and message.</div>`; return; }
-    if (target==="student" && !studentId) { status.innerHTML = `<div class="err">Please select a student.</div>`; return; }
     try {
-      await dbInsert("fee_reminders", { student_id: target==="student" ? studentId : null, title, message, created_by: profile?.full_name || null });
-      status.innerHTML = `<div class="msg-ok">Reminder sent.</div>`;
-      document.getElementById("f_remTitle").value = ""; document.getElementById("f_remMessage").value = "";
-      loadReminders();
+      if (typeSel.value === "reminder") {
+        const target = targetSel.value;
+        const studentId = document.getElementById("f_remStudent").value;
+        if (target==="student" && !studentId) { status.innerHTML = `<div class="err">Please select a student.</div>`; return; }
+        await dbInsert("fee_reminders", { student_id: target==="student" ? studentId : null, title, message, created_by: profile?.full_name || null });
+        status.innerHTML = `<div class="msg-ok">Reminder sent.</div>`;
+      } else {
+        await dbInsert("school_communications", { type:"announcement", title, message, audience: document.getElementById("f_annAudience").value, created_by: profile?.full_name || null });
+        status.innerHTML = `<div class="msg-ok">Announcement sent.</div>`;
+      }
+      document.getElementById("f_msgTitle").value = ""; document.getElementById("f_msgMessage").value = "";
+      loadRecent();
     } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
   };
 
-  async function loadAnnouncements() {
-    const wrap = document.getElementById("annList");
-    try {
-      const rows = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:"20" });
-      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Recent announcements</h3>` +
-        (rows.length ? rows.map(c => `<div class="list-row"><div class="list-main"><div class="list-title">${c.title}</div><div class="list-sub">${c.audience||"Everyone"} · ${formatDate(c.created_at)}</div></div></div>`).join("") : emptyState("No announcements sent yet."));
-    } catch (e) {
-      wrap.innerHTML = `<div class="card">
-        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>Announcements need a small table in your database before you can send anything.</p></div></div>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${COMMUNICATIONS_SQL}</pre>
-        <button class="btn btn-primary" id="retryAnnBtn" style="margin-top:12px;">I've run it — Refresh</button>
-      </div>`;
-      const retryBtn = document.getElementById("retryAnnBtn");
-      if (retryBtn) retryBtn.onclick = loadAnnouncements;
-    }
-  }
-  document.getElementById("sendAnnBtn").onclick = async () => {
-    const status = document.getElementById("annStatus"); status.innerHTML = "";
-    const title = document.getElementById("f_annTitle").value.trim();
-    const message = document.getElementById("f_annMessage").value.trim();
-    if (!title || !message) { status.innerHTML = `<div class="err">Please fill in both title and message.</div>`; return; }
-    try {
-      await dbInsert("school_communications", { type:"announcement", title, message, audience: document.getElementById("f_annAudience").value, created_by: profile?.full_name || null });
-      status.innerHTML = `<div class="msg-ok">Announcement sent.</div>`;
-      document.getElementById("f_annTitle").value = ""; document.getElementById("f_annMessage").value = "";
-      loadAnnouncements();
-    } catch (e) { status.innerHTML = `<div class="err">${e.message}</div>`; }
-  };
-  loadReminders();
-  loadAnnouncements();
+  loadRecent();
 }
 async function renderFeeStructure(body) {
   const [classes, terms, items] = await Promise.all([
@@ -4824,7 +4790,7 @@ async function renderFeePayment(body) {
       <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
       <div id="payMsg"></div>
       <div class="tiny-note" style="margin-top:10px;text-align:left;">Once recorded, a payment and its receipt are permanent — they can't be edited or deleted afterwards, so double-check the details before saving.</div>
-      <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">Enforce this at the database level too (optional, one-time)</summary>
+      <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">Enforce this at the account level too (optional, one-time)</summary>
       <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${FEE_PAYMENTS_READONLY_SQL}</pre></details>
     </div>`;
   const classFilterSel = document.getElementById("f_classFilter");
@@ -4983,7 +4949,7 @@ async function renderExamList(body) {
     dbSelectActive("exam_types", { order:"name.asc" }),
   ]);
   body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exams</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam</button></div>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving an exam or a remark fails)</summary>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving an exam or a remark fails)</summary>
     <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${EXAM_MIGRATION_SQL}</pre></details>
     <div class="card" id="list"></div>`;
   const list = document.getElementById("list");
@@ -5170,82 +5136,84 @@ async function renderResultsOverview(body, filters={}) {
     list.appendChild(row);
   });
 }
-/* ---------------- COMMS: Announcements / Reports / Notices / Meetings ----------------
-   One page, four pill tabs. Announcements/Reports/Notices share one small
-   table (school_communications) told apart by `type`. Meetings gets its own
-   table (school_meetings, see MEETINGS_SQL) since it needs a date/location
-   instead of a free-text message. Administration always has this (via "all"
-   access); the Parents & Community department is the other one that sees it,
-   for sending things out to parents/guardians. */
-const COMMS_TYPES = [
-  ["announcement","Announcements","Send announcement"],
-  ["report","Reports","Send report"],
-  ["notice","Notices","Deliver information"],
-  ["meeting","Meetings","Schedule meeting"],
+/* ---------------- COMMS: Messages / Meetings ----------------
+   One page, two pill tabs. Announcements/Reports/Notices are really the
+   same action (post something for people to see) so they now live in one
+   combined "Messages" list, backed by one small table
+   (school_communications) with a `type` field the user picks per-post.
+   Meetings keeps its own tab and table (school_meetings, see MEETINGS_SQL)
+   since it needs a date/location instead of a free-text message.
+   Administration always has this (via "all" access); the Parents &
+   Community department is the other one that sees it, for sending things
+   out to parents/guardians. */
+const COMMS_MESSAGE_TYPES = [
+  ["announcement","Announcement"],
+  ["report","Report"],
+  ["notice","Notice"],
 ];
-async function renderComms(container, sub="announcement") {
+async function renderComms(container, sub="messages") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
-  COMMS_TYPES.forEach(([id,label])=>{
+  [["messages","Messages"],["meeting","Meetings"]].forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
     p.onclick = () => renderComms(container, id);
     pills.appendChild(p);
   });
   const body = document.getElementById("secBody");
   if (sub === "meeting") renderMeetingsAdminList(body, container);
-  else renderCommsList(body, container, sub);
+  else renderCommsList(body, container);
 }
-async function renderCommsList(body, container, type) {
-  const meta = COMMS_TYPES.find(t=>t[0]===type) || COMMS_TYPES[0];
+async function renderCommsList(body, container) {
   let items = [];
   let missingTable = false;
-  try { items = await dbSelectActive("school_communications", { type:`eq.${type}`, order:"created_at.desc" }); }
+  try { items = await dbSelectActive("school_communications", { order:"created_at.desc" }); }
   catch (e) { missingTable = true; }
 
   if (missingTable) {
     body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Comms needs a small table in your database before you can send anything.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Comms needs a one-time setup before you can send anything.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
       <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${COMMUNICATIONS_SQL}</pre>
       <button class="btn btn-primary" id="retryCommsBtn" style="margin-top:12px;">I've run it — Refresh</button>
     </div>`;
-    document.getElementById("retryCommsBtn").onclick = () => renderCommsList(body, container, type);
+    document.getElementById("retryCommsBtn").onclick = () => renderCommsList(body, container);
     return;
   }
 
-  body.innerHTML = `<div class="section-head"><h3 style="color:#c2410c;">${meta[1]}</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} ${meta[2]}</button></div>
+  body.innerHTML = `<div class="section-head"><h3 style="color:#c2410c;">Messages</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Post a message</button></div>
     <div class="card" id="list"></div>`;
   const list = document.getElementById("list");
-  list.innerHTML = items.length ? "" : emptyState(`No ${meta[1].toLowerCase()} sent yet.`);
+  list.innerHTML = items.length ? "" : emptyState("No messages sent yet.");
   items.forEach(c => {
+    const typeLabel = COMMS_MESSAGE_TYPES.find(t=>t[0]===c.type)?.[1] || c.type;
     const row = el(`<div class="list-row"><div class="avatar">${ic.megaphone}</div>
       <div class="list-main"><div class="list-title">${c.title}</div>
-      <div class="list-sub">${c.audience || "Everyone"} · ${new Date(c.created_at).toLocaleDateString()}</div></div></div>`);
+      <div class="list-sub">${typeLabel} · ${c.audience || "Everyone"} · ${new Date(c.created_at).toLocaleDateString()}</div></div></div>`);
     const view = () => openViewModal(c.title, [
-      ["Audience", c.audience || "Everyone"], ["Message", c.message],
+      ["Type", typeLabel], ["Audience", c.audience || "Everyone"], ["Message", c.message],
       ["Sent by", c.created_by], ["Sent on", new Date(c.created_at).toLocaleString()],
-    ], () => openCommsModal(body, container, type, c));
-    const edit = () => openCommsModal(body, container, type, c);
-    const del = async () => { if (await customConfirm(`Delete "${c.title}"?`, { danger:true, okLabel:"Delete" })) safe(async()=>{ await softDelete("school_communications", c.id); renderCommsList(body, container, type); })(); };
+    ], () => openCommsModal(body, container, c));
+    const edit = () => openCommsModal(body, container, c);
+    const del = async () => { if (await customConfirm(`Delete "${c.title}"?`, { danger:true, okLabel:"Delete" })) safe(async()=>{ await softDelete("school_communications", c.id); renderCommsList(body, container); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
-  document.getElementById("addBtn").onclick = () => openCommsModal(body, container, type, null);
+  document.getElementById("addBtn").onclick = () => openCommsModal(body, container, null);
 }
-function openCommsModal(body, container, type, c) {
+function openCommsModal(body, container, c) {
   const isEdit = !!c;
-  const meta = COMMS_TYPES.find(t=>t[0]===type) || COMMS_TYPES[0];
   const audiences = ["Everyone","All parents","All staff","All students","Specific class"];
-  openModal(isEdit ? `Edit ${meta[1].slice(0,-1).toLowerCase()}` : meta[2], `
+  openModal(isEdit ? "Edit message" : "Post a message", `
+    <div class="field"><label>Type</label><select id="f_type">${COMMS_MESSAGE_TYPES.map(([id,label])=>`<option value="${id}" ${(c?.type||"announcement")===id?'selected':''}>${label}</option>`).join("")}</select></div>
     <div class="field"><label>Title</label><input id="f_title" placeholder="e.g. Term 2 opening date" value="${c?.title||''}"/></div>
     <div class="field"><label>Audience</label><select id="f_audience">${audiences.map(a=>`<option ${c?.audience===a?'selected':''}>${a}</option>`).join("")}</select></div>
     <div class="field"><label>Message</label><textarea id="f_message" rows="5" placeholder="Write the full message here…">${c?.message||''}</textarea></div>
   `, async (ov) => {
     requireFields(ov, [["f_title","Title"], ["f_message","Message"]]);
-    const payload = { type, title: val(ov,"f_title"), audience: val(ov,"f_audience"), message: val(ov,"f_message"), created_by: profile?.full_name || null };
+    const payload = { type: val(ov,"f_type"), title: val(ov,"f_title"), audience: val(ov,"f_audience"), message: val(ov,"f_message"), created_by: profile?.full_name || null };
     if (isEdit) await dbUpdate("school_communications", c.id, payload); else await dbInsert("school_communications", payload);
-    renderCommsList(body, container, type);
-  }, { saveLabel: isEdit ? "Save changes" : "Send" });
+    renderCommsList(body, container);
+  }, { saveLabel: isEdit ? "Save changes" : "Post" });
 }
 
 /* ---------------- COMMS: Meetings (admin side) ----------------
@@ -5261,8 +5229,8 @@ async function renderMeetingsAdminList(body, container) {
 
   if (missingTable) {
     body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.calendar}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Meetings needs a small table in your database before you can schedule anything.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.calendar}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Meetings needs a one-time setup before you can schedule anything.</p></div></div>
+      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
       <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${MEETINGS_SQL}</pre>
       <button class="btn btn-primary" id="retryMeetingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
     </div>`;
@@ -5430,8 +5398,8 @@ async function renderContactTransApple(container) {
   let tickets = [];
   try { tickets = await listMySupportRequests(); }
   catch (e) {
-    area.innerHTML = `<div class="tiny-note">Support isn't set up for this school's database yet. Ask an administrator to run the one-time setup below (safe to re-run).</div>
-      <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup</summary>
+    area.innerHTML = `<div class="tiny-note">Support isn't set up for this school yet. Ask an administrator to run the one-time setup below (safe to re-run).</div>
+      <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup</summary>
       <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${SUPPORT_SQL}</pre></details>`;
     return;
   }
@@ -5529,7 +5497,7 @@ async function renderUsers(container) {
       openModal("Request a detail change", `
         <div class="tiny-note" style="text-align:left;">Tell Administration what you'd like changed (department, position, phone number, etc) and why — they'll review it and update your account.</div>
         <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder="e.g. Please move me from Teaching Staff to Head of Department (HOD)"></textarea></div>
-        <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if sending fails)</summary>
+        <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if sending fails)</summary>
         <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ACCOUNT_REQUESTS_SQL}</pre></details>
       `, async (ov) => {
         requireFields(ov, [["f_msg","Message"]]);
@@ -5610,7 +5578,7 @@ async function renderUsers(container) {
       renderUsers(container);
     }));
   } catch (e) {
-    reqList.innerHTML = `<div class="tiny-note">Request history isn't set up yet — the one-time database setup appears when a request is sent. Run it in Supabase → SQL Editor, then refresh.</div>`;
+    reqList.innerHTML = `<div class="tiny-note">Request history isn't set up yet — the one-time setup appears when a request is sent. Ask your developer to complete it, then refresh.</div>`;
   }
 }
 // Opened by tapping an account card in Manage Accounts (everyone but "This is You").
@@ -5704,14 +5672,14 @@ function pushNotifCardHtml() {
           <label class="toggle-switch"><input type="checkbox" id="staffPushToggle" /><span class="toggle-slider"></span></label>
         </div>
         <div id="staffPushMsg" style="margin-top:8px;"></div>
-        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database + server setup (needed before this can send real pushes)</summary>
-          <p class="tiny-note" style="margin-top:8px;">1. Run this once in Supabase → SQL Editor:</p>
+        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (needed before this can send real pushes)</summary>
+          <p class="tiny-note" style="margin-top:8px;">1. Run this one-time setup script:</p>
           <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_PUSH_SQL}</pre>
-          <p class="tiny-note" style="margin-top:8px;">2. Create an Edge Function called <code>staff-notify</code> with this code:</p>
+          <p class="tiny-note" style="margin-top:8px;">2. Create a server function called <code>staff-notify</code> with this code:</p>
           <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_NOTIFY_FUNCTION_CODE}</pre>
-          <p class="tiny-note" style="margin-top:8px;">3. In Edge Functions → staff-notify → Secrets, add <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>VAPID_PUBLIC_KEY</code> (must match the one baked into this app, shown below), <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code> (e.g. <code>mailto:you@yourdomain.com</code>).</p>
+          <p class="tiny-note" style="margin-top:8px;">3. In your server function's settings, add the app's connection URL and service key, a <code>VAPID_PUBLIC_KEY</code> (must match the one baked into this app, shown below), <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code> (e.g. <code>mailto:you@yourdomain.com</code>).</p>
           <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">VAPID_PUBLIC_KEY = ${VAPID_PUBLIC_KEY}</pre>
-          <p class="tiny-note" style="margin-top:8px;">4. In Database → Webhooks, add two webhooks: one on <code>mother_announcements</code> (Insert) and one on <code>parent_messages</code> (Insert), both calling the <code>staff-notify</code> Edge Function.</p>
+          <p class="tiny-note" style="margin-top:8px;">4. Add two webhooks: one on new announcements (Insert) and one on new parent messages (Insert), both calling the <code>staff-notify</code> function.</p>
           <p class="tiny-note" style="margin-top:6px;">⚠️ Generate your own VAPID key pair for production (e.g. <code>npx web-push generate-vapid-keys</code>) and swap both the secret and the <code>VAPID_PUBLIC_KEY</code> constant in this file — the one above is a shared example key.</p>
         </details>
       `}
@@ -5750,8 +5718,8 @@ async function renderSettings(container) {
   if (missingTable) {
     container.innerHTML = `
       <div class="card">
-        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>School Settings needs a small table in your database before it can save anything.</p></div></div>
-        <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Run this once in your Supabase SQL editor, then come back and tap refresh.</p>
+        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>School Settings needs a one-time setup before it can save anything.</p></div></div>
+        <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
         <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${SCHOOL_SETTINGS_SQL}</pre>
         <button class="btn btn-primary" id="retrySettingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
       </div>`;
@@ -5821,18 +5789,18 @@ async function renderSettings(container) {
           </div>`).join("")}
       </div>
       <input type="file" id="stampFile" accept="image/*" style="display:none;"/>
-      <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time database setup (only if saving a stamp or receipt number fails)</summary>
+      <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving a stamp or receipt number fails)</summary>
         <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${STAMPS_RECEIPT_SQL}</pre></details>
     </div>
 
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.edit}</div><div><h3 style="color:var(--navy);">Receipt number format</h3><p>Controls how receipt numbers are generated for fee payments.</p></div></div>
       <div class="grid2">
-        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="RCT" maxlength="12" value="${s.receipt_prefix||'RCT'}"/></div>
-        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" value="${s.receipt_digits||6}"/></div>
+        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="RCT" maxlength="12" value="${s.receipt_prefix||''}"/></div>
+        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" placeholder="6" value="${s.receipt_digits||''}"/></div>
       </div>
       <div class="field" style="margin-bottom:0;"><label>Next receipt number</label>
-        <input id="f_rnext" type="number" min="1" value="${s.receipt_next_number||1}"/>
+        <input id="f_rnext" type="number" min="1" placeholder="1" value="${s.receipt_next_number||''}"/>
         <div id="receiptPreview" class="receipt-preview-chip"></div>
       </div>
     </div>
@@ -6205,8 +6173,8 @@ if ("serviceWorker" in navigator) {
       const title = data.title || "Nova School App";
       const options = {
         body: data.body || "",
-        icon: "https://i.postimg.cc/hvy7NPrV/20260729-202128.png",
-        badge: "https://i.postimg.cc/hvy7NPrV/20260729-202128.png",
+        icon: "https://i.postimg.cc/Qddq11JN/20260731-074502.png",
+        badge: "https://i.postimg.cc/Qddq11JN/20260731-074502.png",
         data: { url: data.url || "/" },
       };
       e.waitUntil(self.registration.showNotification(title, options));
@@ -6246,7 +6214,7 @@ if ("serviceWorker" in navigator) {
    The overlay never shows again once the app is actually installed,
    and can be dismissed (for this visit, or for a while) without
    blocking access to the app itself. */
-const PWA_ICON_URL = "https://i.postimg.cc/0NBZwRMk/file-000000008ea481f4a7d2fe89b842a95b.png";
+const PWA_ICON_URL = "https://i.postimg.cc/Qddq11JN/20260731-074502.png";
 const PWA_OPTOUT_DAYS = 21;
 
 // Small inline icons used only by this overlay (kept local rather than in the
@@ -6375,7 +6343,7 @@ function pwaManualSteps(platform) {
 function pwaInstallBtnHtml(canPromptNow) {
   return `<div class="pwa-actions" style="margin-bottom:6px;">
     <button type="button" class="btn btn-primary pwa-install-btn" id="pwaInstallBtn" ${canPromptNow ? "" : "disabled"}>
-      ${PWA_ICONS.download} <span id="pwaInstallBtnLabel">${canPromptNow ? "Install App" : "Preparing install…"}</span>
+      ${PWA_ICONS.download} <span id="pwaInstallBtnLabel">${canPromptNow ? "Install App" : "Install"}</span>
     </button>
   </div>`;
 }
