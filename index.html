@@ -839,7 +839,7 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
-    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at" });
+    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at,upgrade_requested_at,upgrade_completed_at" });
     CURRENT_SCHOOL = rows[0] || null;
   } catch (e) { CURRENT_SCHOOL = null; }
 }
@@ -933,6 +933,12 @@ function motherSystemCardHtml(admins) {
 
       <div class="view-row"><div class="vlabel">Registration status</div><div class="vvalue"><span class="badge ${st.cls}">${st.label}</span></div></div>
       <p style="font-size:12px;color:var(--ink-soft);margin:6px 0 12px;line-height:1.5;">${st.note}</p>
+      ${schoolUpgradePending() && hasFullAccess(profile) ? `
+        <div class="card" style="background:var(--amber-tint,#fef3c7);border:none;margin-bottom:12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">🏫 School upgrade available</div>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;line-height:1.5;">TransApple has moved to a new registration format. Complete a short form to finish upgrading — your students, staff, fees, exams and settings are all preserved.</p>
+          <button class="btn btn-primary btn-sm" id="settingsUpgradeBtn">Complete Upgrade</button>
+        </div>` : ""}
 
       <div class="view-row"><div class="vlabel">School ID</div><div class="vvalue" style="font-family:monospace;">${s.school_code || "—"}</div></div>
       <div class="view-row"><div class="vlabel">Registered name</div><div class="vvalue">${s.name || "—"}</div></div>
@@ -2078,6 +2084,57 @@ async function registerSchool({ schoolName, schoolMotto, schoolVillage, schoolSu
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
+// True once the Mother System has marked this school "Upgrade Available"
+// and the school hasn't completed it yet.
+function schoolUpgradePending() {
+  return !!(CURRENT_SCHOOL && !CURRENT_SCHOOL.school_code && CURRENT_SCHOOL.upgrade_requested_at && !CURRENT_SCHOOL.upgrade_completed_at);
+}
+// Called by the school's own Administrator once they submit the upgrade
+// form — fills in the same fields register_school() collects for a
+// brand-new school (never overwriting anything already set) and marks the
+// upgrade complete. Every other table (students, staff, parents, fees,
+// attendance, exams, report cards, settings...) is completely untouched.
+async function completeSchoolUpgrade(fields, password) {
+  if (!CURRENT_SCHOOL_ID) throw new Error("No school selected.");
+  if (!profile?.username) throw new Error("Not signed in.");
+  if (!password) throw new Error("Enter your password to confirm.");
+  const rows = await sb(`/rest/v1/rpc/complete_school_upgrade`, { method:"POST", body: JSON.stringify({
+    p_school_id: CURRENT_SCHOOL_ID, p_actor_username: profile.username, p_actor_password: password,
+    p_motto: fields.motto || null, p_village: fields.village || null, p_subcounty: fields.subcounty || null,
+    p_district: fields.district || null, p_size_range: fields.sizeRange || null, p_password: fields.password || null,
+  }) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+// The "Complete Upgrade" form opened from the notification bell / Settings —
+// same fields the Register School screen collects about the school itself,
+// minus the admin's own details (that account already exists). Fields
+// already on file are shown read-only, same convention as the Mother App's
+// own Format & ID tab.
+function openSchoolUpgradeModal() {
+  const s = CURRENT_SCHOOL || {};
+  const sizeOptions = SCHOOL_SIZE_RANGES.map(r => `<option value="${r}" ${s.size_range===r?"selected":""}>${r}</option>`).join("");
+  openModal("Complete School Upgrade", `
+    <p class="tiny-note" style="margin-bottom:10px;">TransApple has moved to a new registration format. Fill in what's still missing below to finish upgrading your school — nothing already on file changes, and none of your students, staff, fees, exams or settings are affected.</p>
+    <div class="field"><label>Motto</label><input id="upgMotto" value="${s.motto||""}" placeholder="${s.motto?"":"Not set"}" ${s.motto?"disabled":""} /></div>
+    <div class="field"><label>Village</label><input id="upgVillage" value="${s.village||""}" ${s.village?"disabled":""} /></div>
+    <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.subcounty||""}" ${s.subcounty?"disabled":""} /></div>
+    <div class="field"><label>District</label><input id="upgDistrict" value="${s.district||""}" ${s.district?"disabled":""} /></div>
+    <div class="field"><label>School size</label><select id="upgSizeRange" ${s.size_range?"disabled":""}><option value="">Select…</option>${sizeOptions}</select></div>
+    <div class="field"><label>School login password</label><input id="upgPassword" type="password" placeholder="Leave blank to keep the current one" /></div>
+    <div class="field"><label>Your password (to confirm)</label><input id="upgConfirmPw" type="password" /></div>
+  `, async (overlay) => {
+    const updated = await completeSchoolUpgrade({
+      motto: val(overlay, "upgMotto"), village: val(overlay, "upgVillage"),
+      subcounty: val(overlay, "upgSubcounty"), district: val(overlay, "upgDistrict"),
+      sizeRange: val(overlay, "upgSizeRange"), password: val(overlay, "upgPassword"),
+    }, val(overlay, "upgConfirmPw"));
+    CURRENT_SCHOOL = updated;
+    markBellDismissed(`schoolupg:${CURRENT_SCHOOL_ID}`);
+    refreshStaffBell();
+    alert(`Upgrade complete! Your School ID is ${updated.school_code} — it's now visible under Settings.`);
+    render();
+  }, { saveLabel: "Complete Upgrade" });
+}
 // Creates a parent account. The Student ID + exact registered name match is verified
 // server-side FIRST (see create_parent_account() in PARENT_PORTAL_SQL) — the account
 // only comes into existence, already linked to the child, once that check passes.
@@ -3166,7 +3223,8 @@ async function refreshStaffBell() {
   const unreadAnnCount = announcements.filter(a => !read.has(`ann:${a.id}`) && !dismissed.has(`ann:${a.id}`)).length;
   const unreadMsgCount = messages.filter(m => m.status === "unread" && !dismissed.has(`msg:${m.id}`)).length;
   const updateUnseen = latestChangelog && isUpdateNotifFresh(latestChangelog) && String(latestChangelog.id) !== getSeenChangelogId() && !dismissed.has(`upd:${latestChangelog.id}`);
-  const count = unreadAnnCount + unreadMsgCount + (updateUnseen ? 1 : 0);
+  const upgradePending = profile?.department === "administration" && schoolUpgradePending() && !dismissed.has(`schoolupg:${CURRENT_SCHOOL_ID}`);
+  const count = unreadAnnCount + unreadMsgCount + (updateUnseen ? 1 : 0) + (upgradePending ? 1 : 0);
   document.querySelectorAll('[data-bell="staff"]').forEach(btn => {
     if (count > 0) btn.appendChild(el(`<span class="nav-badge-count">${count > 99 ? "99+" : count}</span>`));
   });
@@ -3215,6 +3273,18 @@ async function openStaffBellPanel() {
       <button class="btn btn-primary btn-sm" id="bellUpdateBtn" style="margin-top:8px;width:100%;">${ic.download} Update to New Version</button>
     </div>` : "";
 
+  // School format upgrade: only Administrators can act on it, and only while
+  // the Mother System has marked it available and it hasn't been completed.
+  const upgradePendingNow = profile?.department === "administration" && schoolUpgradePending();
+  const upgradeDismissed = getBellDismissedIds().has(`schoolupg:${CURRENT_SCHOOL_ID}`);
+  const upgradeItemHtml = (upgradePendingNow && !upgradeDismissed) ? `
+    <div class="bell-item" id="bellUpgradeItem" style="border:1px solid var(--line);border-radius:10px;">
+      <div class="b-title">🏫 School upgrade available</div>
+      <div class="b-body">TransApple has moved to a new registration format. Complete a short form to finish upgrading — your students, staff, fees, exams and settings are all preserved.</div>
+      <div class="b-meta">Upgrade · ${new Date(CURRENT_SCHOOL.upgrade_requested_at).toLocaleString()}</div>
+      <button class="btn btn-primary btn-sm" id="bellUpgradeBtn" style="margin-top:8px;width:100%;">Complete Upgrade</button>
+    </div>` : "";
+
   const itemsHtml = items.map(i => `
     <div class="bell-item" data-id="${i.id}">
       <div class="b-title">${i.kind === "Message" ? "" : "📣 "}${i.title}</div>
@@ -3223,7 +3293,7 @@ async function openStaffBellPanel() {
     </div>`).join("");
 
   function renderBellBody() {
-    body.innerHTML = (updateItemHtml || itemsHtml) ? `${updateItemHtml}${itemsHtml}` : `<div class="empty">No notifications yet.</div>`;
+    body.innerHTML = (updateItemHtml || upgradeItemHtml || itemsHtml) ? `${updateItemHtml}${upgradeItemHtml}${itemsHtml}` : `<div class="empty">No notifications yet.</div>`;
   }
   function showEmptyIfNothingLeft() {
     if (!body.querySelector(".bell-item")) body.innerHTML = `<div class="empty">No notifications yet.</div>`;
@@ -3241,6 +3311,15 @@ async function openStaffBellPanel() {
     document.getElementById("bellUpdateItem")?.remove();
     showEmptyIfNothingLeft();
     refreshStaffBell();
+  };
+
+  // School upgrade card: opens the completion form. Left in place (not
+  // dismissed) unless the form is actually submitted successfully, so
+  // closing the form without saving doesn't lose the prompt.
+  const upgradeBtn = document.getElementById("bellUpgradeBtn");
+  if (upgradeBtn) upgradeBtn.onclick = () => {
+    closeStaffBellPanel();
+    openSchoolUpgradeModal();
   };
 
   // Announcements & messages stay put on tap — long-press opens a Delete
@@ -6802,6 +6881,8 @@ async function renderSettings(container) {
     try { await navigator.clipboard.writeText(CURRENT_SCHOOL?.school_code || ""); toast("School ID copied.", false); }
     catch (e) { toast("Couldn't copy — long-press the field to copy manually.", true); }
   };
+  const settingsUpgradeBtn = document.getElementById("settingsUpgradeBtn");
+  if (settingsUpgradeBtn) settingsUpgradeBtn.onclick = () => openSchoolUpgradeModal();
   container.querySelector("#logoUpload").onclick = () => document.getElementById("logoFile").click();
   document.getElementById("logoFile").onchange = async (e) => {
     const file = e.target.files[0];
