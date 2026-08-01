@@ -839,7 +839,7 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
-    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at,upgrade_requested_at,upgrade_completed_at" });
+    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at,upgrade_requested_at,upgrade_completed_at,deleted_at" });
     CURRENT_SCHOOL = rows[0] || null;
   } catch (e) { CURRENT_SCHOOL = null; }
 }
@@ -852,9 +852,13 @@ function isFeatureEnabled(navId) {
 // Is this school allowed to be used at all right now, per the Mother System?
 function schoolIsActive() {
   if (!CURRENT_SCHOOL) return true; // couldn't reach the schools row (offline, RLS not set up yet, etc.) — fail open, not closed
+  if (CURRENT_SCHOOL.deleted_at) return false; // moved to Trash by a Mother App admin — overrides status, no restore
   return CURRENT_SCHOOL.status === "active";
 }
 function schoolBlockedMessage() {
+  if (CURRENT_SCHOOL?.deleted_at) {
+    return `"${CURRENT_SCHOOL.name}" no longer exists in the system because it was permanently deleted. If you think this is a mistake, please contact us now.`;
+  }
   const s = CURRENT_SCHOOL?.status;
   if (s === "pending") return "Your school's registration is still awaiting approval from TransApple. Please check back shortly.";
   if (s === "suspended") return "Access to this school has been suspended by TransApple. Please contact your administrator or TransApple support.";
@@ -874,12 +878,14 @@ function startSchoolSync() {
     const prevFeatures = JSON.stringify(CURRENT_SCHOOL?.features || {});
     const prevUpgradeRequested = CURRENT_SCHOOL?.upgrade_requested_at || null;
     const prevUpgradeCompleted = CURRENT_SCHOOL?.upgrade_completed_at || null;
+    const prevDeletedAt = CURRENT_SCHOOL?.deleted_at || null;
     await loadCurrentSchool();
     if (!auth) return; // logged out while this was in flight
     const changed = prevStatus !== CURRENT_SCHOOL?.status
       || prevFeatures !== JSON.stringify(CURRENT_SCHOOL?.features || {})
       || prevUpgradeRequested !== (CURRENT_SCHOOL?.upgrade_requested_at || null)
-      || prevUpgradeCompleted !== (CURRENT_SCHOOL?.upgrade_completed_at || null);
+      || prevUpgradeCompleted !== (CURRENT_SCHOOL?.upgrade_completed_at || null)
+      || prevDeletedAt !== (CURRENT_SCHOOL?.deleted_at || null);
     if (changed) {
       if (!schoolIsActive()) { render(); return; } // full block screen takes over immediately
       if (!hasNavAccess(profile, tab)) tab = "dashboard";
@@ -1020,6 +1026,12 @@ function deptAccess(p) {
   return ["dashboard","contact"];
 }
 function hasFullAccess(p) { return deptAccess(p) === "all"; }
+// True for the single account per school holding full ownership authority —
+// set on the founding Administrator by register_school(), and moved by
+// transferOwnership() (see AUTH section). Distinct from hasFullAccess(): every
+// Administration account gets full nav access, but only the owner can
+// suspend/delete an entire department at once or hand off ownership.
+function isOwner(p) { return !!(p && p.is_owner); }
 function hasNavAccess(p, navId) {
   if (!isFeatureEnabled(navId)) return false; // Mother System module gate overrides department access entirely
   const a = deptAccess(p);
@@ -1579,7 +1591,7 @@ grant execute on function create_account(text,text,text,text,text,text,text,uuid
    "Register Your School" screen shown the first time this app is opened on a
    new browser/device with no account yet.
    IMPORTANT — data ownership: everything collected on that screen about the
-   SCHOOL itself (name, motto, location, size range, school password) is written
+   SCHOOL itself (name, motto, location, size range) is written
    ONLY to the `schools` table below. `schools` is the TransApple mother system's
    registry — the same table mother-app.html reads and manages — never this
    app's own operational tables (profiles, students, etc). That keeps school
@@ -1595,7 +1607,6 @@ alter table schools add column if not exists village text;
 alter table schools add column if not exists subcounty text;
 alter table schools add column if not exists district text;
 alter table schools add column if not exists size_range text;
-alter table schools add column if not exists password_hash text;
 
 -- The human-facing School ID — letters, numbers, and underscores only. Generated
 -- automatically inside register_school() below (TATNOVA followed by 7
@@ -1618,15 +1629,25 @@ end $$;
 alter table profiles add column if not exists whatsapp text;
 alter table profiles add column if not exists email text;
 
+-- Marks the account that has full ownership authority over the school — set
+-- automatically for the founding Administrator inside register_school()
+-- below. There's exactly one owner per school at a time; see transfer_ownership()
+-- further down for how that authority moves to someone else. Only the owner
+-- can suspend/delete an entire department at once (see openDepartmentModal in
+-- the app) — every other Administration account still manages accounts one
+-- at a time, same as before.
+alter table profiles add column if not exists is_owner boolean not null default false;
+
 -- Registers a brand-new school (written to the mother system's \`schools\`
 -- table) AND creates its first Administrator account together, atomically —
 -- if either half fails, nothing is created.
 drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text);
 drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text,text);
+drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text);
 create function register_school(
   p_school_name text, p_school_motto text,
   p_school_village text, p_school_subcounty text, p_school_district text,
-  p_school_password text, p_school_size_range text,
+  p_school_size_range text,
   p_admin_full_name text, p_admin_username text, p_admin_phone text,
   p_admin_whatsapp text, p_admin_email text,
   p_admin_password text, p_admin_pin text default null, p_admin_photo_url text default null
@@ -1636,9 +1657,6 @@ declare new_school schools; new_admin profiles; candidate_code text;
 begin
   if p_school_name is null or trim(p_school_name) = '' then
     raise exception 'School name is required.';
-  end if;
-  if p_school_password is null or length(p_school_password) < 6 then
-    raise exception 'School password must be at least 6 characters.';
   end if;
   if p_admin_full_name is null or trim(p_admin_full_name) = '' then
     raise exception 'Administrator full name is required.';
@@ -1661,28 +1679,63 @@ begin
   end loop;
 
   -- School record: owned by the mother system, not this app's own tables.
-  insert into schools (name, motto, village, subcounty, district, size_range, password_hash, status, school_code)
+  insert into schools (name, motto, village, subcounty, district, size_range, status, school_code)
   values (
     trim(p_school_name), nullif(trim(p_school_motto),''),
     nullif(trim(p_school_village),''), nullif(trim(p_school_subcounty),''), nullif(trim(p_school_district),''),
-    nullif(p_school_size_range,''), crypt(p_school_password, gen_salt('bf')), 'active', candidate_code
+    nullif(p_school_size_range,''), 'active', candidate_code
   ) returning * into new_school;
 
-  -- First Administrator — Administration department = full access to everything.
+  -- First Administrator — Administration department = full access to everything,
+  -- and is_owner = true: they hold full authority over the school (including
+  -- suspending/deleting whole departments) until they transfer it to someone else.
   insert into profiles (
     full_name, username, department, phone, whatsapp, email,
-    pin, password_hash, role, photo_url, school_id
+    pin, password_hash, role, photo_url, school_id, is_owner
   ) values (
     trim(p_admin_full_name), p_admin_username, 'administration',
     nullif(p_admin_phone,''), nullif(p_admin_whatsapp,''), nullif(p_admin_email,''),
-    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', p_admin_photo_url, new_school.id
+    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', p_admin_photo_url, new_school.id, true
   ) returning * into new_admin;
 
   new_admin.password_hash := null;
   return new_admin;
 end;
 $register_school$;
-grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;`;
+grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;
+
+-- Moves full ownership authority from the current owner to another active
+-- Administration-department account at the same school. Verified against the
+-- acting (current owner's) password, same trust model as reset_password().
+drop function if exists transfer_ownership(text,text,uuid);
+create function transfer_ownership(p_actor_username text, p_actor_password text, p_new_owner_id uuid)
+returns void language plpgsql security definer as $$
+declare actor profiles; new_owner profiles;
+begin
+  select * into actor from profiles where username = p_actor_username;
+  if actor.id is null or actor.password_hash is null or crypt(p_actor_password, actor.password_hash) <> actor.password_hash then
+    raise exception 'Your password could not be verified.';
+  end if;
+  if not actor.is_owner then
+    raise exception 'Only the current owner can transfer ownership.';
+  end if;
+
+  select * into new_owner from profiles where id = p_new_owner_id and school_id = actor.school_id;
+  if new_owner.id is null then
+    raise exception 'That account was not found at your school.';
+  end if;
+  if new_owner.department <> 'administration' then
+    raise exception 'Ownership can only be transferred to an Administration account.';
+  end if;
+  if new_owner.deleted_at is not null or new_owner.suspended_at is not null then
+    raise exception 'That account is suspended or deleted.';
+  end if;
+
+  update profiles set is_owner = false where id = actor.id;
+  update profiles set is_owner = true where id = new_owner.id;
+end;
+$$;
+grant execute on function transfer_ownership(text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- REGISTRATION APPROVAL ----------------
    Run this ONCE in Supabase → SQL Editor, after everything above (including
@@ -1826,7 +1879,10 @@ grant execute on function reject_registration(uuid,uuid) to anon, authenticated;
 
 -- Final verify_login: builds on every prior upgrade (deleted/suspended checks,
 -- school-status checks, last_login_at, school_login_log) and adds the new
--- approval_status gate. Blocks a login before it ever reaches the app shell.
+-- approval_status gate, plus the school-level Trash check (see
+-- SCHOOL_TRASH_SQL / soft_delete_school in the Mother App) — checked first,
+-- since once the school itself has been deleted nothing else about the
+-- account matters. Blocks a login before it ever reaches the app shell.
 drop function if exists verify_login(text, text);
 create function verify_login(p_username text, p_password text) returns profiles
 language plpgsql security definer as $verify_login$
@@ -1839,6 +1895,18 @@ begin
       insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
     end if;
     raise exception 'Incorrect username or password.';
+  end if;
+  if found_row.school_id is not null then
+    select * into school_row from schools where id = found_row.school_id;
+  end if;
+  -- The whole school was deleted (moved to Trash by a Mother App admin) —
+  -- this overrides every other check below, and the school row/name is
+  -- still around to name-check against during its 30-day Trash window.
+  if school_row.id is not null and school_row.deleted_at is not null then
+    if to_regclass('school_login_log') is not null then
+      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
+    end if;
+    raise exception '"%" no longer exists in the system because it was permanently deleted. If you think this is a mistake, please contact us now.', school_row.name;
   end if;
   if found_row.deleted_at is not null then
     if to_regclass('school_login_log') is not null then
@@ -1864,8 +1932,7 @@ begin
     end if;
     raise exception 'Your registration was not approved. Contact your school Administrator for more information.';
   end if;
-  if found_row.school_id is not null then
-    select * into school_row from schools where id = found_row.school_id;
+  if school_row.id is not null then
     if school_row.status = 'pending' then
       raise exception 'Your school is still awaiting approval by TransApple. Please check back soon.';
     elsif school_row.status = 'rejected' then
@@ -2143,7 +2210,7 @@ async function tryRestoreRememberedSession() {
   const username = getRememberedSession();
   if (!username) return false;
   try {
-    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id,approval_status" });
+    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id,approval_status,is_owner" });
     const row = rows[0];
     if (!row) { clearRememberedSession(); return false; }
     if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
@@ -2175,11 +2242,11 @@ const SCHOOL_SIZE_RANGES = ["1–100 students","101–300 students","301–600 s
 // Registers a brand-new school (stored in the mother system's `schools` table —
 // see SCHOOL_SELF_REGISTRATION_SQL) and creates its first Administrator account
 // in one atomic call. Returns the new Administrator's profile.
-async function registerSchool({ schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolPassword, schoolSizeRange, adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl }) {
+async function registerSchool({ schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolSizeRange, adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl }) {
   const rows = await sb(`/rest/v1/rpc/register_school`, { method:"POST", body: JSON.stringify({
     p_school_name: schoolName, p_school_motto: schoolMotto || null,
     p_school_village: schoolVillage || null, p_school_subcounty: schoolSubcounty || null, p_school_district: schoolDistrict || null,
-    p_school_password: schoolPassword, p_school_size_range: schoolSizeRange || null,
+    p_school_size_range: schoolSizeRange || null,
     p_admin_full_name: adminFullName, p_admin_username: adminUsername, p_admin_phone: adminPhone || null,
     p_admin_whatsapp: adminWhatsapp || null, p_admin_email: adminEmail || null,
     p_admin_password: adminPassword, p_admin_pin: adminPin || null, p_admin_photo_url: adminPhotoUrl || null,
@@ -2203,7 +2270,7 @@ async function completeSchoolUpgrade(fields, password) {
   const rows = await sb(`/rest/v1/rpc/complete_school_upgrade`, { method:"POST", body: JSON.stringify({
     p_school_id: CURRENT_SCHOOL_ID, p_actor_username: profile.username, p_actor_password: password,
     p_motto: fields.motto || null, p_village: fields.village || null, p_subcounty: fields.subcounty || null,
-    p_district: fields.district || null, p_size_range: fields.sizeRange || null, p_password: fields.password || null,
+    p_district: fields.district || null, p_size_range: fields.sizeRange || null,
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
@@ -2222,13 +2289,12 @@ function openSchoolUpgradeModal() {
     <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.subcounty||""}" ${s.subcounty?"disabled":""} /></div>
     <div class="field"><label>District</label><input id="upgDistrict" value="${s.district||""}" ${s.district?"disabled":""} /></div>
     <div class="field"><label>School size</label><select id="upgSizeRange" ${s.size_range?"disabled":""}><option value="">Select…</option>${sizeOptions}</select></div>
-    <div class="field"><label>School login password</label><input id="upgPassword" type="password" placeholder="Leave blank to keep the current one" /></div>
     <div class="field"><label>Your password (to confirm)</label><input id="upgConfirmPw" type="password" /></div>
   `, async (overlay) => {
     const updated = await completeSchoolUpgrade({
       motto: val(overlay, "upgMotto"), village: val(overlay, "upgVillage"),
       subcounty: val(overlay, "upgSubcounty"), district: val(overlay, "upgDistrict"),
-      sizeRange: val(overlay, "upgSizeRange"), password: val(overlay, "upgPassword"),
+      sizeRange: val(overlay, "upgSizeRange"),
     }, val(overlay, "upgConfirmPw"));
     CURRENT_SCHOOL = updated;
     markBellDismissed(`schoolupg:${CURRENT_SCHOOL_ID}`);
@@ -2275,6 +2341,15 @@ function logout() { stopSchoolSync(); auth = null; profile = null; cache = {}; C
 // then sets a new password via the reset_password() Postgres function.
 async function resetPassword({ username, pin, new_password }) {
   await sb(`/rest/v1/rpc/reset_password`, { method:"POST", body: JSON.stringify({ p_username: username, p_pin: pin, p_new_password: new_password }) });
+}
+// Hands full ownership authority to another active Administration account at
+// this school — verified against the CURRENT owner's own password (see
+// transfer_ownership() in SCHOOL_SELF_REGISTRATION_SQL). Only the owner can
+// call this; the button that triggers it is only shown to them (see meCard).
+async function transferOwnership(newOwnerId, actorPassword) {
+  await sb(`/rest/v1/rpc/transfer_ownership`, { method:"POST", body: JSON.stringify({
+    p_actor_username: profile.username, p_actor_password: actorPassword, p_new_owner_id: newOwnerId,
+  }) });
 }
 
 /* ---------------- APP SHELL ---------------- */
@@ -2571,7 +2646,6 @@ function renderSchoolRegistration() {
       <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="" /></div>
       <div class="field"><label>District</label><input id="r_district" placeholder="" /></div>
       <div class="field"><label>School Size</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
-      <div class="field"><label>School Password</label><input id="r_schoolPassword" type="password" placeholder="At least 6 characters" /></div>
       <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;">Your School ID is generated automatically once you register, and can't be changed afterwards. It'll be visible to Administrators under Settings, and is how the TransApple Mother System identifies your school.</div>
 
       <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">First Administrator</div>
@@ -2629,7 +2703,6 @@ function renderSchoolRegistration() {
     const schoolVillage = document.getElementById("r_village").value.trim();
     const schoolSubcounty = document.getElementById("r_subcounty").value.trim();
     const schoolDistrict = document.getElementById("r_district").value.trim();
-    const schoolPassword = document.getElementById("r_schoolPassword").value;
     const schoolSizeRange = document.getElementById("r_sizeRange").value;
     const adminFullName = document.getElementById("r_adminName").value.trim();
     const adminUsername = document.getElementById("r_adminUsername").value.trim();
@@ -2642,13 +2715,12 @@ function renderSchoolRegistration() {
     const btn = document.getElementById("registerSchoolBtn");
     try {
       if (!schoolName) throw new Error("Enter your school's name.");
-      if (!schoolPassword || schoolPassword.length < 6) throw new Error("School password must be at least 6 characters.");
       if (!adminFullName || !adminUsername) throw new Error("The Administrator's full names and username are required.");
       if (!adminPassword || adminPassword.length < 6) throw new Error("The Administrator's password must be at least 6 characters.");
       if (adminPassword !== adminPassword2) throw new Error("Administrator passwords don't match.");
       btn.disabled = true; btn.textContent = "Registering…";
       const newAdmin = await registerSchool({
-        schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolPassword, schoolSizeRange,
+        schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolSizeRange,
         adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl: regPhotoDataUrl,
       });
       profile = scrubProfile(newAdmin);
@@ -2918,7 +2990,7 @@ function renderLogin() {
    restored on launch — a quick PIN re-confirms it's really this person before
    handing back full access, without making them type their password again. */
 function renderSchoolBlocked() {
-  const status = CURRENT_SCHOOL?.status || "inactive";
+  const status = CURRENT_SCHOOL?.deleted_at ? "deleted" : (CURRENT_SCHOOL?.status || "inactive");
   app().innerHTML = `
     <div class="login-wrap">
       <div class="login-card" style="text-align:center;">
@@ -6562,13 +6634,17 @@ async function renderUsers(container) {
       <div class="list-row" style="flex-wrap:wrap;">
         ${avatarHtml(profile?.full_name, profile?.photo_url)}
         <div class="list-main">
-          <div class="list-title">${profile?.full_name || ""}</div>
+          <div class="list-title">${profile?.full_name || ""} ${isOwner(profile) ? `<span class="badge badge-green">Owner</span>` : ""}</div>
           <div class="list-sub">${profile?.phone || ""}${profile?.username ? ` · @${profile.username}` : ""}</div>
         </div>
         <div class="list-sub">${deptLabel || "No department"}${profile?.position ? ` · ${profile.position}` : ""}</div>
       </div>
       <div class="tiny-note" style="margin-top:10px;">You can log in and log out any time — that's never restricted by department.</div>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" style="margin-top:8px;">${ic.logout} Log out</button>
+      ${isOwner(profile) ? `
+        <div class="tiny-note" style="margin-top:10px;">As the school's owner, you're the only one who can suspend or delete an entire department at once, or hand full ownership to another Administrator.</div>
+        <button class="btn btn-ghost btn-sm" id="transferOwnerBtn" style="margin-top:8px;">${ic.userPlus||''} Transfer ownership</button>
+      ` : ""}
       ${restrictedDept ? `
         <div class="tiny-note" style="margin-top:8px;">${deptLabel} accounts can't change department, position or role here — send Administration a request instead and they'll update it for you.</div>
         <button class="btn btn-ghost btn-sm" id="reqBtn" style="margin-top:8px;">${ic.edit} Request a detail change</button>
@@ -6603,7 +6679,7 @@ async function renderUsers(container) {
     return;
   }
 
-  const profiles = await dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,approval_status" });
+  const profiles = await dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,whatsapp,email,department,position,role,username,pin,photo_url,suspended_at,deleted_at,approval_status,is_owner,created_at" });
   const pendingRegs = profiles.filter(p => p.approval_status === "pending" && !p.deleted_at);
   container.innerHTML = meCard +
     `<div class="section-head"><h3 style="color:var(--navy-2);">Pending Registrations</h3></div>
@@ -6612,6 +6688,11 @@ async function renderUsers(container) {
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
     <div class="tiny-note" style="margin-bottom:10px;">Department controls which sections of the app someone can open. Administration gets full access to everything, including this page. New staff create their own login from the sign-in screen's "Create one" link — set their department and position here afterwards. Suspend or delete an account to block its login instantly; both can be reversed any time from this list.</div>
     <div class="card" id="list"></div>
+    ${isOwner(profile) ? `
+    <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Departments</h3></div>
+    <div class="tiny-note" style="margin-bottom:10px;">As owner, click a department to see every account's full registration information, or suspend/delete the whole department at once.</div>
+    <div class="card" id="deptCards"></div>
+    ` : ""}
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
     <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
     <div class="card" id="reqList"></div>
@@ -6622,6 +6703,9 @@ async function renderUsers(container) {
     <div class="card" id="deptLockCard"></div>`;
   renderRegToggleCard();
   renderDeptLockCard();
+  const transferOwnerBtn = document.getElementById("transferOwnerBtn");
+  if (transferOwnerBtn) transferOwnerBtn.onclick = () => openTransferOwnershipModal(profiles, container);
+  if (isOwner(profile)) renderDeptCards(profiles, container);
   const pendingRegList = document.getElementById("pendingRegList");
   const renderPendingRegList = () => {
     pendingRegList.innerHTML = !pendingRegs.length ? `<div class="tiny-note">No pending registrations.</div>` :
@@ -6780,6 +6864,123 @@ function openAccountControls(p, container, deptOptions, posOptions) {
       refresh();
     });
   }
+}
+
+/* ---------------- OWNERSHIP & DEPARTMENT-WIDE CONTROLS (owner only) ----------------
+   Everyone in Administration already gets full nav access (see deptAccess()),
+   but only the single account with is_owner=true can act on a WHOLE
+   department at once (suspend/delete every account in it) or hand that
+   authority to someone else. Individual account controls above are
+   unaffected — any Administration account can still manage one person at a
+   time from the list. */
+function renderDeptCards(profiles, container) {
+  const mount = document.getElementById("deptCards");
+  if (!mount) return;
+  mount.innerHTML = Object.entries(DEPARTMENTS).map(([key, d]) => {
+    const members = profiles.filter(p => p.department === key && !p.deleted_at);
+    return `<div class="list-row deptCardRow" data-dept="${key}" style="cursor:pointer;flex-wrap:wrap;">
+      <div class="list-main">
+        <div class="list-title">${d.label}</div>
+        <div class="list-sub">${members.length} account${members.length===1?"":"s"}</div>
+      </div>
+      <div class="tiny-note">Tap to view &amp; manage</div>
+    </div>`;
+  }).join("");
+  mount.querySelectorAll(".deptCardRow").forEach(row => {
+    row.onclick = () => openDepartmentModal(row.dataset.dept, profiles, container);
+  });
+}
+function openDepartmentModal(deptKey, profiles, container) {
+  const dept = DEPARTMENTS[deptKey];
+  const members = profiles.filter(p => p.department === deptKey);
+  const activeMembers = members.filter(p => !p.deleted_at);
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${dept.label}</h3>
+    <div class="tiny-note" style="margin-bottom:12px;">${members.length} account${members.length===1?"":"s"} in this department. Full registration information for each is shown below.</div>
+    <div id="deptMemberList">
+      ${!members.length ? `<div class="tiny-note">No one is in this department yet.</div>` : members.map(p => `
+        <div class="list-row" style="flex-wrap:wrap;align-items:flex-start;border-bottom:1px solid var(--border,#eee);padding-bottom:10px;margin-bottom:10px;">
+          ${avatarHtml(p.full_name, p.photo_url)}
+          <div class="list-main">
+            <div class="list-title">${p.full_name || "—"} ${p.id===profile.id?`<span class="badge badge-green">This is You</span>`:""}${p.deleted_at?`<span class="badge badge-grey">Deleted</span>`:p.suspended_at?`<span class="badge badge-amber">Suspended</span>`:""}${p.is_owner?` <span class="badge badge-green">Owner</span>`:""}</div>
+            <div class="list-sub">${p.position || "No position set"}</div>
+            <div class="list-sub">${p.username ? `@${p.username}` : ""}${p.phone ? ` · ${p.phone}` : ""}</div>
+            <div class="list-sub">${p.whatsapp ? `WhatsApp: ${p.whatsapp}` : ""}${p.email ? `${p.whatsapp?" · ":""}${p.email}` : ""}</div>
+            <div class="list-sub">${p.created_at ? `Joined ${new Date(p.created_at).toLocaleDateString()}` : ""}</div>
+          </div>
+        </div>`).join("")}
+    </div>
+    <div class="form-actions" style="flex-wrap:wrap;">
+      <button class="btn btn-ghost" id="modalCancel">Close</button>
+      ${activeMembers.length ? `
+        <button class="btn btn-ghost" id="suspendDeptBtn">${ic.keyLock} Suspend department</button>
+        <button class="btn btn-ghost" id="deleteDeptBtn" style="color:var(--red);">${ic.trash} Delete department</button>
+      ` : ""}
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const suspendBtn = overlay.querySelector("#suspendDeptBtn");
+  const deleteBtn = overlay.querySelector("#deleteDeptBtn");
+  // The owner's own account is never touched by a bulk action — that would
+  // lock them out of the very department they're managing from.
+  const actionable = activeMembers.filter(p => p.id !== profile.id);
+  if (suspendBtn) suspendBtn.onclick = safe(async () => {
+    if (!actionable.length) { toast("Nothing to suspend besides your own account.", false); return; }
+    if (!(await customConfirm(`Suspend all ${actionable.length} active account(s) in ${dept.label}? They won't be able to log in until unsuspended individually.`, { danger:true, okLabel:"Suspend department" }))) return;
+    await Promise.all(actionable.map(p => dbUpdate("profiles", p.id, { suspended_at: new Date().toISOString() })));
+    toast(`${dept.label} suspended.`, false);
+    close(); renderUsers(container);
+  });
+  if (deleteBtn) deleteBtn.onclick = safe(async () => {
+    if (!actionable.length) { toast("Nothing to delete besides your own account.", false); return; }
+    if (!(await customConfirm(`Delete all ${actionable.length} account(s) in ${dept.label}? Each can be recovered individually afterwards from Manage Accounts.`, { danger:true, okLabel:"Delete department" }))) return;
+    await Promise.all(actionable.map(p => dbUpdate("profiles", p.id, { deleted_at: new Date().toISOString() })));
+    toast(`${dept.label} deleted.`, false);
+    close(); renderUsers(container);
+  });
+}
+// Lets the current owner hand their authority to another active
+// Administration account at the school — verified against the owner's own
+// password server-side (see transfer_ownership()).
+function openTransferOwnershipModal(profiles, container) {
+  const candidates = profiles.filter(p => p.department === "administration" && p.id !== profile.id && !p.deleted_at && !p.suspended_at);
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>Transfer ownership</h3>
+    <div class="tiny-note" style="margin-bottom:12px;">Hand full ownership authority — including the ability to suspend or delete whole departments — to another Administrator. You'll keep your Administration access, just not the owner powers.</div>
+    ${!candidates.length ? `<div class="tiny-note">There's no other active Administration account to transfer to yet — create one from Manage Accounts first.</div>` : `
+      <div class="field"><label>New owner</label><select id="newOwnerSel">${candidates.map(p=>`<option value="${p.id}">${p.full_name}${p.username?` (@${p.username})`:""}</option>`).join("")}</select></div>
+      <div class="field"><label>Your password (to confirm)</label><input id="ownerConfirmPw" type="password" /></div>
+    `}
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+      ${candidates.length ? `<button class="btn btn-primary" id="confirmTransferBtn">Transfer</button>` : ""}
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#modalCancel").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  const confirmBtn = overlay.querySelector("#confirmTransferBtn");
+  if (confirmBtn) confirmBtn.onclick = safe(async () => {
+    const newOwnerId = val(overlay, "newOwnerSel");
+    const pw = val(overlay, "ownerConfirmPw");
+    if (!pw) { toast("Enter your password to confirm.", true); return; }
+    const chosen = candidates.find(p => p.id === newOwnerId);
+    if (!(await customConfirm(`Make ${chosen ? chosen.full_name : "this account"} the new owner? You'll lose owner powers immediately.`, { danger:true, okLabel:"Transfer ownership" }))) return;
+    await transferOwnership(newOwnerId, pw);
+    profile.is_owner = false;
+    toast("Ownership transferred.", false);
+    close(); renderUsers(container);
+  });
 }
 
 /* ---------------- SCHOOL SETTINGS ---------------- */
@@ -7352,6 +7553,7 @@ function playSplashScreen() {
   render();
   await loadSchoolSettings();
   await tryRestoreRememberedSession();
+  if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } // fire-and-forget: finalizes any school whose 30-day Trash window already passed
   render();
   // The app underneath is already ready by now; the splash just waits out
   // its own 6s minimum before stepping aside and "opening" the app.
