@@ -159,7 +159,6 @@
   .link-btn{background:none;border:none;color:var(--teal-dark);font-weight:600;font-size:13.5px;padding:0;}
   .err{background:#fdecec;color:var(--red);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
   .msg-ok{background:#e9f7f1;color:var(--teal-dark);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
-  .tiny-note{font-size:11.5px;color:var(--ink-soft);margin-top:16px;line-height:1.5;text-align:center;}
 
   /* ---------- SHELL ---------- */
   .shell{display:flex;height:100vh;height:100dvh;overflow:hidden;}
@@ -584,144 +583,26 @@ const BRAND_PRESETS = {
   indigo: { base:"#5B5FCF", dark:"#43469E", tint:"#ECEDFA", label:"Indigo" },
 };
 const CURRENCY_OPTIONS = ["₦","$","£","€","KSh","UGX","TSh","R","GH₵"];
-const SCHOOL_SETTINGS_SQL = `create table if not exists school_settings (
-  id int primary key default 1,
-  school_name text,
-  motto text,
-  mission text,
-  vision text,
-  logo_url text,
-  phone text,
-  email text,
-  address text,
-  brand_color text default 'teal',
-  currency_symbol text default '₦',
-  updated_at timestamptz default now()
-);
-insert into school_settings (id) values (1) on conflict (id) do nothing;
-alter table school_settings enable row level security;
-create policy "Anyone can read school settings" on school_settings for select using (true);
-create policy "Admins can update school settings" on school_settings for update using (true);`;
-const EXAM_MIGRATION_SQL = `alter table exams add column if not exists exam_end_date date;
-alter table exam_results add column if not exists remarks text;`;
-const STAMPS_RECEIPT_SQL = `alter table school_settings add column if not exists stamp_head_teacher text;
-alter table school_settings add column if not exists stamp_deputy_head_teacher text;
-alter table school_settings add column if not exists stamp_bursar text;
-alter table school_settings add column if not exists stamp_other text;
-alter table school_settings add column if not exists receipt_prefix text default 'RCT';
-alter table school_settings add column if not exists receipt_digits int default 6;
-alter table school_settings add column if not exists receipt_next_number int default 1;
-alter table payments add column if not exists receipt_no text;`;
 const STAMP_TYPES = [
   { key:"stamp_head_teacher", label:"Head Teacher" },
   { key:"stamp_deputy_head_teacher", label:"Deputy Head Teacher" },
   { key:"stamp_bursar", label:"Bursar" },
   { key:"stamp_other", label:"Other office stamp" },
 ];
-const GRADES_SETUP_SQL = `create table if not exists grades (
-  id bigint generated always as identity primary key,
-  grade text not null,
-  min_score numeric not null,
-  max_score numeric not null,
-  remark text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table grades enable row level security;
-create policy "Anyone can read grades" on grades for select using (true);
-create policy "Authenticated can manage grades" on grades for all using (true);`;
-const ID_FORMAT_SQL = `alter table school_settings add column if not exists student_id_prefix text;
-alter table school_settings add column if not exists student_id_seq int default 0;
-alter table school_settings add column if not exists student_id_digits int default 3;
-alter table school_settings add column if not exists teacher_id_prefix text;
-alter table school_settings add column if not exists teacher_id_seq int default 0;
-alter table school_settings add column if not exists teacher_id_digits int default 3;`;
 // New "Grade" field added to both the student and staff registration forms.
-const GRADE_FIELD_SQL = `alter table students add column if not exists grade text;
-alter table teachers add column if not exists grade text;`;
 // One-time setup for the Comms page — announcements, reports and notices
 // sent out to parents/staff all live in one small table, distinguished by `type`.
-const COMMUNICATIONS_SQL = `create table if not exists school_communications (
-  id bigint generated always as identity primary key,
-  type text not null check (type in ('announcement','report','notice')),
-  title text not null,
-  message text not null,
-  audience text,
-  created_by text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table school_communications enable row level security;
-drop policy if exists "Anyone can read school_communications" on school_communications;
-create policy "Anyone can read school_communications" on school_communications for select using (true);
-drop policy if exists "Authenticated can manage school_communications" on school_communications;
-create policy "Authenticated can manage school_communications" on school_communications for all using (true);
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'school_communications'
-  ) then
-    alter publication supabase_realtime add table school_communications;
-  end if;
-end $$;`;
 // One-time setup for the School Meetings page — PTA meetings, parent-teacher
 // conferences, staff briefings, etc., each with a date/time so they can be
 // sorted into "upcoming" for parents and staff to plan around.
-const MEETINGS_SQL = `create table if not exists school_meetings (
-  id bigint generated always as identity primary key,
-  title text not null,
-  description text,
-  meeting_date timestamptz not null,
-  location text,
-  audience text,
-  created_by text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table school_meetings enable row level security;
-drop policy if exists "Anyone can read school_meetings" on school_meetings;
-create policy "Anyone can read school_meetings" on school_meetings for select using (true);
-drop policy if exists "Authenticated can manage school_meetings" on school_meetings;
-create policy "Authenticated can manage school_meetings" on school_meetings for all using (true);
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'school_meetings'
-  ) then
-    alter publication supabase_realtime add table school_meetings;
-  end if;
-end $$;`;
 // One-time setup for Finance's "Fee Reminders" tool. A reminder with
 // student_id = null goes out to every parent; one with a student_id only
 // reaches the parent(s) linked to that specific student (see
 // fetchParentFeeReminders on the parent side).
-const FEE_REMINDERS_SQL = `create table if not exists fee_reminders (
-  id bigint generated always as identity primary key,
-  student_id uuid references students(id) on delete cascade,
-  title text not null,
-  message text not null,
-  created_by text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table fee_reminders enable row level security;
-drop policy if exists "Anyone can read fee_reminders" on fee_reminders;
-drop policy if exists "Anyone can create fee_reminders" on fee_reminders;
-drop policy if exists "Anyone can update fee_reminders" on fee_reminders;
-create policy "Anyone can read fee_reminders" on fee_reminders for select using (true);
-create policy "Anyone can create fee_reminders" on fee_reminders for insert with check (true);
-create policy "Anyone can update fee_reminders" on fee_reminders for update using (true);`;
 // Optional but recommended: once a payment/receipt is recorded it should never
 // be editable or deletable again — the app's UI never exposes an edit/delete
 // action for fee_payments, but this closes the door at the database level too,
 // regardless of policies set up before this app existed.
-const FEE_PAYMENTS_READONLY_SQL = `alter table fee_payments enable row level security;
-drop policy if exists "fee_payments no update" on fee_payments;
-drop policy if exists "fee_payments no delete" on fee_payments;
-create policy "fee_payments no update" on fee_payments for update using (false);
-create policy "fee_payments no delete" on fee_payments for delete using (false);`;
 
 function applyBrandColor(key) {
   const p = BRAND_PRESETS[key] || BRAND_PRESETS.teal;
@@ -1047,152 +928,16 @@ function hasNavAccess(p, navId) {
 // email involved anywhere — accounts live entirely in the `profiles` table,
 // with passwords hashed by Postgres itself (pgcrypto), checked via the
 // verify_login() function below. Run this once in Supabase → SQL Editor.
-const PROFILES_MIGRATION_SQL = `-- lets Postgres hash/check passwords for us
-create extension if not exists pgcrypto;
-
--- new columns this account system needs
-alter table profiles add column if not exists username text unique;
-alter table profiles add column if not exists phone text;
-alter table profiles add column if not exists pin text;
-alter table profiles add column if not exists password_hash text;
-alter table profiles add column if not exists photo_url text;
-alter table profiles add column if not exists suspended_at timestamptz;
-alter table profiles add column if not exists deleted_at timestamptz;
--- profiles.id used to come from auth.users (via a foreign key) — accounts are
--- created directly here now, so that link has to go, and id needs to generate itself:
-alter table profiles drop constraint if exists profiles_id_fkey;
-alter table profiles alter column id set default gen_random_uuid();
-
--- Creates a new account. Called from the app's "Create account" screen.
-drop function if exists create_account(text, text, text, text, text, text);
-drop function if exists create_account(text, text, text, text, text, text, text);
-create function create_account(
-  p_full_name text, p_username text, p_department text,
-  p_phone text, p_password text, p_pin text, p_photo_url text default null
-) returns profiles
-language plpgsql security definer as $create_account$
-declare new_row profiles;
-begin
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url)
-  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url)
-  returning * into new_row;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_account$;
-grant execute on function create_account(text,text,text,text,text,text,text) to anon, authenticated;
-
--- Checks a username + password and returns the profile on success.
-drop function if exists verify_login(text, text);
-create function verify_login(p_username text, p_password text) returns profiles
-language plpgsql security definer as $verify_login$
-declare found_row profiles;
-begin
-  select * into found_row from profiles where username = p_username;
-  if found_row.id is null or found_row.password_hash is null
-     or crypt(p_password, found_row.password_hash) <> found_row.password_hash then
-    raise exception 'Incorrect username or password.';
-  end if;
-  if found_row.deleted_at is not null then
-    raise exception 'This account has been deleted. Contact Administration.';
-  end if;
-  if found_row.suspended_at is not null then
-    raise exception 'This account is suspended. Contact Administration.';
-  end if;
-  found_row.password_hash := null;
-  return found_row;
-end;
-$verify_login$;
-grant execute on function verify_login(text,text) to anon, authenticated;
-
--- "Forgot password" flow: identity is confirmed with the account's PIN
--- (no email involved), then the password is reset straight away.
-drop function if exists reset_password(text, text, text);
-create function reset_password(p_username text, p_pin text, p_new_password text) returns void
-language plpgsql security definer as $reset_password$
-declare found_row profiles;
-begin
-  select * into found_row from profiles where username = p_username;
-  if found_row.id is null then
-    raise exception 'No account found with that username.';
-  end if;
-  if found_row.pin is null or found_row.pin = '' or found_row.pin <> p_pin then
-    raise exception 'That PIN does not match our records.';
-  end if;
-  if p_new_password is null or length(p_new_password) < 6 then
-    raise exception 'New password must be at least 6 characters.';
-  end if;
-  update profiles set password_hash = crypt(p_new_password, gen_salt('bf')) where id = found_row.id;
-end;
-$reset_password$;
-grant execute on function reset_password(text,text,text) to anon, authenticated;`;
 
 // One-time setup for the "Request a detail change" flow on the Account page —
 // Academic, Finance and Parents department accounts can't edit their own department,
 // position or role there, so they submit a request here instead, which shows
 // up for Administration to action on the same page.
-const ACCOUNT_REQUESTS_SQL = `create table if not exists account_change_requests (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid references schools(id) on delete cascade,
-  profile_id uuid references profiles(id) on delete cascade,
-  full_name text,
-  department text,
-  message text not null,
-  status text not null default 'pending',
-  created_at timestamptz not null default now(),
-  resolved_at timestamptz
-);
-alter table account_change_requests add column if not exists school_id uuid references schools(id) on delete cascade;
-alter table account_change_requests enable row level security;
-drop policy if exists "Anyone can read account change requests" on account_change_requests;
-create policy "Anyone can read account change requests" on account_change_requests for select using (true);
-drop policy if exists "Anyone can create account change requests" on account_change_requests;
-create policy "Anyone can create account change requests" on account_change_requests for insert with check (true);
-drop policy if exists "Anyone can update account change requests" on account_change_requests;
-create policy "Anyone can update account change requests" on account_change_requests for update using (true);
-alter publication supabase_realtime add table account_change_requests;`;
 
 // One-time setup for the "Contact TransApple" page — schools submit a request
 // (school_support_requests), then a back-and-forth conversation (school_support_messages)
 // continues underneath it until TransApple marks it resolved. Safe to re-run,
 // and safe to run from either this app or the Mother App — same tables either way.
-const SUPPORT_SQL = `create table if not exists school_support_requests (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid references schools(id) on delete cascade,
-  subject text not null,
-  message text not null,
-  status text not null default 'open', -- 'open' | 'resolved'
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-alter table school_support_requests add column if not exists updated_at timestamptz not null default now();
-alter table school_support_requests enable row level security;
-drop policy if exists "Anyone can submit support requests" on school_support_requests;
-create policy "Anyone can submit support requests" on school_support_requests for insert with check (true);
-drop policy if exists "Anyone can read support requests" on school_support_requests;
-create policy "Anyone can read support requests" on school_support_requests for select using (true);
-drop policy if exists "Anyone can update support requests" on school_support_requests;
-create policy "Anyone can update support requests" on school_support_requests for update using (true);
-
-create table if not exists school_support_messages (
-  id uuid primary key default gen_random_uuid(),
-  request_id uuid references school_support_requests(id) on delete cascade,
-  sender text not null default 'school', -- 'school' | 'transapple'
-  sender_name text,
-  message text not null,
-  created_at timestamptz not null default now()
-);
-alter table school_support_messages enable row level security;
-drop policy if exists "Anyone can read support messages" on school_support_messages;
-create policy "Anyone can read support messages" on school_support_messages for select using (true);
-drop policy if exists "Anyone can send support messages" on school_support_messages;
-create policy "Anyone can send support messages" on school_support_messages for insert with check (true);`;
 
 // One-time setup for real push notifications to staff devices — ones that
 // arrive even with this app fully closed. One row per device/browser that
@@ -1201,19 +946,6 @@ create policy "Anyone can send support messages" on school_support_messages for 
 // announcement or an incoming parent message only pushes to the right
 // people. Actually *sending* a push still needs the small Edge Function
 // shown in Settings — this SQL only stores subscriptions.
-const STAFF_PUSH_SQL = `create table if not exists push_subscriptions_staff (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid,
-  profile_id uuid references profiles(id) on delete cascade,
-  department text,
-  endpoint text unique not null,
-  p256dh text not null,
-  auth text not null,
-  created_at timestamptz not null default now()
-);
-alter table push_subscriptions_staff enable row level security;
-drop policy if exists "Anyone can manage staff push subscriptions" on push_subscriptions_staff;
-create policy "Anyone can manage staff push subscriptions" on push_subscriptions_staff for all using (true) with check (true);`;
 
 // Edge Function template (see Settings → Push notifications → one-time setup
 // for exactly how to wire this up). Triggered by a Database Webhook on
@@ -1306,116 +1038,6 @@ Deno.serve(async (req) => {
    Student ID (admission no.) AND the student's exact registered name are
    both verified server-side — see link_parent_child()/create_parent_account()
    below. One-time setup: run this once in Supabase → SQL Editor. */
-const PARENT_PORTAL_SQL = `-- Links a parent profile to one or more student records.
-create table if not exists parent_students (
-  id bigint generated always as identity primary key,
-  parent_id uuid references profiles(id) on delete cascade,
-  student_id uuid references students(id) on delete cascade,
-  created_at timestamptz default now(),
-  unique(parent_id, student_id)
-);
-alter table parent_students enable row level security;
-create policy "Anyone can read parent_students" on parent_students for select using (true);
-create policy "Anyone can manage parent_students" on parent_students for all using (true);
-
--- Messages a parent sends to the school from the Contact School page.
--- "department" routes it to Administration, Academics or Finance.
-create table if not exists parent_messages (
-  id bigint generated always as identity primary key,
-  parent_id uuid references profiles(id) on delete cascade,
-  parent_name text,
-  department text,
-  subject text not null,
-  message text not null,
-  status text not null default 'unread',
-  created_at timestamptz default now()
-);
-alter table parent_messages add column if not exists department text;
-alter table parent_messages enable row level security;
-create policy "Anyone can read parent_messages" on parent_messages for select using (true);
-create policy "Anyone can create parent_messages" on parent_messages for insert with check (true);
-create policy "Anyone can update parent_messages" on parent_messages for update using (true);
-
--- Private Contact: a confidential note from a parent to one specific staff
--- member, found by searching their account/username. Only shown to the
--- parent who sent it and the staff member it's addressed to — enforced on
--- the client by always filtering on parent_id or recipient_id (this app has
--- no Supabase Auth session to key real row-level security off of, same as
--- every other table here).
-create table if not exists private_messages (
-  id bigint generated always as identity primary key,
-  parent_id uuid references profiles(id) on delete cascade,
-  parent_name text,
-  recipient_id uuid references profiles(id) on delete cascade,
-  recipient_name text,
-  subject text not null,
-  message text not null,
-  status text not null default 'unread',
-  created_at timestamptz default now()
-);
-alter table private_messages enable row level security;
-create policy "Anyone can read private_messages" on private_messages for select using (true);
-create policy "Anyone can create private_messages" on private_messages for insert with check (true);
-create policy "Anyone can update private_messages" on private_messages for update using (true);
-
--- Verifies a Student ID + the student's exact registered name match, then
--- links that student to a parent profile. Used both when adding a child
--- after sign-up and (inside create_parent_account below) during sign-up.
-drop function if exists link_parent_child(uuid, text, text);
-create function link_parent_child(p_parent_id uuid, p_admission_no text, p_student_name text) returns students
-language plpgsql security definer as $link_parent_child$
-declare found_student students;
-begin
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
-  end if;
-  insert into parent_students (parent_id, student_id) values (p_parent_id, found_student.id)
-    on conflict (parent_id, student_id) do nothing;
-  return found_student;
-end;
-$link_parent_child$;
-grant execute on function link_parent_child(uuid,text,text) to anon, authenticated;
-
--- Creates a parent account. The Student ID + exact registered name match is
--- verified FIRST — the account (and the link to the child) is only created
--- once that check passes.
-drop function if exists create_parent_account(text, text, text, text, text, text, text, text);
-create function create_parent_account(
-  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
-  p_photo_url text, p_admission_no text, p_student_name text
-) returns profiles
-language plpgsql security definer as $create_parent_account$
-declare new_row profiles; found_student students;
-begin
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
-  end if;
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url)
-  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url)
-  returning * into new_row;
-  insert into parent_students (parent_id, student_id) values (new_row.id, found_student.id)
-    on conflict (parent_id, student_id) do nothing;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_parent_account$;
-grant execute on function create_parent_account(text,text,text,text,text,text,text,text) to anon, authenticated;`;
 
 /* ---------------- MULTI-SCHOOL SETUP ----------------
    Run this ONCE in Supabase → SQL Editor to turn this single-school app into
@@ -1425,126 +1047,6 @@ grant execute on function create_parent_account(text,text,text,text,text,text,te
    and updates create_account/create_parent_account/link_parent_child to be
    school-aware. Nothing here changes how the app works for a school that's
    already using it — it just adds the ability to have more than one. */
-const MULTI_SCHOOL_SQL = `create table if not exists schools (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  status text not null default 'active', -- 'active' or 'suspended'
-  created_at timestamptz not null default now()
-);
-alter table schools enable row level security;
-drop policy if exists "Anyone can read active schools" on schools;
-create policy "Anyone can read active schools" on schools for select using (true);
-
--- One default school so existing data has somewhere to belong.
-insert into schools (name) select 'My School' where not exists (select 1 from schools);
-
--- Add school_id to every table this app uses, and backfill it to the first
--- school so nothing existing breaks. Safe to re-run.
-do $$
-declare t text; default_school uuid;
-begin
-  select id into default_school from schools order by created_at limit 1;
-  foreach t in array array[
-    'profiles','students','teachers','classes','class_subjects','subjects','terms',
-    'exams','exam_types','exam_results','grades','attendance','staff_attendance',
-    'fee_structures','fee_payments','school_communications','school_meetings',
-    'school_settings','account_change_requests','parent_students','parent_messages','private_messages','fee_reminders'
-  ]
-  loop
-    if to_regclass(t) is not null then
-      execute format('alter table %I add column if not exists school_id uuid references schools(id)', t);
-      execute format('update %I set school_id = %L where school_id is null', t, default_school);
-    end if;
-  end loop;
-end $$;
-
--- Creates a new staff account within a specific school.
-drop function if exists create_account(text, text, text, text, text, text, text);
-create function create_account(
-  p_full_name text, p_username text, p_department text,
-  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_account$
-declare new_row profiles;
-begin
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id)
-  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id)
-  returning * into new_row;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_account$;
-grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
-
--- Creates a parent account, scoped to the school the student belongs to.
-drop function if exists create_parent_account(text, text, text, text, text, text, text, text);
-create function create_parent_account(
-  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
-  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_parent_account$
-declare new_row profiles; found_student students;
-begin
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and school_id = p_school_id
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
-  end if;
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id)
-  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id)
-  returning * into new_row;
-  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
-    on conflict (parent_id, student_id) do nothing;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_parent_account$;
-grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;
-
--- Links an additional child, scoped to the parent's own school.
-drop function if exists link_parent_child(uuid, text, text);
-create function link_parent_child(p_parent_id uuid, p_admission_no text, p_student_name text) returns students
-language plpgsql security definer as $link_parent_child$
-declare found_student students; parent_school uuid;
-begin
-  select school_id into parent_school from profiles where id = p_parent_id;
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and school_id = parent_school
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name. Please check with the school office.';
-  end if;
-  insert into parent_students (parent_id, student_id, school_id) values (p_parent_id, found_student.id, parent_school)
-    on conflict (parent_id, student_id) do nothing;
-  return found_student;
-end;
-$link_parent_child$;
-grant execute on function link_parent_child(uuid,text,text) to anon, authenticated;`;
 
 /* ---------------- DEPARTMENT REGISTRATION LOCK ----------------
    Run this ONCE in Supabase → SQL Editor, after MULTI_SCHOOL_SQL (it redefines
@@ -1558,39 +1060,6 @@ grant execute on function link_parent_child(uuid,text,text) to anon, authenticat
    this setting — see openAccountControls. The check is enforced here in the
    database (not just hidden from the dropdown client-side) so it can't be
    bypassed by someone posting straight to the API. */
-const DEPARTMENT_LOCK_SQL = `alter table school_settings add column if not exists locked_departments jsonb not null default '{}'::jsonb;
-
-drop function if exists create_account(text, text, text, text, text, text, text, uuid);
-create function create_account(
-  p_full_name text, p_username text, p_department text,
-  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_account$
-declare new_row profiles; locked jsonb;
-begin
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  if p_department is not null and p_department <> '' then
-    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
-    if locked is not null and (locked ->> p_department) = 'true' then
-      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
-    end if;
-  end if;
-  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id)
-  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id)
-  returning * into new_row;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_account$;
-grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- SCHOOL SELF-REGISTRATION (TransApple mother system) ----------------
    Run this ONCE in Supabase → SQL Editor, after MULTI_SCHOOL_SQL. It powers the
@@ -1606,142 +1075,6 @@ grant execute on function create_account(text,text,text,text,text,text,text,uuid
    Administrator's login account is created here, in `profiles`, because that
    account has to exist in this app's database for them to log in and start
    creating the rest of their team. */
-const SCHOOL_SELF_REGISTRATION_SQL = `-- Extra fields the registration screen collects about the school itself —
--- these live on the mother system's own \`schools\` table, not in this app's data.
-alter table schools add column if not exists motto text;
-alter table schools add column if not exists village text;
-alter table schools add column if not exists subcounty text;
-alter table schools add column if not exists district text;
-alter table schools add column if not exists size_range text;
-
--- The human-facing School ID — letters, numbers, and underscores only. Generated
--- automatically inside register_school() below (TATNOVA followed by 7
--- random digits, retried until unique), shown to Administrators under Settings,
--- and never editable afterwards. Staff/parents key this in on the "Create your
--- account" screen so their account lands in the right school — this is the code
--- the TransApple Mother System uses to identify the school everywhere.
-alter table schools add column if not exists school_code text;
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'schools_school_code_key') then
-    alter table schools add constraint schools_school_code_key unique (school_code);
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'schools_school_code_format') then
-    alter table schools add constraint schools_school_code_format check (school_code ~ '^[A-Za-z0-9_]+$');
-  end if;
-end $$;
-
--- Extra contact fields for the first Administrator account. photo_url already
--- exists from the base PROFILES_MIGRATION_SQL.
-alter table profiles add column if not exists whatsapp text;
-alter table profiles add column if not exists email text;
-
--- Marks the account that has full ownership authority over the school — set
--- automatically for the founding Administrator inside register_school()
--- below. There's exactly one owner per school at a time; see transfer_ownership()
--- further down for how that authority moves to someone else. Only the owner
--- can suspend/delete an entire department at once (see openDepartmentModal in
--- the app) — every other Administration account still manages accounts one
--- at a time, same as before.
-alter table profiles add column if not exists is_owner boolean not null default false;
-
--- Registers a brand-new school (written to the mother system's \`schools\`
--- table) AND creates its first Administrator account together, atomically —
--- if either half fails, nothing is created.
-drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text);
-drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text,text);
-drop function if exists register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text);
-create function register_school(
-  p_school_name text, p_school_motto text,
-  p_school_village text, p_school_subcounty text, p_school_district text,
-  p_school_size_range text,
-  p_admin_full_name text, p_admin_username text, p_admin_phone text,
-  p_admin_whatsapp text, p_admin_email text,
-  p_admin_password text, p_admin_pin text default null, p_admin_photo_url text default null
-) returns profiles
-language plpgsql security definer as $register_school$
-declare new_school schools; new_admin profiles; candidate_code text;
-begin
-  if p_school_name is null or trim(p_school_name) = '' then
-    raise exception 'School name is required.';
-  end if;
-  if p_admin_full_name is null or trim(p_admin_full_name) = '' then
-    raise exception 'Administrator full name is required.';
-  end if;
-  if p_admin_username is null or trim(p_admin_username) = '' then
-    raise exception 'Administrator username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_admin_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  if p_admin_password is null or length(p_admin_password) < 6 then
-    raise exception 'Administrator password must be at least 6 characters.';
-  end if;
-
-  -- Build the School ID as TATNOVA followed by 7 random digits, retrying
-  -- until it's unique.
-  loop
-    candidate_code := 'TATNOVA' || lpad(floor(random() * 10000000)::text, 7, '0');
-    exit when not exists (select 1 from schools where school_code = candidate_code);
-  end loop;
-
-  -- School record: owned by the mother system, not this app's own tables.
-  insert into schools (name, motto, village, subcounty, district, size_range, status, school_code)
-  values (
-    trim(p_school_name), nullif(trim(p_school_motto),''),
-    nullif(trim(p_school_village),''), nullif(trim(p_school_subcounty),''), nullif(trim(p_school_district),''),
-    nullif(p_school_size_range,''), 'active', candidate_code
-  ) returning * into new_school;
-
-  -- First Administrator — Administration department = full access to everything,
-  -- and is_owner = true: they hold full authority over the school (including
-  -- suspending/deleting whole departments) until they transfer it to someone else.
-  insert into profiles (
-    full_name, username, department, phone, whatsapp, email,
-    pin, password_hash, role, photo_url, school_id, is_owner
-  ) values (
-    trim(p_admin_full_name), p_admin_username, 'administration',
-    nullif(p_admin_phone,''), nullif(p_admin_whatsapp,''), nullif(p_admin_email,''),
-    nullif(p_admin_pin,''), crypt(p_admin_password, gen_salt('bf')), 'staff', p_admin_photo_url, new_school.id, true
-  ) returning * into new_admin;
-
-  new_admin.password_hash := null;
-  return new_admin;
-end;
-$register_school$;
-grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;
-
--- Moves full ownership authority from the current owner to another active
--- Administration-department account at the same school. Verified against the
--- acting (current owner's) password, same trust model as reset_password().
-drop function if exists transfer_ownership(text,text,uuid);
-create function transfer_ownership(p_actor_username text, p_actor_password text, p_new_owner_id uuid)
-returns void language plpgsql security definer as $$
-declare actor profiles; new_owner profiles;
-begin
-  select * into actor from profiles where username = p_actor_username;
-  if actor.id is null or actor.password_hash is null or crypt(p_actor_password, actor.password_hash) <> actor.password_hash then
-    raise exception 'Your password could not be verified.';
-  end if;
-  if not actor.is_owner then
-    raise exception 'Only the current owner can transfer ownership.';
-  end if;
-
-  select * into new_owner from profiles where id = p_new_owner_id and school_id = actor.school_id;
-  if new_owner.id is null then
-    raise exception 'That account was not found at your school.';
-  end if;
-  if new_owner.department <> 'administration' then
-    raise exception 'Ownership can only be transferred to an Administration account.';
-  end if;
-  if new_owner.deleted_at is not null or new_owner.suspended_at is not null then
-    raise exception 'That account is suspended or deleted.';
-  end if;
-
-  update profiles set is_owner = false where id = actor.id;
-  update profiles set is_owner = true where id = new_owner.id;
-end;
-$$;
-grant execute on function transfer_ownership(text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- REGISTRATION APPROVAL ----------------
    Run this ONCE in Supabase → SQL Editor, after everything above (including
@@ -1762,207 +1095,6 @@ grant execute on function transfer_ownership(text,text,uuid) to anon, authentica
    there's no other Administrator yet to approve them, so that account keeps
    the column's default of 'approved'. Every account created afterwards goes
    through this workflow. */
-const REGISTRATION_APPROVAL_SQL = `alter table profiles add column if not exists approval_status text not null default 'approved';
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'profiles_approval_status_check') then
-    alter table profiles add constraint profiles_approval_status_check check (approval_status in ('pending','approved','rejected'));
-  end if;
-end $$;
-
--- Self-signup staff accounts now start pending.
-drop function if exists create_account(text, text, text, text, text, text, text, uuid);
-create function create_account(
-  p_full_name text, p_username text, p_department text,
-  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_account$
-declare new_row profiles; locked jsonb;
-begin
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  if p_department is not null and p_department <> '' then
-    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
-    if locked is not null and (locked ->> p_department) = 'true' then
-      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
-    end if;
-  end if;
-  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id, approval_status)
-  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id, 'pending')
-  returning * into new_row;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_account$;
-grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
-
--- Self-signup parent accounts now start pending too.
-drop function if exists create_parent_account(text, text, text, text, text, text, text, text, uuid);
-create function create_parent_account(
-  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
-  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_parent_account$
-declare new_row profiles; found_student students;
-begin
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and school_id = p_school_id
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
-  end if;
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id, approval_status)
-  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id, 'pending')
-  returning * into new_row;
-  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
-    on conflict (parent_id, student_id) do nothing;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_parent_account$;
-grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;
-
--- Approves a pending registration. Must be called by an existing Administrator
--- at the same school as the account being approved.
-drop function if exists approve_registration(uuid, uuid);
-create function approve_registration(p_admin_id uuid, p_profile_id uuid)
-returns profiles language plpgsql security definer as $$
-declare admin_row profiles; target_row profiles;
-begin
-  select * into admin_row from profiles where id = p_admin_id and department = 'administration' and deleted_at is null;
-  if admin_row.id is null then
-    raise exception 'Only a school Administrator can approve registrations.';
-  end if;
-  select * into target_row from profiles where id = p_profile_id and school_id = admin_row.school_id;
-  if target_row.id is null then
-    raise exception 'That registration was not found at this school.';
-  end if;
-  update profiles set approval_status = 'approved' where id = p_profile_id returning * into target_row;
-  target_row.password_hash := null;
-  return target_row;
-end;
-$$;
-grant execute on function approve_registration(uuid,uuid) to anon, authenticated;
-
--- Rejects a pending registration (kept on file, marked 'rejected', blocked at login).
-drop function if exists reject_registration(uuid, uuid);
-create function reject_registration(p_admin_id uuid, p_profile_id uuid)
-returns profiles language plpgsql security definer as $$
-declare admin_row profiles; target_row profiles;
-begin
-  select * into admin_row from profiles where id = p_admin_id and department = 'administration' and deleted_at is null;
-  if admin_row.id is null then
-    raise exception 'Only a school Administrator can reject registrations.';
-  end if;
-  select * into target_row from profiles where id = p_profile_id and school_id = admin_row.school_id;
-  if target_row.id is null then
-    raise exception 'That registration was not found at this school.';
-  end if;
-  update profiles set approval_status = 'rejected' where id = p_profile_id returning * into target_row;
-  target_row.password_hash := null;
-  return target_row;
-end;
-$$;
-grant execute on function reject_registration(uuid,uuid) to anon, authenticated;
-
--- Final verify_login: builds on every prior upgrade (deleted/suspended checks,
--- school-status checks, last_login_at, school_login_log) and adds the new
--- approval_status gate, plus the school-level Trash check (see
--- SCHOOL_TRASH_SQL / soft_delete_school in the Mother App) — checked first,
--- since once the school itself has been deleted nothing else about the
--- account matters. Blocks a login before it ever reaches the app shell.
-drop function if exists verify_login(text, text);
-create function verify_login(p_username text, p_password text) returns profiles
-language plpgsql security definer as $verify_login$
-declare found_row profiles; school_row schools;
-begin
-  select * into found_row from profiles where username = p_username;
-  if found_row.id is null or found_row.password_hash is null
-     or crypt(p_password, found_row.password_hash) <> found_row.password_hash then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception 'Incorrect username or password.';
-  end if;
-  if found_row.school_id is not null then
-    select * into school_row from schools where id = found_row.school_id;
-  end if;
-  -- The whole school was deleted (moved to Trash by a Mother App admin) —
-  -- this overrides every other check below, and the school row/name is
-  -- still around to name-check against during its 30-day Trash window.
-  if school_row.id is not null and school_row.deleted_at is not null then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception '"%" no longer exists in the system because it was permanently deleted. If you think this is a mistake, please contact us now.', school_row.name;
-  end if;
-  if found_row.deleted_at is not null then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception 'This account has been deleted. Contact Administration.';
-  end if;
-  if found_row.suspended_at is not null then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception 'This account is suspended. Contact Administration.';
-  end if;
-  if found_row.approval_status = 'pending' then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception 'Your registration is awaiting approval from your school Administrator.';
-  end if;
-  if found_row.approval_status = 'rejected' then
-    if to_regclass('school_login_log') is not null then
-      insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, false);
-    end if;
-    raise exception 'Your registration was not approved. Contact your school Administrator for more information.';
-  end if;
-  if school_row.id is not null then
-    if school_row.status = 'pending' then
-      raise exception 'Your school is still awaiting approval by TransApple. Please check back soon.';
-    elsif school_row.status = 'rejected' then
-      raise exception 'Your school''s registration was not approved. Contact TransApple for more information.';
-    elsif school_row.status = 'suspended' then
-      raise exception 'Your school''s account is suspended. Contact TransApple to resolve this.';
-    elsif school_row.status = 'deactivated' then
-      raise exception 'Your school''s account has been deactivated. Contact TransApple for help.';
-    end if;
-  end if;
-  if to_regclass('profiles') is not null then
-    begin
-      update profiles set last_login_at = now() where id = found_row.id;
-    exception when undefined_column then null;
-    end;
-  end if;
-  if to_regclass('school_login_log') is not null then
-    insert into school_login_log (school_id, username, success) values (found_row.school_id, p_username, true);
-  end if;
-  found_row.password_hash := null;
-  return found_row;
-end;
-$verify_login$;
-grant execute on function verify_login(text,text) to anon, authenticated;`;
 
 /* ---------------- SCHOOL REGISTRATION TOGGLE ----------------
    Run this ONCE in Supabase → SQL Editor, LAST — after REGISTRATION_APPROVAL_SQL
@@ -1979,89 +1111,6 @@ grant execute on function verify_login(text,text) to anon, authenticated;`;
    just the ones already locked individually. This never touches existing
    accounts or logins — only new self-signups. Defaults to open, so schools
    that never touch this setting are unaffected. */
-const SCHOOL_REGISTRATION_TOGGLE_SQL = `alter table school_settings add column if not exists registration_open boolean not null default true;
-
--- Self-signup staff accounts: blocked entirely while registration is closed,
--- checked before the per-department lock so the message is unambiguous.
-drop function if exists create_account(text, text, text, text, text, text, text, uuid);
-create function create_account(
-  p_full_name text, p_username text, p_department text,
-  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_account$
-declare new_row profiles; locked jsonb; reg_open boolean;
-begin
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  select registration_open into reg_open from school_settings where school_id = p_school_id limit 1;
-  if reg_open is false then
-    raise exception 'Registration is currently closed for this school. Please contact your admin.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  if p_department is not null and p_department <> '' then
-    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
-    if locked is not null and (locked ->> p_department) = 'true' then
-      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
-    end if;
-  end if;
-  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id, approval_status)
-  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id, 'pending')
-  returning * into new_row;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_account$;
-grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
-
--- Self-signup parent accounts: same closed-registration check, before the
--- student-match lookup so a closed school never leaks whether a Student ID
--- exists.
-drop function if exists create_parent_account(text, text, text, text, text, text, text, text, uuid);
-create function create_parent_account(
-  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
-  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
-) returns profiles
-language plpgsql security definer as $create_parent_account$
-declare new_row profiles; found_student students; reg_open boolean;
-begin
-  if p_school_id is null then
-    raise exception 'Select a school.';
-  end if;
-  select registration_open into reg_open from school_settings where school_id = p_school_id limit 1;
-  if reg_open is false then
-    raise exception 'Registration is currently closed for this school. Please contact your admin.';
-  end if;
-  select * into found_student from students
-    where trim(lower(admission_no)) = trim(lower(p_admission_no))
-      and trim(lower(full_name)) = trim(lower(p_student_name))
-      and school_id = p_school_id
-      and deleted_at is null
-    limit 1;
-  if found_student.id is null then
-    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
-  end if;
-  if p_username is null or trim(p_username) = '' then
-    raise exception 'Username is required.';
-  end if;
-  if exists (select 1 from profiles where username = p_username) then
-    raise exception 'That username is already taken.';
-  end if;
-  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id, approval_status)
-  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id, 'pending')
-  returning * into new_row;
-  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
-    on conflict (parent_id, student_id) do nothing;
-  new_row.password_hash := null;
-  return new_row;
-end;
-$create_parent_account$;
-grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
@@ -2289,7 +1338,7 @@ function openSchoolUpgradeModal() {
   const s = CURRENT_SCHOOL || {};
   const sizeOptions = SCHOOL_SIZE_RANGES.map(r => `<option value="${r}" ${s.size_range===r?"selected":""}>${r}</option>`).join("");
   openModal("Complete School Upgrade", `
-    <p class="tiny-note" style="margin-bottom:10px;">TransApple has moved to a new registration format. Fill in what's still missing below to finish upgrading your school — nothing already on file changes, and none of your students, staff, fees, exams or settings are affected.</p>
+    
     <div class="field"><label>Motto</label><input id="upgMotto" value="${s.motto||""}" placeholder="${s.motto?"":"Not set"}" ${s.motto?"disabled":""} /></div>
     <div class="field"><label>Village</label><input id="upgVillage" value="${s.village||""}" ${s.village?"disabled":""} /></div>
     <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.subcounty||""}" ${s.subcounty?"disabled":""} /></div>
@@ -2657,8 +1706,8 @@ function renderSchoolRegistration() {
   app().innerHTML = `
     <div class="login-wrap"><div class="login-card" style="max-width:420px;">
       <div class="brand">${sidebarBrandHtml()}</div>
-      <div class="tiny-note" style="font-size:16px;font-weight:800;color:var(--ink);margin-bottom:2px;">Register Your School to Use This System</div>
-      <div class="tiny-note" style="margin-bottom:14px;">A few details about your school, then set up your Administrator account.</div>
+      
+      
       <div id="regMsg"></div>
       <div class="field" style="font-weight:700;color:var(--navy-2);">School Information</div>
       <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="" /></div>
@@ -2667,7 +1716,7 @@ function renderSchoolRegistration() {
       <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="" /></div>
       <div class="field"><label>District</label><input id="r_district" placeholder="" /></div>
       <div class="field"><label>School Size</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
-      <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;">Your School ID is generated automatically once you register, and can't be changed afterwards. It'll be visible to Administrators under Settings, and is how the TransApple Mother System identifies your school.</div>
+      
 
       <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">First Administrator</div>
       <div class="field" style="text-align:center;">
@@ -2685,13 +1734,13 @@ function renderSchoolRegistration() {
       <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="" /></div>
       <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="" /></div>
       <div class="field"><label>Email Address</label><input id="r_adminEmail" type="email" placeholder="" /></div>
-      <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;">Only an Administrator can register a new school — everyone else is added afterwards from Users &amp; Roles.</div></div>
-      <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="At least 6 characters" /></div>
-      <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="Re-enter password" /></div>
+      <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /></div>
+      <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="" /></div>
+      <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="" /></div>
       <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
 
       <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
-      <div class="tiny-note" style="text-align:center;margin-top:12px;">Already registered? <span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
+      
     </div></div>
   `;
   document.getElementById("toLoginFromReg").onclick = () => renderLogin();
@@ -2787,8 +1836,8 @@ function renderLogin() {
         <div class="brand">${sidebarBrandHtml()}</div>
         <div id="loginMsg"></div>
         <div id="loginForm"></div>
-        <div class="tiny-note">${mode==="login" ? `Joining a school that's already registered? <span class="link-btn" id="toSignup" style="cursor:pointer">Create your account</span>` : mode==="forgot" ? "" : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
-        ${mode==="login" ? `<div class="tiny-note">Registering a brand-new school? <span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>` : ""}
+        
+        ${mode==="login" ? `` : ""}
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
@@ -2802,7 +1851,7 @@ function renderLogin() {
           <input id="remember" type="checkbox" style="width:16px;height:16px;" /> Remember me on this device
         </label>
         <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Log in</button>
-        <div class="tiny-note" style="text-align:right;"><span class="link-btn" id="toForgot" style="cursor:pointer">Forgot password?</span></div>
+        
       `;
       document.getElementById("submitBtn").onclick = async () => {
         const username = document.getElementById("username").value.trim();
@@ -2828,14 +1877,14 @@ function renderLogin() {
       document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
     } else if (mode === "forgot") {
       formDiv.innerHTML = `
-        <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Reset your password</div>
-        <div class="tiny-note" style="margin-bottom:10px;">Confirm it's you with your username and PIN, then set a new password.</div>
+        
+        
         <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="" /></div>
-        <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN" /></div>
-        <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="At least 6 characters" /></div>
-        <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="Repeat new password" /></div>
+        <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="" /></div>
+        <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="" /></div>
+        <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="" /></div>
         <button class="btn btn-primary" id="resetBtn" style="margin-top:6px;">Reset password</button>
-        <div class="tiny-note"><span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
+        
       `;
       document.getElementById("resetBtn").onclick = async () => {
         const username = document.getElementById("f_username").value.trim();
@@ -2882,7 +1931,7 @@ function renderLogin() {
         <div class="field">
           <label>School ID</label>
           <input id="school_code" autocapitalize="none" style="text-transform:uppercase;font-family:monospace;letter-spacing:.03em;" placeholder="" />
-          <div id="schoolCodeNote" class="tiny-note" style="margin-top:2px;">Ask your school's Administrator for this — it's shown to them under Settings.</div>
+          <div id="schoolCodeNote" style="margin-top:2px;">Ask your school's Administrator for this — it's shown to them under Settings.</div>
         </div>`;
       if (signupAccountType === "staff") {
         fieldsWrap.innerHTML = `
@@ -2891,11 +1940,11 @@ function renderLogin() {
           <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
           <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select>
-            <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
+            <div id="deptLockNote" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
           </div>
           <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
-          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="" /></div>
           <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
         `;
@@ -2906,13 +1955,13 @@ function renderLogin() {
           <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
           <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
-          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="" /></div>
           <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Link your child</div>
-          <div class="tiny-note" style="margin:0 0 6px;text-align:left;">We match your child's Student ID with their exact registered name before your account is created — nothing is created until that match succeeds.</div>
+          
           <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="" /></div>
-          <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="Full name as registered at the school" /></div>
+          <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
         `;
       }
@@ -2926,23 +1975,23 @@ function renderLogin() {
       async function resolveSchoolCode() {
         resolvedSchoolId = null;
         const raw = schoolCodeInput.value.trim();
-        if (!raw) { schoolCodeNote.textContent = "Ask your school's Administrator for this — it's shown to them under Settings."; schoolCodeNote.className = "tiny-note"; return null; }
+        if (!raw) { schoolCodeNote.textContent = "Ask your school's Administrator for this — it's shown to them under Settings."; schoolCodeNote.className = ""; return null; }
         if (!SCHOOL_CODE_FORMAT.test(raw)) {
           schoolCodeNote.textContent = "School ID can only contain letters, numbers, and underscores.";
-          schoolCodeNote.className = "tiny-note err"; return null;
+          schoolCodeNote.className = "err"; return null;
         }
-        schoolCodeNote.textContent = "Checking…"; schoolCodeNote.className = "tiny-note";
+        schoolCodeNote.textContent = "Checking…"; schoolCodeNote.className = "";
         try {
           const rows = await sb(`/rest/v1/schools?school_code=eq.${encodeURIComponent(raw.toUpperCase())}&select=id,name,status`);
           const school = rows[0];
-          if (!school) { schoolCodeNote.textContent = "No school found with that School ID — check with your Administrator."; schoolCodeNote.className = "tiny-note err"; return null; }
+          if (!school) { schoolCodeNote.textContent = "No school found with that School ID — check with your Administrator."; schoolCodeNote.className = "err"; return null; }
           resolvedSchoolId = school.id;
-          schoolCodeNote.textContent = `Registering for: ${school.name}`; schoolCodeNote.className = "tiny-note msg-ok";
+          schoolCodeNote.textContent = `Registering for: ${school.name}`; schoolCodeNote.className = "msg-ok";
           if (signupAccountType === "staff") await refreshDeptOptionsForSelectedSchool(school.id);
           return school.id;
         } catch (e) {
           schoolCodeNote.textContent = "Couldn't verify that School ID — check your connection and try again.";
-          schoolCodeNote.className = "tiny-note err"; return null;
+          schoolCodeNote.className = "err"; return null;
         }
       }
       schoolCodeInput.onblur = resolveSchoolCode;
@@ -3030,8 +2079,8 @@ function renderSchoolBlocked() {
           <div class="brand-badge">${ic.lock || "🔒"}</div>
         </div>
         <h2 style="margin-bottom:10px;">Access unavailable</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">${schoolBlockedMessage()}</div>
-        <div class="tiny-note" style="margin-bottom:18px;">Status: <b>${status}</b></div>
+        
+        
         <button class="btn btn-ghost" id="blockedLogout" style="width:100%;">Log out</button>
         <button class="btn btn-primary" id="blockedRetry" style="width:100%;margin-top:8px;">Check again</button>
         <div style="margin-top:16px;"><span class="link-btn" id="blockedContact" style="cursor:pointer;font-size:13px;">Contact</span></div>
@@ -3100,9 +2149,9 @@ function renderPendingApproval() {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-amber">${ic.clock}</div>
         <h2 style="margin-bottom:8px;">Registration submitted</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:6px;">Thanks for registering <b>${schoolName}</b>! Your application is now with TransApple for review.</div>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">Approval usually takes up to <b>24 hours</b> — please check back later. You'll be able to log in and start using the system as soon as it's approved.</div>
-        ${submitted ? `<div class="tiny-note" style="margin-bottom:18px;">Submitted: <b>${submitted}</b></div>` : ""}
+        
+        
+        ${submitted ? `` : ""}
         ${statusScreenActions()}
       </div>
     </div>`;
@@ -3120,8 +2169,8 @@ function renderSchoolSuspended() {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-red">🚫</div>
         <h2 style="margin-bottom:8px;">Access suspended</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:12px;">Access to <b>${schoolName}</b> has been suspended by TransApple. This is usually related to a billing or policy issue.</div>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">If you think this was a mistake, contact us and it'll go straight to TransApple.</div>
+        
+        
         ${statusScreenActions()}
       </div>
     </div>`;
@@ -3145,8 +2194,8 @@ function renderSchoolDeleted(opts = {}) {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-slate">${ic.trash}</div>
         <h2 style="margin-bottom:8px;">School no longer exists</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:12px;">${message}</div>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">If you think this was a mistake, contact us and it'll go straight to TransApple.</div>
+        
+        
         ${statusScreenActions({ retry: false })}
       </div>
     </div>`;
@@ -3164,7 +2213,7 @@ function renderParentPortalDisabled() {
           <div class="brand-badge">${ic.lock || "🔒"}</div>
         </div>
         <h2 style="margin-bottom:10px;">Parent Portal unavailable</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">The Parent Portal isn't currently enabled for this school. Please contact the school office for the latest updates on your child.</div>
+        
         <button class="btn btn-ghost" id="parentDisabledLogout" style="width:100%;">Log out</button>
         <button class="btn btn-primary" id="parentDisabledRetry" style="width:100%;margin-top:8px;">Check again</button>
       </div>
@@ -3194,11 +2243,11 @@ function renderPinUnlock() {
   app().innerHTML = `
     <div class="login-wrap"><div class="login-card">
       <div class="brand">${sidebarBrandHtml()}</div>
-      <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Welcome back, ${profile?.full_name || ""}</div>
+      
       <div id="loginMsg"></div>
       <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" autofocus /></div>
       <button class="btn btn-primary" id="unlockBtn" style="margin-top:6px;">Unlock</button>
-      <div class="tiny-note"><span class="link-btn" id="useLoginInstead" style="cursor:pointer">Not you? Log in with password</span></div>
+      
     </div></div>
   `;
   const tryUnlock = () => {
@@ -3956,9 +3005,9 @@ async function renderParentChildren(container) {
 }
 function openAddChildModal(container) {
   openModal("Add a child", `
-    <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter the Student ID and the student's exact registered name — the school confirms the match before linking.</div>
+    
     <div class="field"><label>Student ID (admission no.)</label><input id="f_adm" placeholder=""/></div>
-    <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder="Full name as registered at the school"/></div>
+    <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder=""/></div>
   `, async (ov) => {
     requireFields(ov, [["f_adm","Student ID"], ["f_sname","Student's name"]]);
     await linkParentChild(profile.id, val(ov,"f_adm"), val(ov,"f_sname"));
@@ -3976,7 +3025,7 @@ async function renderParentChildDetail(container, child) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to My Children</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div></div>
     </div>
     <div class="card"><h3 style="color:var(--amber-dark);margin-bottom:10px;">Attendance</h3><div id="attArea"><div class="center-loading">Loading…</div></div></div>
     <div class="card"><h3 style="color:var(--indigo);margin-bottom:10px;">Report card &amp; academics</h3><div id="acadArea"><div class="center-loading">Loading…</div></div></div>
@@ -4067,7 +3116,7 @@ async function renderParentFees(container) {
     const className = c.classes ? (c.classes.name + (c.classes.section ? (' '+c.classes.section) : '')) : "Unassigned";
     const row = el(`<div class="list-row">${avatarHtml(c.full_name, c.photo_url, 40)}
       <div class="list-main"><div class="list-title">${c.full_name}</div><div class="list-sub">${className} · Paid ${currency()}${s.totalPaid.toLocaleString()}</div></div>
-      <div style="text-align:right;"><div style="font-weight:800;color:${s.totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${s.totalDue.toLocaleString()}</div><div class="tiny-note" style="margin:0;">due</div></div>${ic.chevronRight}</div>`);
+      <div style="text-align:right;"><div style="font-weight:800;color:${s.totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${s.totalDue.toLocaleString()}</div></div>${ic.chevronRight}</div>`);
     row.onclick = () => renderParentChildFeeDetail(container, c);
     list.appendChild(row);
   });
@@ -4097,7 +3146,7 @@ async function renderParentChildFeeDetail(container, child) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div></div>
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
@@ -4238,9 +3287,9 @@ async function renderParentContact(container) {
     <div class="card" id="sentMsgs"><div class="center-loading">Loading…</div></div>
     <div class="card">
       <h3 style="color:var(--purple);margin-bottom:4px;">Private Contact</h3>
-      <div class="tiny-note" style="margin:0 0 12px;text-align:left;">Search for a staff member by their account/username and send a confidential message — only they will see it.</div>
+      
       <div class="row" style="gap:8px;">
-        <input id="f_staffSearch" placeholder="Search by username…" style="flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;"/>
+        <input id="f_staffSearch" placeholder="" style="flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;"/>
         <button class="btn btn-primary" id="staffSearchBtn">${ic.search || "Search"}</button>
       </div>
       <div id="staffSearchResults" style="margin-top:10px;"></div>
@@ -4321,7 +3370,7 @@ async function renderParentContact(container) {
 }
 function openPrivateMessageModal(staffMember, onSent) {
   openModal(`Private message to ${staffMember.full_name}`, `
-    <div class="tiny-note" style="text-align:left;">This is confidential — only @${staffMember.username} will see it, not the rest of the school office.</div>
+    
     <div class="field"><label>Subject</label><input id="f_psubject" placeholder=""/></div>
     <div class="field"><label>Message</label><textarea id="f_pmessage" rows="4" placeholder=""></textarea></div>
   `, async (ov) => {
@@ -4353,10 +3402,10 @@ async function renderParentSettings(container) {
     </div>
     <div class="card">
       <div class="section-head" style="margin-bottom:10px;"><h3 style="color:var(--indigo);margin:0;">Change password</h3></div>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter your PIN to confirm it's you, then set a new password.</div>
-      <div class="field"><label>PIN</label><input id="f_cpin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN"/></div>
-      <div class="field"><label>New password</label><input id="f_cnewpass" type="password" placeholder="At least 6 characters"/></div>
-      <div class="field"><label>Confirm new password</label><input id="f_cnewpass2" type="password" placeholder="Repeat new password"/></div>
+      
+      <div class="field"><label>PIN</label><input id="f_cpin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder=""/></div>
+      <div class="field"><label>New password</label><input id="f_cnewpass" type="password" placeholder=""/></div>
+      <div class="field"><label>Confirm new password</label><input id="f_cnewpass2" type="password" placeholder=""/></div>
       <button class="btn btn-primary" id="changePassBtn" style="width:100%;">Update password</button>
       <div id="passStatus"></div>
     </div>
@@ -4734,8 +3783,8 @@ function openTermModal(body, t) {
   openModal(isEdit ? "Edit term" : "New term", `
     <div class="field"><label>Term name (e.g. First Term)</label><input id="f_name" value="${t?.name||''}"/></div>
     <div class="grid2">
-      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${t?.start_date||''}"/></div>
-      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${t?.end_date||''}"/></div>
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="" value="${t?.start_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="" value="${t?.end_date||''}"/></div>
     </div>
     <div class="field"><label><input id="f_current" type="checkbox" style="width:auto;margin-right:6px;" ${t?.is_current?'checked':''}/>Set as current term</label></div>
   `, async (ov) => {
@@ -4893,7 +3942,7 @@ async function renderStudents(container, opts={}) {
   container.innerHTML = `
     <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
     <div class="search-bar">
-      <input id="searchInput" placeholder="Search by name or admission ID…" value="${search}"/>
+      <input id="searchInput" placeholder="" value="${search}"/>
       <select id="classFilterSel"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}" ${classFilter===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
       ${sortSelectHtml("sortSel", sortBy, true)}
     </div>
@@ -4948,7 +3997,7 @@ function openStudentModal(container, classes, s) {
       <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="Select date" value="${s?.dob||''}"/></div>
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="" value="${s?.dob||''}"/></div>
       <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
@@ -5048,7 +4097,7 @@ async function renderTeachers(container, opts={}) {
   container.innerHTML = `
     <h3 style="color:var(--purple);margin-bottom:12px;">Staff</h3>
     <div class="search-bar">
-      <input id="searchInput" placeholder="Search staff name…" value="${search}"/>
+      <input id="searchInput" placeholder="" value="${search}"/>
       ${sortSelectHtml("sortSel", sortBy, true)}
     </div>
     <div class="card" id="list"></div>
@@ -5174,7 +4223,7 @@ async function renderStudentAttendance(body, opts={}) {
   const classes = await dbSelectActive("classes", { order:"name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="" value="${date}"/></div>
     </div>
     <div class="card" id="classListCard"><div class="center-loading">Loading…</div></div>
   `;
@@ -5315,7 +4364,7 @@ async function renderStaffAttendance(body, opts={}) {
   const teachers = await dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="" value="${date}"/></div>
     </div>
     <div class="card" id="staffAttCard"><div class="center-loading">Loading…</div></div>
     <button class="btn btn-primary" id="saveStaffAttBtn" style="width:100%;">Save attendance</button>
@@ -5563,7 +4612,7 @@ async function renderFeesHealth(body) {
     }
     return `<div class="card">
       <h3 style="color:var(--red);margin-bottom:2px;">${title}</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">${termRangeLabel(termList)}</div>
+      
       <div class="stat-grid">
         <div class="stat" id="fh_total_${key}" style="cursor:pointer;"><div class="num">${currency()}${stats.total.toLocaleString()}</div><div class="lbl">Total Payments</div></div>
         <div class="stat"><div class="num">${stats.studentCount}</div><div class="lbl">Students paid</div></div>
@@ -5704,7 +4753,7 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(student.full_name, student.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${student.admission_no||''} · ${className}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div></div>
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
@@ -5713,7 +4762,7 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
     <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
     <div class="card">
       <h3 style="color:var(--teal-dark);margin-bottom:4px;">Payment history &amp; receipts</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Once issued, a receipt is permanent — it cannot be edited or deleted, only viewed or reprinted.</div>
+      
       <div id="payList"></div>
     </div>
   `;
@@ -5741,7 +4790,7 @@ async function renderFeeReminders(body) {
   body.innerHTML = `
     <div class="card">
       <h3 style="color:var(--red);margin-bottom:4px;">Send a message</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Send a fee reminder to specific parents, or a finance announcement to everyone.</div>
+      
       <div class="field"><label>Type</label><select id="f_msgType"><option value="reminder">Fee reminder</option><option value="announcement">Finance announcement</option></select></div>
       <div class="field" id="f_remTargetWrap"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
       <div class="field" id="f_remStudentWrap" style="display:none;"><label>Student</label><select id="f_remStudent"><option value="">— Select student —</option>${students.map(s=>`<option value="${s.id}">${s.full_name} (${s.admission_no})</option>`).join("")}</select></div>
@@ -5986,7 +5035,7 @@ async function renderFeePayment(body) {
       <div class="field"><label>Note (optional)</label><input id="f_note"/></div>
       <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
       <div id="payMsg"></div>
-      <div class="tiny-note" style="margin-top:10px;text-align:left;">Once recorded, a payment and its receipt are permanent — they can't be edited or deleted afterwards, so double-check the details before saving.</div>
+      
     </div>`;
   const classFilterSel = document.getElementById("f_classFilter");
   const studentSel = document.getElementById("f_student");
@@ -6179,11 +5228,11 @@ function openExamModal(body, classes, terms, examTypes, existingExams, x) {
   openModal(isEdit ? "Edit exam" : "New exam", `
     <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="field"><label>Class</label><select id="f_class">${isEdit ? "" : `<option value="__all__">— All Classes —</option>`}${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
-    ${isEdit ? "" : `<div class="tiny-note" style="margin:6px 0 0;text-align:left;">Choose "All Classes" to create this exam for every class at once (skipping any class that already has one for this type and term).</div>`}</div>
+    ${isEdit ? "" : ``}</div>
     <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${x?.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="grid2">
-      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_date||''}"/></div>
-      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_end_date||''}"/></div>
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="" value="${x?.exam_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="" value="${x?.exam_end_date||''}"/></div>
     </div>
   `, async (ov)=>{
     const exam_type_id = val(ov,"f_examtype")||null, class_id = val(ov,"f_class"), term_id = val(ov,"f_term");
@@ -6245,7 +5294,7 @@ async function renderEnterResults(body) {
         <td><input type="number" max="${maxScore}" min="0" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="markInput" value="${marksMap[s.id]??''}"/></td>
         <td>${maxScore}</td>
         <td class="gradeCell" data-sid="${s.id}" style="font-weight:700;">${initialGrade}</td>
-        <td><input type="text" placeholder="Teacher's remark…" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
+        <td><input type="text" placeholder="" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
     });
     // Live-update the Grade cell as marks are typed, using the admin-defined grade bands.
     gb.querySelectorAll(".markInput").forEach(inp => {
@@ -6575,7 +5624,7 @@ async function renderReportCard(body) {
 async function renderContactTransApple(container) {
   container.innerHTML = `
     <div class="section-head"><h3 style="color:var(--navy-2);">Contact TransApple</h3></div>
-    <div class="tiny-note" style="margin-bottom:12px;">Send a complaint, question, or support request straight to TransApple. Replies show up here — keep the conversation going until it's resolved.</div>
+    
     <button class="btn btn-primary btn-sm" id="newTicketBtn" style="margin-bottom:14px;">${ic.plus} New request</button>
     <div id="ticketArea"></div>`;
   document.getElementById("newTicketBtn").onclick = () => {
@@ -6593,7 +5642,7 @@ async function renderContactTransApple(container) {
   let tickets = [];
   try { tickets = await listMySupportRequests(); }
   catch (e) {
-    area.innerHTML = `<div class="tiny-note">Support isn't available for this school yet. Please check back shortly.</div>`;
+    area.innerHTML = ``;
     return;
   }
   if (!tickets.length) { area.innerHTML = `<div class="empty">No requests yet. Tap "New request" to reach TransApple.</div>`; return; }
@@ -6617,9 +5666,9 @@ async function openSupportThread(ticket, container) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>${ticket.subject}</h3>
-    <div class="tiny-note" style="margin-bottom:8px;">Status: <b>${ticket.status}</b></div>
+    
     <div id="threadMsgs" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
-    ${ticket.status === "resolved" ? `<div class="tiny-note" style="margin-bottom:8px;">This request is marked resolved. Sending a message reopens it.</div>` : ""}
+    ${ticket.status === "resolved" ? `` : ""}
     <div class="field"><textarea id="replyMsg" rows="3" placeholder=""></textarea></div>
     <div class="form-actions">
       <button class="btn btn-ghost" id="modalCancel">Close</button>
@@ -6637,7 +5686,7 @@ async function openSupportThread(ticket, container) {
     <div style="align-self:${m.sender==='school'?'flex-end':'flex-start'};max-width:82%;background:${m.sender==='school'?'var(--teal-tint)':'var(--card-alt)'};border:1px solid var(--line);border-radius:10px;padding:8px 10px;">
       <div style="font-size:11px;color:var(--ink-soft);margin-bottom:2px;">${m.sender==='school' ? (m.sender_name || 'You') : 'TransApple'} · ${new Date(m.created_at).toLocaleString()}</div>
       <div style="font-size:13px;white-space:pre-wrap;">${m.message}</div>
-    </div>`).join("") || `<div class="tiny-note">No messages yet.</div>`;
+    </div>`).join("") || ``;
   msgsEl.scrollTop = msgsEl.scrollHeight;
   overlay.querySelector("#sendReplyBtn").onclick = safe(async () => {
     const txt = overlay.querySelector("#replyMsg").value.trim();
@@ -6671,7 +5720,7 @@ async function renderRegToggleCard() {
     open = rows[0]?.registration_open !== false;
   } catch (e) { missingCol = true; }
   if (missingCol) {
-    card.innerHTML = `<div class="tiny-note">Registration Controls isn't available for your school yet.</div>
+    card.innerHTML = `
       <button class="btn btn-primary btn-sm" id="retryRegToggleBtn" style="margin-top:10px;">Refresh</button>`;
     const retry = document.getElementById("retryRegToggleBtn");
     if (retry) retry.onclick = renderRegToggleCard;
@@ -6724,7 +5773,7 @@ async function renderDeptLockCard() {
     locked = (rows[0] && rows[0].locked_departments) || {};
   } catch (e) { missingCol = true; }
   if (missingCol) {
-    card.innerHTML = `<div class="tiny-note">Registration Controls isn't available for your school yet.</div>
+    card.innerHTML = `
       <button class="btn btn-primary btn-sm" id="retryDeptLockBtn" style="margin-top:10px;">Refresh</button>`;
     const retry = document.getElementById("retryDeptLockBtn");
     if (retry) retry.onclick = renderDeptLockCard;
@@ -6782,14 +5831,14 @@ async function renderUsers(container) {
         </div>
         <div class="list-sub">${deptLabel || "No department"}${profile?.position ? ` · ${profile.position}` : ""}</div>
       </div>
-      <div class="tiny-note" style="margin-top:10px;">You can log in and log out any time — that's never restricted by department.</div>
+      
       <button class="btn btn-ghost btn-sm" id="logoutBtn" style="margin-top:8px;">${ic.logout} Log out</button>
       ${isOwner(profile) ? `
-        <div class="tiny-note" style="margin-top:10px;">As the school's owner, you're the only one who can suspend or delete an entire department at once, or hand full ownership to another Administrator.</div>
+        
         <button class="btn btn-ghost btn-sm" id="transferOwnerBtn" style="margin-top:8px;">${ic.userPlus||''} Transfer ownership</button>
       ` : ""}
       ${restrictedDept ? `
-        <div class="tiny-note" style="margin-top:8px;">${deptLabel} accounts can't change department, position or role here — send Administration a request instead and they'll update it for you.</div>
+        
         <button class="btn btn-ghost btn-sm" id="reqBtn" style="margin-top:8px;">${ic.edit} Request a detail change</button>
       ` : ""}
     </div>`;
@@ -6803,7 +5852,7 @@ async function renderUsers(container) {
     const reqBtn = document.getElementById("reqBtn");
     if (reqBtn) reqBtn.onclick = () => {
       openModal("Request a detail change", `
-        <div class="tiny-note" style="text-align:left;">Tell Administration what you'd like changed (department, position, phone number, etc) and why — they'll review it and update your account.</div>
+        
         <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder=""></textarea></div>
       `, async (ov) => {
         requireFields(ov, [["f_msg","Message"]]);
@@ -6826,23 +5875,23 @@ async function renderUsers(container) {
   const pendingRegs = profiles.filter(p => p.approval_status === "pending" && !p.deleted_at);
   container.innerHTML = meCard +
     `<div class="section-head"><h3 style="color:var(--navy-2);">Pending Registrations</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">New accounts created from the sign-in screen's "Create account" link stay Pending Approval and can't log in until you approve them here.</div>
+    
     <div class="card" id="pendingRegList"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Department controls which sections of the app someone can open. Administration gets full access to everything, including this page. New staff create their own login from the sign-in screen's "Create one" link — set their department and position here afterwards. Suspend or delete an account to block its login instantly; both can be reversed any time from this list.</div>
+    
     <div class="card" id="list"></div>
     ${isOwner(profile) ? `
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Departments</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">As owner, click a department to see every account's full registration information, or suspend/delete the whole department at once.</div>
+    
     <div class="card" id="deptCards"></div>
     ` : ""}
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
+    
     <div class="card" id="reqList"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Registration Controls</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Close registration entirely to stop every new self-signup from the sign-in screen's "Create account" flow — both Staff and Parent accounts. Existing accounts and logins are never affected.</div>
+    
     <div class="card" id="regToggleCard" style="margin-bottom:16px;"></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Or close just one department, so a school with registration open can still keep a sensitive department (like Administration) invite-only, without shutting the whole school out.</div>
+    
     <div class="card" id="deptLockCard"></div>`;
   renderRegToggleCard();
   renderDeptLockCard();
@@ -6851,7 +5900,7 @@ async function renderUsers(container) {
   if (isOwner(profile)) renderDeptCards(profiles, container);
   const pendingRegList = document.getElementById("pendingRegList");
   const renderPendingRegList = () => {
-    pendingRegList.innerHTML = !pendingRegs.length ? `<div class="tiny-note">No pending registrations.</div>` :
+    pendingRegList.innerHTML = !pendingRegs.length ? `` :
       pendingRegs.map(p => `<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;">
         ${avatarHtml(p.full_name, p.photo_url)}
         <div class="list-main">
@@ -6900,7 +5949,7 @@ async function renderUsers(container) {
       <div class="list-main">
         <div class="list-title">${p.full_name} ${badges}</div>
         <div class="list-sub">${roleLabel}</div>
-        ${isSelf ? "" : `<div class="tiny-note" style="margin-top:2px;">Tap to open more controls</div>`}
+        ${isSelf ? "" : ``}
       </div>
     </div>`);
     if (!isSelf) row.onclick = () => openAccountControls(p, container, deptOptions, posOptions);
@@ -6909,7 +5958,7 @@ async function renderUsers(container) {
   const reqList = document.getElementById("reqList");
   try {
     const reqs = await dbSelect("account_change_requests", { status:"eq.pending", order:"created_at.asc", select:"id,full_name,department,message,created_at" });
-    reqList.innerHTML = !reqs.length ? `<div class="tiny-note">No pending requests.</div>` :
+    reqList.innerHTML = !reqs.length ? `` :
       reqs.map(r => `<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;">
         <div class="list-main">
           <div class="list-title">${r.full_name || "Unknown"} <span class="badge badge-amber">${DEPARTMENTS[r.department]?.label || r.department || "No department"}</span></div>
@@ -6930,7 +5979,7 @@ async function renderUsers(container) {
       renderUsers(container);
     }));
   } catch (e) {
-    reqList.innerHTML = `<div class="tiny-note">Request history isn't available yet.</div>`;
+    reqList.innerHTML = ``;
   }
 }
 // Opened by tapping an account card in Manage Accounts (everyone but "This is You").
@@ -6942,8 +5991,8 @@ function openAccountControls(p, container, deptOptions, posOptions) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>${p.full_name}</h3>
-    <div class="tiny-note" style="margin-bottom:12px;">${p.phone||''}${p.username?` · @${p.username}`:''}</div>
-    ${isDeleted ? `<div class="tiny-note" style="margin-bottom:10px;">This account has been deleted.</div>` : `
+    
+    ${isDeleted ? `` : `
       <div class="field"><label>Department</label><select id="ctrlDept">${deptOptions(p.department)}</select></div>
       <div class="field"><label>Position</label><select id="ctrlPos">${posOptions(p.department, p.position)}</select></div>
       <div class="field"><label title="Legacy role — Administration department already grants full access on its own">Legacy role</label>
@@ -7026,7 +6075,7 @@ function renderDeptCards(profiles, container) {
         <div class="list-title">${d.label}</div>
         <div class="list-sub">${members.length} account${members.length===1?"":"s"}</div>
       </div>
-      <div class="tiny-note">Tap to view &amp; manage</div>
+      
     </div>`;
   }).join("");
   mount.querySelectorAll(".deptCardRow").forEach(row => {
@@ -7040,9 +6089,9 @@ function openDepartmentModal(deptKey, profiles, container) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>${dept.label}</h3>
-    <div class="tiny-note" style="margin-bottom:12px;">${members.length} account${members.length===1?"":"s"} in this department. Full registration information for each is shown below.</div>
+    
     <div id="deptMemberList">
-      ${!members.length ? `<div class="tiny-note">No one is in this department yet.</div>` : members.map(p => `
+      ${!members.length ? `` : members.map(p => `
         <div class="list-row" style="flex-wrap:wrap;align-items:flex-start;border-bottom:1px solid var(--border,#eee);padding-bottom:10px;margin-bottom:10px;">
           ${avatarHtml(p.full_name, p.photo_url)}
           <div class="list-main">
@@ -7096,8 +6145,8 @@ function openTransferOwnershipModal(profiles, container) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>Transfer ownership</h3>
-    <div class="tiny-note" style="margin-bottom:12px;">Hand full ownership authority — including the ability to suspend or delete whole departments — to another Administrator. You'll keep your Administration access, just not the owner powers.</div>
-    ${!candidates.length ? `<div class="tiny-note">There's no other active Administration account to transfer to yet — create one from Manage Accounts first.</div>` : `
+    
+    ${!candidates.length ? `` : `
       <div class="field"><label>New owner</label><select id="newOwnerSel">${candidates.map(p=>`<option value="${p.id}">${p.full_name}${p.username?` (@${p.username})`:""}</option>`).join("")}</select></div>
       <div class="field"><label>Your password (to confirm)</label><input id="ownerConfirmPw" type="password" /></div>
     `}
@@ -7135,7 +6184,7 @@ function pushNotifCardHtml() {
   return `
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.bell}</div><div><h3 style="color:var(--navy);">Push notifications</h3><p>Get alerted for new head-office announcements and parent messages — even with the app fully closed.</p></div></div>
-      ${!supported ? `<div class="tiny-note">This browser doesn't support push notifications.</div>` : `
+      ${!supported ? `` : `
         <div class="toggle-row" style="justify-content:space-between;">
           <span style="font-size:13.5px;font-weight:600;">Notify this device</span>
           <label class="toggle-switch"><input type="checkbox" id="staffPushToggle" /><span class="toggle-slider"></span></label>
@@ -7157,7 +6206,7 @@ async function wirePushNotifCard(container) {
     toggle.disabled = true;
     try {
       if (toggle.checked) { await subscribeStaffPush(); msg.innerHTML = `<div class="msg-ok">Push notifications enabled on this device.</div>`; }
-      else { await unsubscribeStaffPush(); msg.innerHTML = `<div class="tiny-note">Push notifications turned off for this device.</div>`; }
+      else { await unsubscribeStaffPush(); msg.innerHTML = ``; }
     } catch (e) {
       toggle.checked = !toggle.checked;
       msg.innerHTML = `<div class="err">${e.message}</div>`;
@@ -7180,8 +6229,8 @@ function updateCardHtml(changelog) {
           <div class="val" style="font-weight:700;">${changelog.title}</div>
           ${changelog.description ? `<div class="val" style="margin-top:2px;">${changelog.description}</div>` : ""}
         </div>
-        <div class="tiny-note" style="margin-bottom:14px;">Released ${new Date(changelog.created_at).toLocaleString()}</div>
-      ` : `<div class="tiny-note" style="margin-bottom:14px;">No update notes have been published yet.</div>`}
+        
+      ` : ``}
       <button class="btn btn-primary" id="updateSiteBtn" style="width:100%;">${ic.download} Update to New Version</button>
     </div>`;
 }
@@ -7855,7 +6904,7 @@ function pwaOverlayShell(bodyHtml, opts) {
       ${opts.chip ? `<div class="pwa-platform-chip">${opts.chip}</div>` : ""}
       <div class="pwa-body">${bodyHtml}</div>
       ${opts.showSkip === false ? "" : `<div class="pwa-actions" style="margin-top:2px;"><button type="button" class="btn btn-ghost pwa-continue-btn" id="pwaSkipLink">Continue in Browser</button></div>`}
-      ${DEV_MODE ? `<div class="tiny-note" style="margin-top:14px;"><button type="button" id="pwaDevSkip" class="btn btn-ghost btn-sm">Skip install (dev mode)</button></div>` : ""}
+      ${DEV_MODE ? `` : ""}
     </div>`;
 }
 // Dismisses the overlay for this visit only (does not mark the app as
