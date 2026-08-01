@@ -2505,8 +2505,20 @@ function openCameraCapture(onCapture, onUnavailable) {
 function render() {
   if (pinLocked) { renderPinUnlock(); return; }
   if (!auth && !DEV_MODE) {
-    if (!isDeviceSeen()) { renderSchoolRegistration(); } else { renderLogin(); }
-    return;
+    if (!isDeviceSeen()) { renderSchoolRegistration(); return; }
+    // This device is tied to a school (see setCurrentSchool()/getRememberedSchool())
+    // whose status was already fetched into CURRENT_SCHOOL during boot() below —
+    // if that school isn't active, show the matching screen right away, before
+    // the login form, and keep showing it on every fresh app open until the
+    // school is approved/unsuspended/restored. Once someone actually is signed
+    // in, the "auth && !schoolIsActive()" branch further down takes over instead.
+    if (CURRENT_SCHOOL && !schoolIsActive()) {
+      if (showSupportPortal) { renderSupportPortal(); return; }
+      if (CURRENT_SCHOOL.deleted_at) { renderSchoolDeleted(); return; }
+      if (CURRENT_SCHOOL.status === "pending") { renderPendingApproval(); return; }
+      if (CURRENT_SCHOOL.status === "suspended") { renderSchoolSuspended(); return; }
+    }
+    renderLogin(); return;
   }
   if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
   if (auth && !schoolIsActive()) {
@@ -3038,30 +3050,35 @@ function renderSchoolBlocked() {
      - renderSchoolSuspended(): status "suspended".
      - renderSchoolDeleted(): schools.deleted_at is set (moved to Trash by a
        Mother App admin — this always overrides status, see schoolIsActive()).
-   All three work in two contexts:
-     1) Signed in (auth set, CURRENT_SCHOOL loaded) — reached via render()'s
-        "auth && !schoolIsActive()" gate, e.g. right after registering, or when
-        startSchoolSync()'s 45s poll catches a status change mid-session. Shows
-        "Check again" + "Log out" + "Contact TransApple".
-     2) Not signed in — reached from renderLogin()'s login submit handler, which
-        pattern-matches the specific error text verify_login() raises for these
-        three school-level states and calls the matching screen directly (since
-        the RPC blocks before ever returning a profile/session). Shows a single
+   All three work in two contexts, both driven by whether CURRENT_SCHOOL is loaded:
+     1) CURRENT_SCHOOL is loaded — either because someone is actually signed in
+        (auth set, e.g. right after registering, or startSchoolSync()'s 45s poll
+        caught a status change mid-session), OR because this device is simply
+        tied to a blocked school from a past registration/login (see boot()'s
+        getRememberedSchool() lookup) — this is what makes the screen appear
+        on cold app open, before the login form, every time it's reopened,
+        with no login attempt needed. Shows "Check again" + "Contact TransApple"
+        + a "Log out"/"Not your school?" reset button.
+     2) CURRENT_SCHOOL isn't loaded — a login attempt on a device with no
+        remembered school just failed with one of these exact school-level
+        errors (renderLogin()'s login submit handler pattern-matches
+        verify_login()'s text and calls the matching screen directly, since the
+        RPC blocks before ever returning a profile/session). Shows a single
         "Back to log in" button instead.
    statusScreenActions()/wireStatusActions() are the shared button row for all three. */
 function statusScreenActions(opts = {}) {
   const { retry = true, contact = true } = opts;
-  if (auth) {
+  if (CURRENT_SCHOOL) {
     return `
-      <button class="btn btn-ghost" id="statusLogout" style="width:100%;">Log out</button>
+      <button class="btn btn-ghost" id="statusLogout" style="width:100%;">${auth ? "Log out" : "Not your school? Start over"}</button>
       ${retry ? `<button class="btn btn-primary" id="statusRetry" style="width:100%;margin-top:8px;">Check again</button>` : ""}
-      ${contact ? `<div style="margin-top:16px;"><span class="link-btn" id="statusContact" style="cursor:pointer;font-size:13px;">Contact TransApple</span></div>` : ""}
+      ${contact ? `<div style="margin-top:16px;"><span class="link-btn" id="statusContact" style="cursor:pointer;font-size:13px;">Think this is a mistake? Contact TransApple</span></div>` : ""}
     `;
   }
   return `<button class="btn btn-primary" id="statusBackToLogin" style="width:100%;">Back to log in</button>`;
 }
 function wireStatusActions() {
-  if (auth) {
+  if (CURRENT_SCHOOL) {
     const logoutBtn = document.getElementById("statusLogout"); if (logoutBtn) logoutBtn.onclick = logout;
     const retryBtn = document.getElementById("statusRetry"); if (retryBtn) retryBtn.onclick = async () => { await loadCurrentSchool(); render(); };
     const contactBtn = document.getElementById("statusContact"); if (contactBtn) contactBtn.onclick = () => { showSupportPortal = true; render(); };
@@ -3070,8 +3087,11 @@ function wireStatusActions() {
   }
 }
 // Shown right after a new school registers (status "pending"), and any time
-// this school is signed-in-but-pending. Approvals are handled from the Mother
-// App's "Pending" queue — there's nothing to do here but wait and check back.
+// this school is signed-in-but-pending — or, now, the moment the app is
+// reopened on this device at all, before the login form even shows (see
+// render()'s "!auth" branch and boot()'s remembered-school lookup). Approvals
+// are handled from the Mother App's "Pending" queue — there's nothing to do
+// here but wait and check back.
 function renderPendingApproval() {
   const schoolName = CURRENT_SCHOOL?.name || "Your school";
   const submitted = CURRENT_SCHOOL?.created_at ? new Date(CURRENT_SCHOOL.created_at).toLocaleString() : null;
@@ -3091,6 +3111,8 @@ function renderPendingApproval() {
 // Shown when TransApple has suspended this school (billing, policy, etc.) —
 // distinct from a suspended individual staff/parent account, which is a
 // separate, school-level (not Mother System) concern with its own message.
+// Appears immediately on app open (before the login form) on any device tied
+// to this school, and stays there until TransApple lifts the suspension.
 function renderSchoolSuspended() {
   const schoolName = CURRENT_SCHOOL?.name || "Your school";
   app().innerHTML = `
@@ -3098,7 +3120,8 @@ function renderSchoolSuspended() {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-red">🚫</div>
         <h2 style="margin-bottom:8px;">Access suspended</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">Access to <b>${schoolName}</b> has been suspended by TransApple. This is usually related to a billing or policy issue. Contact TransApple support to resolve it and restore access.</div>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:12px;">Access to <b>${schoolName}</b> has been suspended by TransApple. This is usually related to a billing or policy issue.</div>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">If you think this was a mistake, contact us and it'll go straight to TransApple.</div>
         ${statusScreenActions()}
       </div>
     </div>`;
@@ -3107,16 +3130,23 @@ function renderSchoolSuspended() {
 // Shown when this school was moved to Trash and permanently purged by a Mother
 // App admin (schools.deleted_at) — this is final, there's no restore, so no
 // "Check again" button. opts.message lets the login-time caller pass through
-// verify_login()'s exact error text (it already names the school).
+// verify_login()'s exact error text (it already names the school). Like the
+// suspended screen, this appears immediately on app open on any device tied
+// to this school — no login attempt required.
 function renderSchoolDeleted(opts = {}) {
   const schoolName = CURRENT_SCHOOL?.name || "This school";
-  const message = opts.message || `"${schoolName}" was permanently deleted from TransApple and can no longer be used. If you believe this is a mistake, please contact us now.`;
+  let message = opts.message || `"${schoolName}" was permanently deleted from TransApple and can no longer be used.`;
+  // verify_login()'s raw error text ends with its own "contact us" sentence —
+  // this screen has its own dedicated contact line right below, so trim that
+  // off here rather than saying it twice.
+  message = message.replace(/\s*If you think this is a mistake,?\s*please contact us now\.?\s*$/i, "").trim();
   app().innerHTML = `
     <div class="login-wrap">
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-slate">${ic.trash}</div>
         <h2 style="margin-bottom:8px;">School no longer exists</h2>
-        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">${message}</div>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:12px;">${message}</div>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">If you think this was a mistake, contact us and it'll go straight to TransApple.</div>
         ${statusScreenActions({ retry: false })}
       </div>
     </div>`;
@@ -7666,6 +7696,18 @@ function playSplashScreen() {
   render();
   await loadSchoolSettings();
   await tryRestoreRememberedSession();
+  // No session was restored (e.g. "Remember me" wasn't checked at login) — but
+  // this device may still be tied to a school from a previous registration or
+  // login (see setCurrentSchool()/REMEMBER_SCHOOL_KEY). Load that school's
+  // status now so render() can show the pending/suspended/deleted screen
+  // immediately instead of the login form — see the "!auth" branch in render().
+  if (!auth) {
+    const rememberedSchoolId = getRememberedSchool();
+    if (rememberedSchoolId) {
+      setCurrentSchool(rememberedSchoolId);
+      await loadCurrentSchool();
+    }
+  }
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } // fire-and-forget: finalizes any school whose 30-day Trash window already passed
   render();
   // The app underneath is already ready by now; the splash just waits out
