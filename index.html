@@ -862,8 +862,9 @@ function schoolBlockedMessage() {
   return "This school's account is not currently active. Please contact TransApple support.";
 }
 // Polls the Mother System's schools row every 45s (and whenever the tab regains
-// focus) so plan/feature/status changes made from the Mother App take effect
-// here automatically, without anyone needing to log out and back in.
+// focus) so plan/feature/status changes — and a Mother-triggered "Upgrade
+// Available" — take effect here automatically, without anyone needing to log
+// out and back in.
 let __schoolSyncTimer = null;
 function startSchoolSync() {
   stopSchoolSync();
@@ -871,9 +872,14 @@ function startSchoolSync() {
     if (!CURRENT_SCHOOL_ID) return;
     const prevStatus = CURRENT_SCHOOL?.status;
     const prevFeatures = JSON.stringify(CURRENT_SCHOOL?.features || {});
+    const prevUpgradeRequested = CURRENT_SCHOOL?.upgrade_requested_at || null;
+    const prevUpgradeCompleted = CURRENT_SCHOOL?.upgrade_completed_at || null;
     await loadCurrentSchool();
     if (!auth) return; // logged out while this was in flight
-    const changed = prevStatus !== CURRENT_SCHOOL?.status || prevFeatures !== JSON.stringify(CURRENT_SCHOOL?.features || {});
+    const changed = prevStatus !== CURRENT_SCHOOL?.status
+      || prevFeatures !== JSON.stringify(CURRENT_SCHOOL?.features || {})
+      || prevUpgradeRequested !== (CURRENT_SCHOOL?.upgrade_requested_at || null)
+      || prevUpgradeCompleted !== (CURRENT_SCHOOL?.upgrade_completed_at || null);
     if (changed) {
       if (!schoolIsActive()) { render(); return; } // full block screen takes over immediately
       if (!hasNavAccess(profile, tab)) tab = "dashboard";
