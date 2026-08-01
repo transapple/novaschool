@@ -116,7 +116,7 @@
     cursor:pointer;
     caret-color:transparent;
   }
-  input.datefield::placeholder{display:none; color:var(--ink-soft);}
+  input.datefield::placeholder{color:var(--ink-soft);}
   .date-cal-popup{
     position:fixed;z-index:500;background:#fff;border-radius:16px;
     box-shadow:0 16px 44px rgba(16,30,60,.28);border:1px solid var(--line);
@@ -153,7 +153,7 @@
   .link-btn{background:none;border:none;color:var(--teal-dark);font-weight:600;font-size:13.5px;padding:0;}
   .err{background:#fdecec;color:var(--red);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
   .msg-ok{background:#e9f7f1;color:var(--teal-dark);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px;}
-  .tiny-note{display:none;font-size:11.5px;color:var(--ink-soft);margin-top:16px;line-height:1.5;text-align:center;}
+  .tiny-note{font-size:11.5px;color:var(--ink-soft);margin-top:16px;line-height:1.5;text-align:center;}
 
   /* ---------- SHELL ---------- */
   .shell{display:flex;height:100vh;height:100dvh;overflow:hidden;}
@@ -2233,7 +2233,7 @@ function openSchoolUpgradeModal() {
     CURRENT_SCHOOL = updated;
     markBellDismissed(`schoolupg:${CURRENT_SCHOOL_ID}`);
     refreshStaffBell();
-    alert(`Upgrade complete! Your School ID is ${updated.school_code} — it's now visible under Settings.`);
+    await customAlert(`Upgrade complete! Your School ID is ${updated.school_code} — it's now visible under Settings.`);
     render();
   }, { saveLabel: "Complete Upgrade" });
 }
@@ -2565,11 +2565,11 @@ function renderSchoolRegistration() {
       <div class="tiny-note" style="margin-bottom:14px;">A few details about your school, then set up your Administrator account.</div>
       <div id="regMsg"></div>
       <div class="field" style="font-weight:700;color:var(--navy-2);">School Information</div>
-      <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="e.g. Meridian Academy" /></div>
-      <div class="field"><label>School Motto</label><input id="r_motto" placeholder="e.g. Knowledge, Character, Service" /></div>
-      <div class="field"><label>Village</label><input id="r_village" placeholder="e.g. Ntinda" /></div>
-      <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="e.g. Nakawa" /></div>
-      <div class="field"><label>District</label><input id="r_district" placeholder="e.g. Kampala" /></div>
+      <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="" /></div>
+      <div class="field"><label>School Motto</label><input id="r_motto" placeholder="" /></div>
+      <div class="field"><label>Village</label><input id="r_village" placeholder="" /></div>
+      <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="" /></div>
+      <div class="field"><label>District</label><input id="r_district" placeholder="" /></div>
       <div class="field"><label>School Size</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
       <div class="field"><label>School Password</label><input id="r_schoolPassword" type="password" placeholder="At least 6 characters" /></div>
       <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;">Your School ID is generated automatically once you register, and can't be changed afterwards. It'll be visible to Administrators under Settings, and is how the TransApple Mother System identifies your school.</div>
@@ -2585,15 +2585,15 @@ function renderSchoolRegistration() {
         <input id="r_photoLive" type="file" accept="image/*" capture="user" style="display:none;"/>
         <input id="r_photoPick" type="file" accept="image/*" style="display:none;"/>
       </div>
-      <div class="field"><label>Full Names</label><input id="r_adminName" placeholder="Jane Okafor" /></div>
-      <div class="field"><label>Username</label><input id="r_adminUsername" autocapitalize="none" placeholder="jane.okafor" /></div>
-      <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="+256 700 000 000" /></div>
-      <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="+256 700 000 000" /></div>
-      <div class="field"><label>Email Address</label><input id="r_adminEmail" type="email" placeholder="jane@school.edu" /></div>
+      <div class="field"><label>Full Names</label><input id="r_adminName" placeholder="" /></div>
+      <div class="field"><label>Username</label><input id="r_adminUsername" autocapitalize="none" placeholder="" /></div>
+      <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="" /></div>
+      <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="" /></div>
+      <div class="field"><label>Email Address</label><input id="r_adminEmail" type="email" placeholder="" /></div>
       <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;">Only an Administrator can register a new school — everyone else is added afterwards from Users &amp; Roles.</div></div>
       <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="At least 6 characters" /></div>
       <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="Re-enter password" /></div>
-      <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+      <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
 
       <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
       <div class="tiny-note" style="text-align:center;margin-top:12px;">Already registered? <span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
@@ -2703,8 +2703,8 @@ function renderLogin() {
     if (toRegisterSchoolLink) toRegisterSchoolLink.onclick = () => renderSchoolRegistration();
     if (mode === "login") {
       formDiv.innerHTML = `
-        <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
-        <div class="field"><label>Password</label><input id="password" type="password" placeholder="••••••••" /></div>
+        <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
+        <div class="field"><label>Password</label><input id="password" type="password" placeholder="" /></div>
         <label class="row" style="gap:8px;align-items:center;font-size:13px;font-weight:600;color:var(--ink-soft);margin:4px 0 2px;">
           <input id="remember" type="checkbox" style="width:16px;height:16px;" /> Remember me on this device
         </label>
@@ -2726,7 +2726,7 @@ function renderLogin() {
       formDiv.innerHTML = `
         <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Reset your password</div>
         <div class="tiny-note" style="margin-bottom:10px;">Confirm it's you with your username and PIN, then set a new password.</div>
-        <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="jane.okafor" /></div>
+        <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="" /></div>
         <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN" /></div>
         <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="At least 6 characters" /></div>
         <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="Repeat new password" /></div>
@@ -2777,37 +2777,37 @@ function renderLogin() {
       const schoolFieldHtml = `
         <div class="field">
           <label>School ID</label>
-          <input id="school_code" autocapitalize="none" style="text-transform:uppercase;font-family:monospace;letter-spacing:.03em;" placeholder="e.g. MERIDIAN_A1B2C" />
+          <input id="school_code" autocapitalize="none" style="text-transform:uppercase;font-family:monospace;letter-spacing:.03em;" placeholder="" />
           <div id="schoolCodeNote" class="tiny-note" style="margin-top:2px;">Ask your school's Administrator for this — it's shown to them under Settings.</div>
         </div>`;
       if (signupAccountType === "staff") {
         fieldsWrap.innerHTML = `
           ${photoBlockHtml}
           ${schoolFieldHtml}
-          <div class="field"><label>Full Names</label><input id="fname" placeholder="Jane Okafor" /></div>
-          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="jane.okafor" /></div>
+          <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
+          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
           <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select>
             <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
           </div>
-          <div class="field"><label>Phone Number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
           <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
           <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
-          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
         `;
       } else {
         fieldsWrap.innerHTML = `
           ${photoBlockHtml}
           ${schoolFieldHtml}
-          <div class="field"><label>Full Names</label><input id="fname" placeholder="Amaka Obi" /></div>
-          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="amaka.obi" /></div>
-          <div class="field"><label>Phone Number</label><input id="phone" placeholder="+256 700 000 000" /></div>
+          <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
+          <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
+          <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
           <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
           <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
-          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="1234" /></div>
+          <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Link your child</div>
           <div class="tiny-note" style="margin:0 0 6px;text-align:left;">We match your child's Student ID with their exact registered name before your account is created — nothing is created until that match succeeds.</div>
-          <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="e.g. DF001" /></div>
+          <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="" /></div>
           <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="Full name as registered at the school" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
         `;
@@ -2981,7 +2981,7 @@ function renderPinUnlock() {
       <div class="brand">${sidebarBrandHtml()}</div>
       <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Welcome back, ${profile?.full_name || ""}</div>
       <div id="loginMsg"></div>
-      <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••" autofocus /></div>
+      <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" autofocus /></div>
       <button class="btn btn-primary" id="unlockBtn" style="margin-top:6px;">Unlock</button>
       <div class="tiny-note"><span class="link-btn" id="useLoginInstead" style="cursor:pointer">Not you? Log in with password</span></div>
     </div></div>
@@ -3596,17 +3596,17 @@ async function refreshParentBadges() {
   });
 }
 
-// Generic "one more one-time setup step" card, shown wherever a parent-portal
-// table/RPC (see PARENT_PORTAL_SQL) hasn't been created in Supabase yet.
+// Generic "feature not enabled yet" card, shown wherever a table/RPC this
+// screen depends on hasn't been enabled for this school yet. Keeps the school
+// app free of any database/setup detail — that lives in the Mother System now.
 function missingSetupHtml(message) {
   return `<div class="card">
-    <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>${message}</p></div></div>
-    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your school's administrator/developer to complete the one-time setup, then refresh.</p>
-    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${PARENT_PORTAL_SQL}</pre>
+    <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Not available yet</h3><p>${message}</p></div></div>
+    <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">This feature is being enabled for your school. Please check back shortly, or contact TransApple support if it's been a while.</p>
   </div>`;
 }
 function renderMissingSetup(container, message, onRetry) {
-  container.innerHTML = missingSetupHtml(message) + `<button class="btn btn-primary" id="retrySetupBtn" style="width:100%;margin-top:10px;">I've run it — Refresh</button>`;
+  container.innerHTML = missingSetupHtml(message) + `<button class="btn btn-primary" id="retrySetupBtn" style="width:100%;margin-top:10px;">Refresh</button>`;
   document.getElementById("retrySetupBtn").onclick = onRetry;
 }
 
@@ -3723,7 +3723,7 @@ async function renderParentMeetings(container) {
 async function renderParentChildren(container) {
   let children = [];
   try { children = await getParentChildren(); }
-  catch (e) { renderMissingSetup(container, "Your parent portal needs one more one-time setup step before it can load your children.", () => renderParentChildren(container)); return; }
+  catch (e) { renderMissingSetup(container, "Your parent portal isn't fully available yet.", () => renderParentChildren(container)); return; }
   container.innerHTML = `
     <div class="section-head"><h3 style="color:var(--sky);">My Children</h3><button class="btn btn-primary btn-sm" id="addChildBtn">${ic.plus} Add a child</button></div>
     <div class="card" id="list"></div>
@@ -3742,7 +3742,7 @@ async function renderParentChildren(container) {
 function openAddChildModal(container) {
   openModal("Add a child", `
     <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter the Student ID and the student's exact registered name — the school confirms the match before linking.</div>
-    <div class="field"><label>Student ID (admission no.)</label><input id="f_adm" placeholder="e.g. DF001"/></div>
+    <div class="field"><label>Student ID (admission no.)</label><input id="f_adm" placeholder=""/></div>
     <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder="Full name as registered at the school"/></div>
   `, async (ov) => {
     requireFields(ov, [["f_adm","Student ID"], ["f_sname","Student's name"]]);
@@ -3830,7 +3830,7 @@ async function renderChildAcademics(area, child) {
 async function renderParentFees(container) {
   let children = [];
   try { children = await getParentChildren(); }
-  catch (e) { renderMissingSetup(container, "Your parent portal needs one more one-time setup step before it can load fees.", () => renderParentFees(container)); return; }
+  catch (e) { renderMissingSetup(container, "Your parent portal isn't fully available yet.", () => renderParentFees(container)); return; }
   if (!children.length) {
     container.innerHTML = `<div class="card">${emptyState('No children linked yet. Go to "My Children" to link a child first.')}</div>`;
     return;
@@ -4015,8 +4015,8 @@ async function renderParentContact(container) {
     <div class="card">
       <h3 style="color:var(--indigo);margin-bottom:12px;">Send a message</h3>
       <div class="field"><label>Department</label><select id="f_department">${parentMsgDeptOptions()}</select></div>
-      <div class="field"><label>Subject</label><input id="f_subject" placeholder="e.g. Question about Term 2 fees"/></div>
-      <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder="Write your message…"></textarea></div>
+      <div class="field"><label>Subject</label><input id="f_subject" placeholder=""/></div>
+      <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder=""></textarea></div>
       <button class="btn btn-primary" id="sendMsgBtn" style="width:100%;">Send message</button>
       <div id="msgStatus"></div>
     </div>
@@ -4053,7 +4053,7 @@ async function renderParentContact(container) {
       wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your messages</h3>` +
         (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject}${m.department ? ` <span style="color:var(--ink-soft);font-weight:600;">· ${parentMsgDeptLabel(m.department)}</span>` : ""}</div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No messages sent yet."));
     } catch (e) {
-      wrap.innerHTML = missingSetupHtml("Messaging needs one more one-time setup step.");
+      wrap.innerHTML = missingSetupHtml("Messaging isn't available for your school yet.");
     }
   }
 
@@ -4085,7 +4085,7 @@ async function renderParentContact(container) {
         };
       });
     } catch (e) {
-      results.innerHTML = missingSetupHtml("Private Contact needs one more one-time setup step.");
+      results.innerHTML = missingSetupHtml("Private Contact isn't available for your school yet.");
     }
   }
   document.getElementById("staffSearchBtn").onclick = searchStaff;
@@ -4098,7 +4098,7 @@ async function renderParentContact(container) {
       wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your private messages</h3>` +
         (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject} <span style="color:var(--ink-soft);font-weight:600;">· to ${m.recipient_name || "staff"}</span></div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No private messages sent yet."));
     } catch (e) {
-      wrap.innerHTML = missingSetupHtml("Private Contact needs one more one-time setup step.");
+      wrap.innerHTML = missingSetupHtml("Private Contact isn't available for your school yet.");
     }
   }
   loadSentMessages();
@@ -4107,8 +4107,8 @@ async function renderParentContact(container) {
 function openPrivateMessageModal(staffMember, onSent) {
   openModal(`Private message to ${staffMember.full_name}`, `
     <div class="tiny-note" style="text-align:left;">This is confidential — only @${staffMember.username} will see it, not the rest of the school office.</div>
-    <div class="field"><label>Subject</label><input id="f_psubject" placeholder="e.g. About my child's progress"/></div>
-    <div class="field"><label>Message</label><textarea id="f_pmessage" rows="4" placeholder="Write your message…"></textarea></div>
+    <div class="field"><label>Subject</label><input id="f_psubject" placeholder=""/></div>
+    <div class="field"><label>Message</label><textarea id="f_pmessage" rows="4" placeholder=""></textarea></div>
   `, async (ov) => {
     requireFields(ov, [["f_psubject","Subject"],["f_pmessage","Message"]]);
     await dbInsert("private_messages", {
@@ -4366,8 +4366,8 @@ async function renderExamTypes(body) {
 function openExamTypeModal(body, t) {
   const isEdit = !!t;
   openModal(isEdit ? "Edit exam type" : "New exam type", `
-    <div class="field"><label>Exam type name</label><input id="f_name" placeholder="Mid-Term Exam" value="${t?.name||''}"/></div>
-    <div class="field"><label>Maximum score</label><input id="f_max" type="number" min="1" step="1" placeholder="100" value="${t?.max_score??''}"/></div>
+    <div class="field"><label>Exam type name</label><input id="f_name" placeholder="" value="${t?.name||''}"/></div>
+    <div class="field"><label>Maximum score</label><input id="f_max" type="number" min="1" step="1" placeholder="" value="${t?.max_score??''}"/></div>
   `, async (ov) => {
     const payload = { name: val(ov,"f_name"), max_score: Number(val(ov,"f_max")) || 100 };
     if (isEdit) await dbUpdate("exam_types", t.id, payload); else await dbInsert("exam_types", payload);
@@ -4383,12 +4383,8 @@ async function renderGrades(body) {
   catch (e) { missingTable = true; }
 
   if (missingTable) {
-    body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Grades need a one-time setup before you can define them.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${GRADES_SETUP_SQL}</pre>
-      <button class="btn btn-primary" id="retryGradesBtn" style="margin-top:12px;">I've run it — Refresh</button>
-    </div>`;
+    body.innerHTML = missingSetupHtml("Grades isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryGradesBtn" style="margin-top:12px;">Refresh</button>`;
     document.getElementById("retryGradesBtn").onclick = () => renderGrades(body);
     return;
   }
@@ -4414,12 +4410,12 @@ async function renderGrades(body) {
 function openGradeModal(body, existingGrades, g) {
   const isEdit = !!g;
   openModal(isEdit ? "Edit grade" : "New grade", `
-    <div class="field"><label>Grade (e.g. A+, A, B+)</label><input id="f_grade" placeholder="A+" value="${g?.grade||''}"/></div>
+    <div class="field"><label>Grade (e.g. A+, A, B+)</label><input id="f_grade" placeholder="" value="${g?.grade||''}"/></div>
     <div class="grid2">
       <div class="field"><label>Min score (%)</label><input id="f_min" type="number" min="0" max="100" step="1" value="${g?.min_score??''}"/></div>
       <div class="field"><label>Max score (%)</label><input id="f_max" type="number" min="0" max="100" step="1" value="${g?.max_score??''}"/></div>
     </div>
-    <div class="field"><label>Remark</label><input id="f_remark" placeholder="Excellent" value="${g?.remark||''}"/></div>
+    <div class="field"><label>Remark</label><input id="f_remark" placeholder="" value="${g?.remark||''}"/></div>
   `, async (ov) => {
     const grade = val(ov,"f_grade").trim();
     const min_score = Number(val(ov,"f_min"));
@@ -4444,15 +4440,11 @@ async function renderIdFormat(body) {
   body.innerHTML = `
     <div class="section-head"><h3 style="color:var(--teal-dark);">ID Format</h3></div>
     <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px;line-height:1.6;">Set a prefix once and every new registration gets a unique ID automatically — prefix + gender (M/F) + year + a running number, e.g. <b>DFM25000</b>. The number keeps counting up with every new registration, whatever the gender.</p>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving fails)</summary>
-    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ID_FORMAT_SQL}</pre></details>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup — Grade field (run once)</summary>
-    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${GRADE_FIELD_SQL}</pre></details>
 
     <div class="card">
       <h4 style="margin-bottom:10px;color:var(--navy);">Student IDs</h4>
       <div class="grid2">
-        <div class="field"><label>Prefix</label><input id="f_s_prefix" placeholder="DF" value="${s.student_id_prefix||''}"/></div>
+        <div class="field"><label>Prefix</label><input id="f_s_prefix" placeholder="" value="${s.student_id_prefix||''}"/></div>
         <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" placeholder="3" value="${s.student_id_digits??''}"/></div>
       </div>
       <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" placeholder="0" value="${s.student_id_seq??''}"/></div>
@@ -4462,7 +4454,7 @@ async function renderIdFormat(body) {
     <div class="card">
       <h4 style="margin-bottom:10px;color:var(--navy);">Teacher IDs</h4>
       <div class="grid2">
-        <div class="field"><label>Prefix</label><input id="f_t_prefix" placeholder="DF" value="${s.teacher_id_prefix||''}"/></div>
+        <div class="field"><label>Prefix</label><input id="f_t_prefix" placeholder="" value="${s.teacher_id_prefix||''}"/></div>
         <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" placeholder="3" value="${s.teacher_id_digits??''}"/></div>
       </div>
       <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" placeholder="0" value="${s.teacher_id_seq??''}"/></div>
@@ -4575,8 +4567,8 @@ function openClassModal(body, teachers, c) {
   const isEdit = !!c;
   openModal(isEdit ? "Edit class" : "New class", `
     <div class="grid2">
-      <div class="field"><label>Class name</label><input id="f_name" placeholder="Grade 5" value="${c?.name||''}"/></div>
-      <div class="field"><label>Stream</label><input id="f_section" placeholder="East" value="${c?.section||''}"/></div>
+      <div class="field"><label>Class name</label><input id="f_name" placeholder="" value="${c?.name||''}"/></div>
+      <div class="field"><label>Stream</label><input id="f_section" placeholder="" value="${c?.section||''}"/></div>
     </div>
     <div class="field"><label>Class teacher</label><select id="f_teacher"><option value="">— None —</option>${teachers.map(t=>`<option value="${t.id}" ${c?.class_teacher_id===t.id?'selected':''}>${t.full_name}</option>`).join("")}</select></div>
   `, async (ov) => {
@@ -4615,8 +4607,8 @@ async function renderSubjects(body, opts={}) {
 function openSubjectModal(body, classes, s, linkedClassIds) {
   const isEdit = !!s;
   openModal(isEdit ? "Edit subject" : "New subject", `
-    <div class="field"><label>Subject name</label><input id="f_name" placeholder="Mathematics" value="${s?.name||''}"/></div>
-    <div class="field"><label>Code</label><input id="f_code" placeholder="MTH" value="${s?.code||''}"/></div>
+    <div class="field"><label>Subject name</label><input id="f_name" placeholder="" value="${s?.name||''}"/></div>
+    <div class="field"><label>Code</label><input id="f_code" placeholder="" value="${s?.code||''}"/></div>
     <div class="field"><label>Linked classes</label>
       <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:8px;">
         ${classes.length ? classes.map(c=>`
@@ -4750,7 +4742,7 @@ function openStudentModal(container, classes, s) {
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
     <div class="grid2">
       <div class="field"><label>Name</label><input id="f_gname" required value="${s?.guardian_name||''}"/></div>
-      <div class="field"><label>Relationship</label><input id="f_grel" required placeholder="Mother, Father, Guardian…" value="${s?.guardian_relationship||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_grel" required placeholder="" value="${s?.guardian_relationship||''}"/></div>
     </div>
     <div class="field"><label>Phone number</label><input id="f_gphone" required value="${s?.guardian_phone||''}"/></div>
 
@@ -4897,7 +4889,7 @@ function openTeacherModal(container, t) {
       <div class="field"><label>Specialty / subject</label><input id="f_spec" required value="${t?.specialty||''}"/></div>
       <div class="field"><label>Qualification</label><input id="f_qual" required value="${t?.qualification||''}"/></div>
     </div>
-    <div class="field"><label>Grade</label><input id="f_grade" required placeholder="e.g. Grade III Teacher" value="${t?.grade||''}"/></div>
+    <div class="field"><label>Grade</label><input id="f_grade" required placeholder="" value="${t?.grade||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
     <div class="grid2">
@@ -5539,8 +5531,8 @@ async function renderFeeReminders(body) {
       <div class="field" id="f_remTargetWrap"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
       <div class="field" id="f_remStudentWrap" style="display:none;"><label>Student</label><select id="f_remStudent"><option value="">— Select student —</option>${students.map(s=>`<option value="${s.id}">${s.full_name} (${s.admission_no})</option>`).join("")}</select></div>
       <div class="field" id="f_annAudienceWrap" style="display:none;"><label>Audience</label><select id="f_annAudience"><option>Everyone</option><option>All parents</option></select></div>
-      <div class="field"><label>Title</label><input id="f_msgTitle" placeholder="e.g. Term 2 balance reminder"/></div>
-      <div class="field"><label>Message</label><textarea id="f_msgMessage" rows="4" placeholder="Write your message…"></textarea></div>
+      <div class="field"><label>Title</label><input id="f_msgTitle" placeholder=""/></div>
+      <div class="field"><label>Message</label><textarea id="f_msgMessage" rows="4" placeholder=""></textarea></div>
       <button class="btn btn-primary" id="sendMsgBtn" style="width:100%;">Send</button>
       <div id="msgStatus"></div>
     </div>
@@ -5566,11 +5558,8 @@ async function renderFeeReminders(body) {
     try { announcements = await dbSelectActive("school_communications", { type:"eq.announcement", order:"created_at.desc", limit:"20" }); } catch (e) { if (!missing) missing = "announcements"; }
 
     if (missing) {
-      wrap.innerHTML = `<div class="card">
-        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">One-time setup needed</h3><p>This needs a one-time setup before you can send anything.</p></div></div>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${missing === "reminders" ? FEE_REMINDERS_SQL : COMMUNICATIONS_SQL}</pre>
-        <button class="btn btn-primary" id="retryMsgBtn" style="margin-top:12px;">I've run it — Refresh</button>
-      </div>`;
+      wrap.innerHTML = missingSetupHtml("Sending messages isn't available for your school yet.") +
+        `<button class="btn btn-primary" id="retryMsgBtn" style="margin-top:12px;">Refresh</button>`;
       document.getElementById("retryMsgBtn").onclick = loadRecent;
       return;
     }
@@ -5679,8 +5668,8 @@ function openFeeItemModal(body, cls, terms, f, onDone) {
       ${classLabel}
       <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${f.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
       <div class="grid2">
-        <div class="field"><label>Item name</label><input id="f_item" placeholder="Tuition" value="${f.item_name||''}"/></div>
-        <div class="field"><label>Amount</label><input id="f_amount" type="number" placeholder="50000" value="${f.amount||''}"/></div>
+        <div class="field"><label>Item name</label><input id="f_item" placeholder="" value="${f.item_name||''}"/></div>
+        <div class="field"><label>Amount</label><input id="f_amount" type="number" placeholder="" value="${f.amount||''}"/></div>
       </div>
     `, async (ov)=>{
       const payload = { class_id: cls.id, term_id: val(ov,"f_term"), item_name: val(ov,"f_item"), amount: Number(val(ov,"f_amount")) };
@@ -5696,8 +5685,8 @@ function openFeeItemModal(body, cls, terms, f, onDone) {
   const makeRowHtml = () => {
     rowCount++;
     return `<div class="feeItemRow" data-row="${rowCount}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;">
-      <div class="field" style="flex:1.5;margin-bottom:0;">${rowCount===1?'<label>Item name</label>':''}<input class="fi-name" placeholder="e.g. Tuition, Uniform, Development fund"/></div>
-      <div class="field" style="flex:1;margin-bottom:0;">${rowCount===1?'<label>Amount</label>':''}<input class="fi-amount" type="number" placeholder="0"/></div>
+      <div class="field" style="flex:1.5;margin-bottom:0;">${rowCount===1?'<label>Item name</label>':''}<input class="fi-name" placeholder=""/></div>
+      <div class="field" style="flex:1;margin-bottom:0;">${rowCount===1?'<label>Amount</label>':''}<input class="fi-amount" type="number" placeholder=""/></div>
       <button type="button" class="btn btn-ghost btn-sm fi-remove" title="Remove item" style="padding:10px 12px;flex-shrink:0;">&times;</button>
     </div>`;
   };
@@ -5774,7 +5763,7 @@ async function renderFeePayment(body) {
       <div class="field"><label>Term</label><select id="f_term"><option value="">— Select term —</option>${terms.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select></div>
       <div id="balanceInfo" style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;"></div>
       <div class="grid2">
-        <div class="field"><label>Amount paid</label><input id="f_amount" type="number" placeholder="20000"/></div>
+        <div class="field"><label>Amount paid</label><input id="f_amount" type="number" placeholder=""/></div>
         <div class="field"><label>Method</label><select id="f_method">
           <option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="card">Card</option><option value="mobile_money">Mobile money</option><option value="other">Other</option>
         </select></div>
@@ -5783,8 +5772,6 @@ async function renderFeePayment(body) {
       <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
       <div id="payMsg"></div>
       <div class="tiny-note" style="margin-top:10px;text-align:left;">Once recorded, a payment and its receipt are permanent — they can't be edited or deleted afterwards, so double-check the details before saving.</div>
-      <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">Enforce this at the account level too (optional, one-time)</summary>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${FEE_PAYMENTS_READONLY_SQL}</pre></details>
     </div>`;
   const classFilterSel = document.getElementById("f_classFilter");
   const studentSel = document.getElementById("f_student");
@@ -5952,8 +5939,6 @@ async function renderExamList(body) {
     dbSelectActive("exam_types", { order:"name.asc" }),
   ]);
   body.innerHTML = `<div class="section-head"><h3 style="color:var(--indigo);">Exams</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add exam</button></div>
-    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving an exam or a remark fails)</summary>
-    <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${EXAM_MIGRATION_SQL}</pre></details>
     <div class="card" id="list"></div>`;
   const list = document.getElementById("list");
   list.innerHTML = exams.length ? "" : emptyState("No exams created yet.");
@@ -6173,12 +6158,8 @@ async function renderCommsList(body, container) {
   catch (e) { missingTable = true; }
 
   if (missingTable) {
-    body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.megaphone}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Comms needs a one-time setup before you can send anything.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${COMMUNICATIONS_SQL}</pre>
-      <button class="btn btn-primary" id="retryCommsBtn" style="margin-top:12px;">I've run it — Refresh</button>
-    </div>`;
+    body.innerHTML = missingSetupHtml("Comms isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryCommsBtn" style="margin-top:12px;">Refresh</button>`;
     document.getElementById("retryCommsBtn").onclick = () => renderCommsList(body, container);
     return;
   }
@@ -6208,9 +6189,9 @@ function openCommsModal(body, container, c) {
   const audiences = ["Everyone","All parents","All staff","All students","Specific class"];
   openModal(isEdit ? "Edit message" : "Post a message", `
     <div class="field"><label>Type</label><select id="f_type">${COMMS_MESSAGE_TYPES.map(([id,label])=>`<option value="${id}" ${(c?.type||"announcement")===id?'selected':''}>${label}</option>`).join("")}</select></div>
-    <div class="field"><label>Title</label><input id="f_title" placeholder="e.g. Term 2 opening date" value="${c?.title||''}"/></div>
+    <div class="field"><label>Title</label><input id="f_title" placeholder="" value="${c?.title||''}"/></div>
     <div class="field"><label>Audience</label><select id="f_audience">${audiences.map(a=>`<option ${c?.audience===a?'selected':''}>${a}</option>`).join("")}</select></div>
-    <div class="field"><label>Message</label><textarea id="f_message" rows="5" placeholder="Write the full message here…">${c?.message||''}</textarea></div>
+    <div class="field"><label>Message</label><textarea id="f_message" rows="5" placeholder="">${c?.message||''}</textarea></div>
   `, async (ov) => {
     requireFields(ov, [["f_title","Title"], ["f_message","Message"]]);
     const payload = { type: val(ov,"f_type"), title: val(ov,"f_title"), audience: val(ov,"f_audience"), message: val(ov,"f_message"), created_by: profile?.full_name || null };
@@ -6231,12 +6212,8 @@ async function renderMeetingsAdminList(body, container) {
   catch (e) { missingTable = true; }
 
   if (missingTable) {
-    body.innerHTML = `<div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.calendar}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>Meetings needs a one-time setup before you can schedule anything.</p></div></div>
-      <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${MEETINGS_SQL}</pre>
-      <button class="btn btn-primary" id="retryMeetingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
-    </div>`;
+    body.innerHTML = missingSetupHtml("Meetings isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryMeetingsBtn" style="margin-top:12px;">Refresh</button>`;
     document.getElementById("retryMeetingsBtn").onclick = () => renderMeetingsAdminList(body, container);
     return;
   }
@@ -6275,12 +6252,12 @@ function openMeetingModal(body, container, m) {
   const dateVal = dt ? dt.toISOString().slice(0,10) : "";
   const timeVal = dt ? dt.toTimeString().slice(0,5) : "";
   openModal(isEdit ? "Edit meeting" : "Schedule meeting", `
-    <div class="field"><label>Title</label><input id="f_title" placeholder="e.g. Term 2 PTA meeting" value="${m?.title||''}"/></div>
+    <div class="field"><label>Title</label><input id="f_title" placeholder="" value="${m?.title||''}"/></div>
     <div class="field"><label>Date</label><input id="f_date" type="date" value="${dateVal}"/></div>
     <div class="field"><label>Time</label><input id="f_time" type="time" value="${timeVal}"/></div>
-    <div class="field"><label>Location</label><input id="f_location" placeholder="e.g. School hall" value="${m?.location||''}"/></div>
+    <div class="field"><label>Location</label><input id="f_location" placeholder="" value="${m?.location||''}"/></div>
     <div class="field"><label>Audience</label><select id="f_audience">${audiences.map(a=>`<option ${m?.audience===a?'selected':''}>${a}</option>`).join("")}</select></div>
-    <div class="field"><label>Details</label><textarea id="f_description" rows="4" placeholder="Agenda, what to bring, etc.">${m?.description||''}</textarea></div>
+    <div class="field"><label>Details</label><textarea id="f_description" rows="4" placeholder="">${m?.description||''}</textarea></div>
   `, async (ov) => {
     requireFields(ov, [["f_title","Title"], ["f_date","Date"], ["f_time","Time"]]);
     const meeting_date = new Date(`${val(ov,"f_date")}T${val(ov,"f_time")}`).toISOString();
@@ -6388,8 +6365,8 @@ async function renderContactTransApple(container) {
     <div id="ticketArea"></div>`;
   document.getElementById("newTicketBtn").onclick = () => {
     openModal("New request to TransApple", `
-      <div class="field"><label>Subject</label><input id="f_subject" placeholder="e.g. Can't access the Fees module" /></div>
-      <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder="Describe your issue or question"></textarea></div>
+      <div class="field"><label>Subject</label><input id="f_subject" placeholder="" /></div>
+      <div class="field"><label>Message</label><textarea id="f_message" rows="4" placeholder=""></textarea></div>
     `, async (ov) => {
       requireFields(ov, [["f_subject","Subject"],["f_message","Message"]]);
       await createSupportRequest(val(ov,"f_subject"), val(ov,"f_message"));
@@ -6401,9 +6378,7 @@ async function renderContactTransApple(container) {
   let tickets = [];
   try { tickets = await listMySupportRequests(); }
   catch (e) {
-    area.innerHTML = `<div class="tiny-note">Support isn't set up for this school yet. Ask an administrator to run the one-time setup below (safe to re-run).</div>
-      <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup</summary>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${SUPPORT_SQL}</pre></details>`;
+    area.innerHTML = `<div class="tiny-note">Support isn't available for this school yet. Please check back shortly.</div>`;
     return;
   }
   if (!tickets.length) { area.innerHTML = `<div class="empty">No requests yet. Tap "New request" to reach TransApple.</div>`; return; }
@@ -6430,7 +6405,7 @@ async function openSupportThread(ticket, container) {
     <div class="tiny-note" style="margin-bottom:8px;">Status: <b>${ticket.status}</b></div>
     <div id="threadMsgs" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
     ${ticket.status === "resolved" ? `<div class="tiny-note" style="margin-bottom:8px;">This request is marked resolved. Sending a message reopens it.</div>` : ""}
-    <div class="field"><textarea id="replyMsg" rows="3" placeholder="Write a message..."></textarea></div>
+    <div class="field"><textarea id="replyMsg" rows="3" placeholder=""></textarea></div>
     <div class="form-actions">
       <button class="btn btn-ghost" id="modalCancel">Close</button>
       <button class="btn btn-primary" id="sendReplyBtn">Send</button>
@@ -6481,9 +6456,8 @@ async function renderRegToggleCard() {
     open = rows[0]?.registration_open !== false;
   } catch (e) { missingCol = true; }
   if (missingCol) {
-    card.innerHTML = `<div class="tiny-note">Registration Controls needs a one-time setup before it can save anything.</div>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${SCHOOL_REGISTRATION_TOGGLE_SQL}</pre>
-      <button class="btn btn-primary btn-sm" id="retryRegToggleBtn" style="margin-top:10px;">I've run it — Refresh</button>`;
+    card.innerHTML = `<div class="tiny-note">Registration Controls isn't available for your school yet.</div>
+      <button class="btn btn-primary btn-sm" id="retryRegToggleBtn" style="margin-top:10px;">Refresh</button>`;
     const retry = document.getElementById("retryRegToggleBtn");
     if (retry) retry.onclick = renderRegToggleCard;
     return;
@@ -6535,9 +6509,8 @@ async function renderDeptLockCard() {
     locked = (rows[0] && rows[0].locked_departments) || {};
   } catch (e) { missingCol = true; }
   if (missingCol) {
-    card.innerHTML = `<div class="tiny-note">Registration Controls needs a one-time setup before it can save anything.</div>
-      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${DEPARTMENT_LOCK_SQL}</pre>
-      <button class="btn btn-primary btn-sm" id="retryDeptLockBtn" style="margin-top:10px;">I've run it — Refresh</button>`;
+    card.innerHTML = `<div class="tiny-note">Registration Controls isn't available for your school yet.</div>
+      <button class="btn btn-primary btn-sm" id="retryDeptLockBtn" style="margin-top:10px;">Refresh</button>`;
     const retry = document.getElementById("retryDeptLockBtn");
     if (retry) retry.onclick = renderDeptLockCard;
     return;
@@ -6612,9 +6585,7 @@ async function renderUsers(container) {
     if (reqBtn) reqBtn.onclick = () => {
       openModal("Request a detail change", `
         <div class="tiny-note" style="text-align:left;">Tell Administration what you'd like changed (department, position, phone number, etc) and why — they'll review it and update your account.</div>
-        <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder="e.g. Please move me from Teaching Staff to Head of Department (HOD)"></textarea></div>
-        <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if sending fails)</summary>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${ACCOUNT_REQUESTS_SQL}</pre></details>
+        <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder=""></textarea></div>
       `, async (ov) => {
         requireFields(ov, [["f_msg","Message"]]);
         await dbInsert("account_change_requests", { profile_id: profile.id, full_name: profile.full_name, department: profile.department, message: val(ov,"f_msg") });
@@ -6732,7 +6703,7 @@ async function renderUsers(container) {
       renderUsers(container);
     }));
   } catch (e) {
-    reqList.innerHTML = `<div class="tiny-note">Request history isn't set up yet — the one-time setup appears when a request is sent. Ask your developer to complete it, then refresh.</div>`;
+    reqList.innerHTML = `<div class="tiny-note">Request history isn't available yet.</div>`;
   }
 }
 // Opened by tapping an account card in Manage Accounts (everyone but "This is You").
@@ -6826,16 +6797,6 @@ function pushNotifCardHtml() {
           <label class="toggle-switch"><input type="checkbox" id="staffPushToggle" /><span class="toggle-slider"></span></label>
         </div>
         <div id="staffPushMsg" style="margin-top:8px;"></div>
-        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (needed before this can send real pushes)</summary>
-          <p class="tiny-note" style="margin-top:8px;">1. Run this one-time setup script:</p>
-          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_PUSH_SQL}</pre>
-          <p class="tiny-note" style="margin-top:8px;">2. Create a server function called <code>staff-notify</code> with this code:</p>
-          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">${STAFF_NOTIFY_FUNCTION_CODE}</pre>
-          <p class="tiny-note" style="margin-top:8px;">3. In your server function's settings, add the app's connection URL and service key, a <code>VAPID_PUBLIC_KEY</code> (must match the one baked into this app, shown below), <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code> (e.g. <code>mailto:you@yourdomain.com</code>).</p>
-          <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;">VAPID_PUBLIC_KEY = ${VAPID_PUBLIC_KEY}</pre>
-          <p class="tiny-note" style="margin-top:8px;">4. Add two webhooks: one on new announcements (Insert) and one on new parent messages (Insert), both calling the <code>staff-notify</code> function.</p>
-          <p class="tiny-note" style="margin-top:6px;">⚠️ Generate your own VAPID key pair for production (e.g. <code>npx web-push generate-vapid-keys</code>) and swap both the secret and the <code>VAPID_PUBLIC_KEY</code> constant in this file — the one above is a shared example key.</p>
-        </details>
       `}
     </div>`;
 }
@@ -6899,13 +6860,8 @@ async function renderSettings(container) {
   } catch (e) { missingTable = true; }
 
   if (missingTable) {
-    container.innerHTML = `
-      <div class="card">
-        <div class="settings-card-head"><div class="ic" style="background:var(--amber-tint);color:var(--amber-dark);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Almost there — one-time setup</h3><p>School Settings needs a one-time setup before it can save anything.</p></div></div>
-        <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;">Ask your developer to complete the one-time setup, then come back and tap refresh.</p>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;">${SCHOOL_SETTINGS_SQL}</pre>
-        <button class="btn btn-primary" id="retrySettingsBtn" style="margin-top:12px;">I've run it — Refresh</button>
-      </div>`;
+    container.innerHTML = missingSetupHtml("School Settings isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retrySettingsBtn" style="margin-top:12px;">Refresh</button>`;
     document.getElementById("retrySettingsBtn").onclick = () => renderSettings(container);
     return;
   }
@@ -6947,8 +6903,8 @@ async function renderSettings(container) {
         </div>
         <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
         <div style="flex:1;min-width:180px;">
-          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="Nova School Academy" value="${s.school_name||''}"/></div>
-          <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="Excellence in every child" maxlength="60" value="${s.motto||''}"/></div>
+          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="" value="${s.school_name||''}"/></div>
+          <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="" maxlength="60" value="${s.motto||''}"/></div>
         </div>
       </div>
       <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
@@ -6960,17 +6916,17 @@ async function renderSettings(container) {
 
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.target}</div><div><h3 style="color:var(--navy);">Mission &amp; vision</h3><p>What your school stands for — visible to staff on this page.</p></div></div>
-      <div class="field"><label>${ic.target} &nbsp;Mission</label><textarea id="f_mission" rows="3" placeholder="What we do, every day, for our students…">${s.mission||''}</textarea></div>
-      <div class="field" style="margin-bottom:0;"><label>${ic.compass} &nbsp;Vision</label><textarea id="f_vision" rows="3" placeholder="Where we're headed as a school…">${s.vision||''}</textarea></div>
+      <div class="field"><label>${ic.target} &nbsp;Mission</label><textarea id="f_mission" rows="3" placeholder="">${s.mission||''}</textarea></div>
+      <div class="field" style="margin-bottom:0;"><label>${ic.compass} &nbsp;Vision</label><textarea id="f_vision" rows="3" placeholder="">${s.vision||''}</textarea></div>
     </div>
 
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.mail}</div><div><h3 style="color:var(--navy);">Contact details</h3><p>Shown to staff and on printed report cards.</p></div></div>
       <div class="grid2">
-        <div class="field"><label>Phone</label><input id="f_phone" placeholder="+256 700 000 000" value="${s.phone||''}"/></div>
-        <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="info@school.edu" value="${s.email||''}"/></div>
+        <div class="field"><label>Phone</label><input id="f_phone" placeholder="" value="${s.phone||''}"/></div>
+        <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="" value="${s.email||''}"/></div>
       </div>
-      <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="P.O. Box 1, Kampala">${s.address||''}</textarea></div>
+      <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="">${s.address||''}</textarea></div>
     </div>
 
     <div class="card">
@@ -6987,8 +6943,6 @@ async function renderSettings(container) {
           </div>`).join("")}
       </div>
       <input type="file" id="stampFile" accept="image/*" style="display:none;"/>
-      <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">One-time setup (only if saving a stamp or receipt number fails)</summary>
-        <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${STAMPS_RECEIPT_SQL}</pre></details>
     </div>
 
     <div class="card">
