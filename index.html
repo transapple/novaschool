@@ -7690,10 +7690,17 @@ function playSplashScreen() {
 
 (async function boot() {
   const splashDone = playSplashScreen();
-  // Paint the login/registration screen immediately — it needs no network data,
-  // so the user should never be staring at a blank screen while we wait on
-  // Supabase (which can now also never hang forever, see FETCH_TIMEOUT_MS above).
-  render();
+  // A device with no remembered school can't possibly be pending/suspended/
+  // deleted, so it's always safe to paint the login/registration screen
+  // immediately — it needs no network data, and the user should never be
+  // staring at a blank screen while we wait on Supabase (which can now also
+  // never hang forever, see FETCH_TIMEOUT_MS above). A device THAT DOES have
+  // a remembered school skips this instant paint and waits for the real
+  // status below instead, so the login form never has a chance to flash in
+  // front of a suspended/deleted/pending screen — see the "!auth" branch in
+  // render() and REMEMBER_SCHOOL_KEY/getRememberedSchool() further down.
+  const rememberedSchoolIdAtBoot = isDeviceSeen() ? getRememberedSchool() : null;
+  if (!rememberedSchoolIdAtBoot) render();
   await loadSchoolSettings();
   await tryRestoreRememberedSession();
   // No session was restored (e.g. "Remember me" wasn't checked at login) — but
@@ -7701,12 +7708,9 @@ function playSplashScreen() {
   // login (see setCurrentSchool()/REMEMBER_SCHOOL_KEY). Load that school's
   // status now so render() can show the pending/suspended/deleted screen
   // immediately instead of the login form — see the "!auth" branch in render().
-  if (!auth) {
-    const rememberedSchoolId = getRememberedSchool();
-    if (rememberedSchoolId) {
-      setCurrentSchool(rememberedSchoolId);
-      await loadCurrentSchool();
-    }
+  if (!auth && rememberedSchoolIdAtBoot) {
+    setCurrentSchool(rememberedSchoolIdAtBoot);
+    await loadCurrentSchool();
   }
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } // fire-and-forget: finalizes any school whose 30-day Trash window already passed
   render();
