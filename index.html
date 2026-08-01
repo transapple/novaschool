@@ -85,6 +85,12 @@
   .brand-badge{width:42px;height:42px;border-radius:12px;background:var(--teal);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;}
   .brand-name{font-size:19px;font-weight:800;color:var(--navy);}
   .brand-sub{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  /* ---- Full-screen status states: pending approval / suspended / deleted ---- */
+  .status-badge-lg{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+  .status-badge-lg.tone-amber{background:var(--amber-tint);color:var(--amber-dark);}
+  .status-badge-lg.tone-red{background:var(--red-tint);color:var(--red);}
+  .status-badge-lg.tone-slate{background:var(--slate-tint);color:var(--slate);}
+  .status-badge-lg svg{width:28px;height:28px;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
   .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;transition:border-color .15s;}
@@ -2505,7 +2511,10 @@ function render() {
   if (!auth && DEV_MODE && !profile) { profile = { id: null, full_name: "Developer", role: "admin" }; }
   if (auth && !schoolIsActive()) {
     if (showSupportPortal) { renderSupportPortal(); return; }
-    renderSchoolBlocked(); return;
+    if (CURRENT_SCHOOL?.deleted_at) { renderSchoolDeleted(); return; }
+    if (CURRENT_SCHOOL?.status === "pending") { renderPendingApproval(); return; }
+    if (CURRENT_SCHOOL?.status === "suspended") { renderSchoolSuspended(); return; }
+    renderSchoolBlocked(); return; // deactivated / rejected / unrecognized status
   }
   showSupportPortal = false; // no longer needed once the school is active again
   if (profile?.role === "parent" || profile?.department === "parents") {
@@ -2790,7 +2799,18 @@ function renderLogin() {
         const msg = document.getElementById("loginMsg");
         msg.innerHTML = "";
         try { await login(username, password, remember); }
-        catch (e) { msg.innerHTML = `<div class="err">${e.message}</div>`; }
+        catch (e) {
+          const em = e.message || "";
+          // These three come from verify_login()'s school-level checks, raised
+          // before any profile/session is returned — so there's no CURRENT_SCHOOL
+          // to load yet. Match on their distinctive wording (see REGISTRATION_APPROVAL_SQL's
+          // verify_login) and route straight to the matching full screen instead of
+          // just showing the raw message inline.
+          if (/awaiting approval by TransApple/i.test(em)) { renderPendingApproval(); return; }
+          if (/school's account is suspended/i.test(em)) { renderSchoolSuspended(); return; }
+          if (/no longer exists in the system because it was permanently deleted/i.test(em)) { renderSchoolDeleted({ message: em }); return; }
+          msg.innerHTML = `<div class="err">${em}</div>`;
+        }
       };
       document.getElementById("toSignup").onclick = () => { mode = "signup"; draw(); };
       document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
@@ -3008,6 +3028,99 @@ function renderSchoolBlocked() {
   document.getElementById("blockedLogout").onclick = logout;
   document.getElementById("blockedRetry").onclick = async () => { await loadCurrentSchool(); render(); };
   document.getElementById("blockedContact").onclick = () => { showSupportPortal = true; render(); };
+}
+/* ---------------- DEDICATED STATUS SCREENS: pending / suspended / deleted ----------------
+   renderSchoolBlocked() above is the generic fallback (deactivated/rejected/unknown).
+   These three cover the specific states asked for most often:
+     - renderPendingApproval(): shown the moment a brand-new school finishes
+       registering (status starts "pending" — see renderSchoolRegistration()),
+       and again any time schoolIsActive() is false with status "pending".
+     - renderSchoolSuspended(): status "suspended".
+     - renderSchoolDeleted(): schools.deleted_at is set (moved to Trash by a
+       Mother App admin — this always overrides status, see schoolIsActive()).
+   All three work in two contexts:
+     1) Signed in (auth set, CURRENT_SCHOOL loaded) — reached via render()'s
+        "auth && !schoolIsActive()" gate, e.g. right after registering, or when
+        startSchoolSync()'s 45s poll catches a status change mid-session. Shows
+        "Check again" + "Log out" + "Contact TransApple".
+     2) Not signed in — reached from renderLogin()'s login submit handler, which
+        pattern-matches the specific error text verify_login() raises for these
+        three school-level states and calls the matching screen directly (since
+        the RPC blocks before ever returning a profile/session). Shows a single
+        "Back to log in" button instead.
+   statusScreenActions()/wireStatusActions() are the shared button row for all three. */
+function statusScreenActions(opts = {}) {
+  const { retry = true, contact = true } = opts;
+  if (auth) {
+    return `
+      <button class="btn btn-ghost" id="statusLogout" style="width:100%;">Log out</button>
+      ${retry ? `<button class="btn btn-primary" id="statusRetry" style="width:100%;margin-top:8px;">Check again</button>` : ""}
+      ${contact ? `<div style="margin-top:16px;"><span class="link-btn" id="statusContact" style="cursor:pointer;font-size:13px;">Contact TransApple</span></div>` : ""}
+    `;
+  }
+  return `<button class="btn btn-primary" id="statusBackToLogin" style="width:100%;">Back to log in</button>`;
+}
+function wireStatusActions() {
+  if (auth) {
+    const logoutBtn = document.getElementById("statusLogout"); if (logoutBtn) logoutBtn.onclick = logout;
+    const retryBtn = document.getElementById("statusRetry"); if (retryBtn) retryBtn.onclick = async () => { await loadCurrentSchool(); render(); };
+    const contactBtn = document.getElementById("statusContact"); if (contactBtn) contactBtn.onclick = () => { showSupportPortal = true; render(); };
+  } else {
+    const backBtn = document.getElementById("statusBackToLogin"); if (backBtn) backBtn.onclick = () => renderLogin();
+  }
+}
+// Shown right after a new school registers (status "pending"), and any time
+// this school is signed-in-but-pending. Approvals are handled from the Mother
+// App's "Pending" queue — there's nothing to do here but wait and check back.
+function renderPendingApproval() {
+  const schoolName = CURRENT_SCHOOL?.name || "Your school";
+  const submitted = CURRENT_SCHOOL?.created_at ? new Date(CURRENT_SCHOOL.created_at).toLocaleString() : null;
+  app().innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <div class="status-badge-lg tone-amber">${ic.clock}</div>
+        <h2 style="margin-bottom:8px;">Registration submitted</h2>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:6px;">Thanks for registering <b>${schoolName}</b>! Your application is now with TransApple for review.</div>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">Approval usually takes up to <b>24 hours</b> — please check back later. You'll be able to log in and start using the system as soon as it's approved.</div>
+        ${submitted ? `<div class="tiny-note" style="margin-bottom:18px;">Submitted: <b>${submitted}</b></div>` : ""}
+        ${statusScreenActions()}
+      </div>
+    </div>`;
+  wireStatusActions();
+}
+// Shown when TransApple has suspended this school (billing, policy, etc.) —
+// distinct from a suspended individual staff/parent account, which is a
+// separate, school-level (not Mother System) concern with its own message.
+function renderSchoolSuspended() {
+  const schoolName = CURRENT_SCHOOL?.name || "Your school";
+  app().innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <div class="status-badge-lg tone-red">🚫</div>
+        <h2 style="margin-bottom:8px;">Access suspended</h2>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">Access to <b>${schoolName}</b> has been suspended by TransApple. This is usually related to a billing or policy issue. Contact TransApple support to resolve it and restore access.</div>
+        ${statusScreenActions()}
+      </div>
+    </div>`;
+  wireStatusActions();
+}
+// Shown when this school was moved to Trash and permanently purged by a Mother
+// App admin (schools.deleted_at) — this is final, there's no restore, so no
+// "Check again" button. opts.message lets the login-time caller pass through
+// verify_login()'s exact error text (it already names the school).
+function renderSchoolDeleted(opts = {}) {
+  const schoolName = CURRENT_SCHOOL?.name || "This school";
+  const message = opts.message || `"${schoolName}" was permanently deleted from TransApple and can no longer be used. If you believe this is a mistake, please contact us now.`;
+  app().innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <div class="status-badge-lg tone-slate">${ic.trash}</div>
+        <h2 style="margin-bottom:8px;">School no longer exists</h2>
+        <div class="tiny-note" style="font-size:14px;margin-bottom:18px;">${message}</div>
+        ${statusScreenActions({ retry: false })}
+      </div>
+    </div>`;
+  wireStatusActions();
 }
 // Shown to a parent account when the school's Mother-System features flag has
 // parent_portal switched off. Distinct from renderSchoolBlocked(): the school
