@@ -940,7 +940,6 @@ function motherSystemCardHtml(admins) {
           <button class="btn btn-primary btn-sm" id="settingsUpgradeBtn">Complete Upgrade</button>
         </div>` : ""}
 
-      <div class="view-row"><div class="vlabel">School ID</div><div class="vvalue" style="font-family:monospace;">${s.school_code || "—"}</div></div>
       <div class="view-row"><div class="vlabel">Registered name</div><div class="vvalue">${s.name || "—"}</div></div>
       ${s.motto ? `<div class="view-row"><div class="vlabel">Motto</div><div class="vvalue">${s.motto}</div></div>` : ""}
       ${loc ? `<div class="view-row"><div class="vlabel">Location</div><div class="vvalue">${loc}</div></div>` : ""}
@@ -1885,6 +1884,105 @@ begin
 end;
 $verify_login$;
 grant execute on function verify_login(text,text) to anon, authenticated;`;
+
+/* ---------------- SCHOOL REGISTRATION TOGGLE ----------------
+   Run this ONCE in Supabase → SQL Editor, LAST — after REGISTRATION_APPROVAL_SQL
+   above (it redefines create_account() and create_parent_account() one more
+   time, on top of those versions, so both the approval workflow and the
+   department lock keep working).
+
+   Lets a school's own Administrator close self-registration entirely from
+   Users & Roles → Registration Controls — e.g. once a school has all the
+   accounts it needs, or during a rollout where every new login should be
+   created by hand. While closed, the sign-in screen's "Create account" flow
+   (both the Staff and Parent forms — they share the same School ID field)
+   is rejected server-side with a clear message, for every department, not
+   just the ones already locked individually. This never touches existing
+   accounts or logins — only new self-signups. Defaults to open, so schools
+   that never touch this setting are unaffected. */
+const SCHOOL_REGISTRATION_TOGGLE_SQL = `alter table school_settings add column if not exists registration_open boolean not null default true;
+
+-- Self-signup staff accounts: blocked entirely while registration is closed,
+-- checked before the per-department lock so the message is unambiguous.
+drop function if exists create_account(text, text, text, text, text, text, text, uuid);
+create function create_account(
+  p_full_name text, p_username text, p_department text,
+  p_phone text, p_password text, p_pin text, p_photo_url text default null, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_account$
+declare new_row profiles; locked jsonb; reg_open boolean;
+begin
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  select registration_open into reg_open from school_settings where school_id = p_school_id limit 1;
+  if reg_open is false then
+    raise exception 'Registration is currently closed for this school. Please contact your admin.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  if p_department is not null and p_department <> '' then
+    select locked_departments into locked from school_settings where school_id = p_school_id limit 1;
+    if locked is not null and (locked ->> p_department) = 'true' then
+      raise exception 'This department is currently closed for new registrations. Please contact your school Administration.';
+    end if;
+  end if;
+  insert into profiles (full_name, username, department, phone, pin, password_hash, role, photo_url, school_id, approval_status)
+  values (p_full_name, p_username, nullif(p_department,''), nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'staff', p_photo_url, p_school_id, 'pending')
+  returning * into new_row;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_account$;
+grant execute on function create_account(text,text,text,text,text,text,text,uuid) to anon, authenticated;
+
+-- Self-signup parent accounts: same closed-registration check, before the
+-- student-match lookup so a closed school never leaks whether a Student ID
+-- exists.
+drop function if exists create_parent_account(text, text, text, text, text, text, text, text, uuid);
+create function create_parent_account(
+  p_full_name text, p_username text, p_phone text, p_password text, p_pin text,
+  p_photo_url text, p_admission_no text, p_student_name text, p_school_id uuid default null
+) returns profiles
+language plpgsql security definer as $create_parent_account$
+declare new_row profiles; found_student students; reg_open boolean;
+begin
+  if p_school_id is null then
+    raise exception 'Select a school.';
+  end if;
+  select registration_open into reg_open from school_settings where school_id = p_school_id limit 1;
+  if reg_open is false then
+    raise exception 'Registration is currently closed for this school. Please contact your admin.';
+  end if;
+  select * into found_student from students
+    where trim(lower(admission_no)) = trim(lower(p_admission_no))
+      and trim(lower(full_name)) = trim(lower(p_student_name))
+      and school_id = p_school_id
+      and deleted_at is null
+    limit 1;
+  if found_student.id is null then
+    raise exception 'We could not find a student with that Student ID and exact registered name at that school. Please check with the school office.';
+  end if;
+  if p_username is null or trim(p_username) = '' then
+    raise exception 'Username is required.';
+  end if;
+  if exists (select 1 from profiles where username = p_username) then
+    raise exception 'That username is already taken.';
+  end if;
+  insert into profiles (full_name, username, phone, pin, password_hash, role, photo_url, school_id, approval_status)
+  values (p_full_name, p_username, nullif(p_phone,''), nullif(p_pin,''), crypt(p_password, gen_salt('bf')), 'parent', p_photo_url, p_school_id, 'pending')
+  returning * into new_row;
+  insert into parent_students (parent_id, student_id, school_id) values (new_row.id, found_student.id, p_school_id)
+    on conflict (parent_id, student_id) do nothing;
+  new_row.password_hash := null;
+  return new_row;
+end;
+$create_parent_account$;
+grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- SUPABASE HELPERS ---------------- */
 async function sb(path, opts = {}) {
@@ -6361,6 +6459,61 @@ async function openSupportThread(ticket, container) {
    including themselves. Academic, Finance and Parents accounts can't change those
    details directly — they submit a request here, which Administration
    sees and actions further down this same page. */
+// Master "Registration open/closed" switch on Users & Roles (admin-only) —
+// stops every new self-signup (Staff and Parent alike) from the sign-in
+// screen's "Create account" flow, regardless of department. Reads/writes
+// school_settings.registration_open, checked server-side in create_account()
+// and create_parent_account() (see SCHOOL_REGISTRATION_TOGGLE_SQL), so this
+// is a genuine lock, not just a hidden button.
+async function renderRegToggleCard() {
+  const card = document.getElementById("regToggleCard");
+  if (!card) return;
+  let open = true;
+  let missingCol = false;
+  try {
+    const rows = await dbSelect("school_settings", { id:"eq.1", select:"registration_open" });
+    open = rows[0]?.registration_open !== false;
+  } catch (e) { missingCol = true; }
+  if (missingCol) {
+    card.innerHTML = `<div class="tiny-note">Registration Controls needs a one-time setup before it can save anything.</div>
+      <pre style="background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;">${SCHOOL_REGISTRATION_TOGGLE_SQL}</pre>
+      <button class="btn btn-primary btn-sm" id="retryRegToggleBtn" style="margin-top:10px;">I've run it — Refresh</button>`;
+    const retry = document.getElementById("retryRegToggleBtn");
+    if (retry) retry.onclick = renderRegToggleCard;
+    return;
+  }
+  const renderState = (isOpen) => `
+    <div class="list-row">
+      <div class="list-main">
+        <div class="list-title">${isOpen ? "Registration open" : "Registration closed"}</div>
+        <div class="list-sub">${isOpen ? "Anyone with your School ID can self-register (Staff or Parent), subject to any department locks below." : "New \"Create account\" attempts fail immediately with a message telling people to contact your admin."}</div>
+      </div>
+      <label class="row" style="gap:6px;align-items:center;cursor:pointer;">
+        <input type="checkbox" id="regOpenToggle" ${isOpen ? "checked" : ""} style="width:18px;height:18px;"/>
+      </label>
+    </div>
+    <div id="regToggleMsg" style="margin-top:8px;"></div>`;
+  card.innerHTML = renderState(open);
+  const wire = () => {
+    document.getElementById("regOpenToggle").onchange = async (e) => {
+      const nowOpen = e.target.checked;
+      const msg = document.getElementById("regToggleMsg");
+      e.target.disabled = true;
+      try {
+        await dbUpsert("school_settings", { id: 1, registration_open: nowOpen }, "id");
+        await loadSchoolSettings();
+        card.innerHTML = renderState(nowOpen);
+        document.getElementById("regToggleMsg").innerHTML = `<div class="msg-ok">Saved.</div>`;
+        toast(nowOpen ? "Registration reopened." : "Registration closed.", false);
+        wire();
+      } catch (err) {
+        msg.innerHTML = `<div class="err">${err.message}</div>`;
+        e.target.checked = !nowOpen; e.target.disabled = false;
+      }
+    };
+  };
+  wire();
+}
 // Registration Controls card on Users & Roles (admin-only) — lets Administration
 // close individual departments to new self-signups. Reads/writes the same
 // school_settings.locked_departments jsonb column checked server-side in
@@ -6486,8 +6639,11 @@ async function renderUsers(container) {
     <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
     <div class="card" id="reqList"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Registration Controls</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Close a department to stop new self-signups for it from the sign-in screen's "Create account" flow — useful once a department has all the staff it needs, or to keep a sensitive department (like Administration) invite-only. This never touches existing accounts, and you can still hand-assign any department to an account above regardless of this setting.</div>
+    <div class="tiny-note" style="margin-bottom:10px;">Close registration entirely to stop every new self-signup from the sign-in screen's "Create account" flow — both Staff and Parent accounts. Existing accounts and logins are never affected.</div>
+    <div class="card" id="regToggleCard" style="margin-bottom:16px;"></div>
+    <div class="tiny-note" style="margin-bottom:10px;">Or close just one department, so a school with registration open can still keep a sensitive department (like Administration) invite-only, without shutting the whole school out.</div>
     <div class="card" id="deptLockCard"></div>`;
+  renderRegToggleCard();
   renderDeptLockCard();
   const pendingRegList = document.getElementById("pendingRegList");
   const renderPendingRegList = () => {
@@ -6765,13 +6921,15 @@ async function renderSettings(container) {
 
     ${motherSystemCardHtml(motherAdmins)}
     <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">School ID</h3><p>Generated automatically at registration. Can't be edited. Give this to staff and parents so they can create their own accounts — it's the permanent identifier the TransApple Mother System uses to identify your school.</p></div></div>
+      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">School ID</h3><p>Generated automatically at registration. Can't be edited. Give this to staff and parents so they can create their own accounts — it's the permanent identifier the TransApple Mother System uses to identify your school. Only Administrators can see this.</p></div></div>
+      ${CURRENT_SCHOOL?.school_code ? `
       <div class="field" style="margin-bottom:0;">
         <div class="row" style="gap:8px;align-items:center;">
-          <input value="${CURRENT_SCHOOL?.school_code || ''}" disabled style="background:var(--card-alt);color:var(--ink-soft);font-family:monospace;font-weight:700;letter-spacing:.03em;flex:1;"/>
+          <input value="${CURRENT_SCHOOL.school_code}" disabled style="background:var(--card-alt);color:var(--ink-soft);font-family:monospace;font-weight:700;letter-spacing:.03em;flex:1;"/>
           <button type="button" class="btn btn-ghost btn-sm" id="copySchoolIdBtn">Copy</button>
         </div>
-      </div>
+      </div>` : `
+      <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0;">${schoolUpgradePending() ? `Not generated yet — TransApple has moved to a new registration format. Complete the upgrade above and a School ID will be generated for you automatically.` : `Not generated yet. This is usually created automatically when your school registers; contact TransApple support if this doesn't resolve itself.`}</p>`}
     </div>
 
     <div class="card">
