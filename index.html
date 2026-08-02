@@ -1843,8 +1843,6 @@ function renderLogin() {
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
-    const toRegisterSchoolLink = document.getElementById("toRegisterSchool");
-    if (toRegisterSchoolLink) toRegisterSchoolLink.onclick = () => renderSchoolRegistration();
     if (mode === "login") {
       formDiv.innerHTML = `
         <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
@@ -1856,6 +1854,9 @@ function renderLogin() {
         <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px;">
           <button type="button" class="link-btn" id="toSignup">Create an account</button>
           <button type="button" class="link-btn" id="toForgot">Forgot password?</button>
+        </div>
+        <div style="margin-top:8px;text-align:center;">
+          <button type="button" class="link-btn" id="toRegisterSchool">Register a new school</button>
         </div>
       `;
       document.getElementById("submitBtn").onclick = async () => {
@@ -1880,6 +1881,7 @@ function renderLogin() {
       };
       document.getElementById("toSignup").onclick = () => { mode = "signup"; draw(); };
       document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
+      document.getElementById("toRegisterSchool").onclick = () => renderSchoolRegistration();
     } else if (mode === "forgot") {
       formDiv.innerHTML = `
         <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="" /></div>
@@ -2090,8 +2092,7 @@ function renderSchoolBlocked() {
           <div class="brand-badge">${ic.lock || "🔒"}</div>
         </div>
         <h2 style="margin-bottom:10px;">Access unavailable</h2>
-        
-        
+        <p style="color:var(--ink-soft);font-size:14px;margin:0 0 18px;">This school's account is currently <b>${status}</b>. Contact TransApple if you think this is a mistake.</p>
         <button class="btn btn-ghost" id="blockedLogout" style="width:100%;">Log out</button>
         <button class="btn btn-primary" id="blockedRetry" style="width:100%;margin-top:8px;">Check again</button>
         <div style="margin-top:16px;"><span class="link-btn" id="blockedContact" style="cursor:pointer;font-size:13px;">Contact</span></div>
@@ -2160,9 +2161,8 @@ function renderPendingApproval() {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-amber">${ic.clock}</div>
         <h2 style="margin-bottom:8px;">Registration submitted</h2>
-        
-        
-        ${submitted ? `` : ""}
+        <p style="color:var(--ink-soft);font-size:14px;margin:0 0 4px;">${schoolName}'s registration is awaiting approval from TransApple. You'll be able to log in once it's approved.</p>
+        ${submitted ? `<p style="color:var(--ink-soft);font-size:12.5px;margin:0 0 18px;">Submitted ${submitted}</p>` : ""}
         ${statusScreenActions()}
       </div>
     </div>`;
@@ -2180,8 +2180,7 @@ function renderSchoolSuspended() {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-red">🚫</div>
         <h2 style="margin-bottom:8px;">Access suspended</h2>
-        
-        
+        <p style="color:var(--ink-soft);font-size:14px;margin:0 0 18px;">${schoolName}'s account has been suspended by TransApple.</p>
         ${statusScreenActions()}
       </div>
     </div>`;
@@ -2205,8 +2204,7 @@ function renderSchoolDeleted(opts = {}) {
       <div class="login-card" style="text-align:center;">
         <div class="status-badge-lg tone-slate">${ic.trash}</div>
         <h2 style="margin-bottom:8px;">School no longer exists</h2>
-        
-        
+        <p style="color:var(--ink-soft);font-size:14px;margin:0 0 18px;">${message}</p>
         ${statusScreenActions({ retry: false })}
       </div>
     </div>`;
@@ -2224,7 +2222,7 @@ function renderParentPortalDisabled() {
           <div class="brand-badge">${ic.lock || "🔒"}</div>
         </div>
         <h2 style="margin-bottom:10px;">Parent Portal unavailable</h2>
-        
+        <p style="color:var(--ink-soft);font-size:14px;margin:0 0 18px;">This school hasn't enabled the parent portal yet, or it's temporarily unavailable. Please check back later or contact the school directly.</p>
         <button class="btn btn-ghost" id="parentDisabledLogout" style="width:100%;">Log out</button>
         <button class="btn btn-primary" id="parentDisabledRetry" style="width:100%;margin-top:8px;">Check again</button>
       </div>
@@ -3038,7 +3036,7 @@ async function renderParentChildDetail(container, child) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to My Children</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div style="font-size:13px;color:var(--ink-soft);">${className}</div></div>
     </div>
     <div class="card"><h3 style="color:var(--amber-dark);margin-bottom:10px;">Attendance</h3><div id="attArea"><div class="center-loading">Loading…</div></div></div>
     <div class="card"><h3 style="color:var(--indigo);margin-bottom:10px;">Report card &amp; academics</h3><div id="acadArea"><div class="center-loading">Loading…</div></div></div>
@@ -3159,7 +3157,7 @@ async function renderParentChildFeeDetail(container, child) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div style="font-size:13px;color:var(--ink-soft);">${className}</div></div>
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
@@ -4766,7 +4764,7 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(student.full_name, student.photo_url, 52)}
-      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div></div>
+      <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div><div style="font-size:13px;color:var(--ink-soft);">${className}</div></div>
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="num" style="font-size:20px;">${currency()}${totalPaid.toLocaleString()}</div><div class="lbl">Total paid</div></div>
