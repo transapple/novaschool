@@ -1740,7 +1740,9 @@ function renderSchoolRegistration() {
       <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
 
       <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
-      
+      <div style="margin-top:14px;text-align:center;">
+        <button type="button" class="link-btn" id="toLoginFromReg">Already have a school account? Log in</button>
+      </div>
     </div></div>
   `;
   document.getElementById("toLoginFromReg").onclick = () => renderLogin();
@@ -1851,7 +1853,10 @@ function renderLogin() {
           <input id="remember" type="checkbox" style="width:16px;height:16px;" /> Remember me on this device
         </label>
         <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Log in</button>
-        
+        <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px;">
+          <button type="button" class="link-btn" id="toSignup">Create an account</button>
+          <button type="button" class="link-btn" id="toForgot">Forgot password?</button>
+        </div>
       `;
       document.getElementById("submitBtn").onclick = async () => {
         const username = document.getElementById("username").value.trim();
@@ -1877,14 +1882,14 @@ function renderLogin() {
       document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
     } else if (mode === "forgot") {
       formDiv.innerHTML = `
-        
-        
         <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="" /></div>
         <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="" /></div>
         <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="" /></div>
         <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="" /></div>
         <button class="btn btn-primary" id="resetBtn" style="margin-top:6px;">Reset password</button>
-        
+        <div style="margin-top:14px;">
+          <button type="button" class="link-btn" id="toLogin2">Back to log in</button>
+        </div>
       `;
       document.getElementById("resetBtn").onclick = async () => {
         const username = document.getElementById("f_username").value.trim();
@@ -1947,6 +1952,9 @@ function renderLogin() {
           <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="" /></div>
           <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
+          <div style="margin-top:14px;text-align:center;">
+            <button type="button" class="link-btn" id="toLogin">Back to log in</button>
+          </div>
         `;
       } else {
         fieldsWrap.innerHTML = `
@@ -1963,6 +1971,9 @@ function renderLogin() {
           <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="" /></div>
           <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
+          <div style="margin-top:14px;text-align:center;">
+            <button type="button" class="link-btn" id="toLogin">Back to log in</button>
+          </div>
         `;
       }
       const SCHOOL_CODE_FORMAT = /^[A-Za-z0-9_]+$/;
@@ -2247,7 +2258,9 @@ function renderPinUnlock() {
       <div id="loginMsg"></div>
       <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" autofocus /></div>
       <button class="btn btn-primary" id="unlockBtn" style="margin-top:6px;">Unlock</button>
-      
+      <div style="margin-top:14px;text-align:center;">
+        <button type="button" class="link-btn" id="useLoginInstead">Not you? Log in with username &amp; password</button>
+      </div>
     </div></div>
   `;
   const tryUnlock = () => {
