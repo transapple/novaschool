@@ -612,6 +612,11 @@ function applyBrandColor(key) {
   r.setProperty("--teal-tint", p.tint);
 }
 async function loadSchoolSettings() {
+  // Guard: with no CURRENT_SCHOOL_ID, dbSelect can't add a school_id filter, so
+  // id=eq.1 would match every school's settings row at once (they each use
+  // id:1) and rows[0] would be an arbitrary school — a cross-tenant leak. Bail
+  // out instead of risking that.
+  if (!CURRENT_SCHOOL_ID) { schoolSettings = null; applyBrandColor(null); return; }
   try {
     const rows = await dbSelect("school_settings", { id:"eq.1" });
     schoolSettings = rows[0] || null;
@@ -1248,7 +1253,9 @@ async function login(username, password, remember) {
   if (!row || !row.id) throw new Error("Incorrect username or password.");
   profile = scrubProfile(row);
   setCurrentSchool(profile.school_id);
+  gradesCache = null;
   await loadCurrentSchool();
+  await loadSchoolSettings();
   auth = { user: { id: profile.id } }; // no real token — just marks "signed in" for the UI gate below
   if (remember) rememberSession(username); else clearRememberedSession();
   markDeviceSeen();
@@ -1272,7 +1279,9 @@ async function tryRestoreRememberedSession() {
     if (row.approval_status && row.approval_status !== "approved") { clearRememberedSession(); return false; }
     profile = scrubProfile(row);
     setCurrentSchool(profile.school_id);
+    gradesCache = null;
     await loadCurrentSchool();
+    await loadSchoolSettings();
     auth = { user: { id: profile.id } };
     markDeviceSeen();
     pinLocked = false;
@@ -1391,7 +1400,7 @@ async function rejectRegistration(profileId) {
   }) });
   return Array.isArray(rows) ? rows[0] : rows;
 }
-function logout() { stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null; clearRememberedSession(); pinLocked = false; showSupportPortal = false; render(); }
+function logout() { stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null; schoolSettings = null; gradesCache = null; clearRememberedSession(); pinLocked = false; showSupportPortal = false; render(); }
 // Confirms identity with the account's PIN (no email anywhere in this app),
 // then sets a new password via the reset_password() Postgres function.
 async function resetPassword({ username, pin, new_password }) {
@@ -1797,7 +1806,9 @@ function renderSchoolRegistration() {
       });
       profile = scrubProfile(newAdmin);
       setCurrentSchool(profile.school_id);
+      gradesCache = null;
       await loadCurrentSchool();
+      await loadSchoolSettings();
       auth = { user: { id: profile.id } };
       markDeviceSeen();
       pinLocked = false;
@@ -6761,6 +6772,13 @@ function playSplashScreen() {
   // render() and REMEMBER_SCHOOL_KEY/getRememberedSchool() further down.
   const rememberedSchoolIdAtBoot = isDeviceSeen() ? getRememberedSchool() : null;
   if (!rememberedSchoolIdAtBoot) render();
+  // Set CURRENT_SCHOOL_ID *before* the first loadSchoolSettings() call. Without
+  // this, that call runs with no school scope at all, so its id=eq.1 filter
+  // matches every school's settings row and just grabs whichever one Postgres
+  // happens to return first — a real cross-tenant leak (wrong school's name/
+  // logo/motto/currency showing on the login screen and beyond). Scoping it
+  // here up front means the very first fetch is already for the right school.
+  if (rememberedSchoolIdAtBoot) setCurrentSchool(rememberedSchoolIdAtBoot);
   await loadSchoolSettings();
   await tryRestoreRememberedSession();
   // No session was restored (e.g. "Remember me" wasn't checked at login) — but
@@ -6769,7 +6787,6 @@ function playSplashScreen() {
   // status now so render() can show the pending/suspended/deleted screen
   // immediately instead of the login form — see the "!auth" branch in render().
   if (!auth && rememberedSchoolIdAtBoot) {
-    setCurrentSchool(rememberedSchoolIdAtBoot);
     await loadCurrentSchool();
   }
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } // fire-and-forget: finalizes any school whose 30-day Trash window already passed
