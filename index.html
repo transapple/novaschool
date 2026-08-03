@@ -2289,8 +2289,8 @@ function openSchoolUpgradeModal() {
   const s = CURRENT_SCHOOL || {};
   const sizeOptions = SCHOOL_SIZE_RANGES.map(r => `<option value="${r}" ${s.size_range===r?"selected":""}>${r}</option>`).join("");
   openModal("Complete School Upgrade", `
-    <p class="tiny-note" style="margin-bottom:10px;">TransApple has moved to a new registration format. Fill in what's still missing below to finish upgrading your school — nothing already on file changes, and none of your students, staff, fees, exams or settings are affected.</p>
-    <div class="field"><label>Motto</label><input id="upgMotto" value="${s.motto||""}" placeholder="${s.motto?"":"Not set"}" ${s.motto?"disabled":""} /></div>
+    <p class="tiny-note" style="margin-bottom:10px;"></p>
+    <div class="field"><label>Motto</label><input id="upgMotto" value="${s.motto||""}" placeholder="" ${s.motto?"disabled":""} /></div>
     <div class="field"><label>Village</label><input id="upgVillage" value="${s.village||""}" ${s.village?"disabled":""} /></div>
     <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.subcounty||""}" ${s.subcounty?"disabled":""} /></div>
     <div class="field"><label>District</label><input id="upgDistrict" value="${s.district||""}" ${s.district?"disabled":""} /></div>
@@ -2550,7 +2550,7 @@ function render() {
         <div class="topbar">
           <h1 id="pageTitle"></h1>
           <div class="row" style="gap:10px;">
-            ${(DEV_MODE && !auth) ? `<span class="badge badge-amber" id="devBadge" style="cursor:pointer;" title="Click to test the real login screen">DEV MODE — no login</span>` : ""}
+            ${(DEV_MODE && !auth) ? `<span class="badge badge-amber" id="devBadge" style="cursor:pointer;" title="">DEV MODE — no login</span>` : ""}
             <div class="who">${profile?.full_name || ""} · <b>${DEPARTMENTS[profile?.department]?.label || profile?.role || ""}</b>${profile?.position ? ` · ${profile.position}` : ""}</div>
             <button class="bell-btn" id="staffBellBtn" data-bell="staff" title="Notifications">${ic.bell}</button>
           </div>
@@ -2658,7 +2658,7 @@ function renderSchoolRegistration() {
     <div class="login-wrap"><div class="login-card" style="max-width:420px;">
       <div class="brand">${sidebarBrandHtml()}</div>
       <div class="tiny-note" style="font-size:16px;font-weight:800;color:var(--ink);margin-bottom:2px;">Register Your School to Use This System</div>
-      <div class="tiny-note" style="margin-bottom:14px;">A few details about your school, then set up your Administrator account.</div>
+      <div class="tiny-note" style="margin-bottom:14px;"></div>
       <div id="regMsg"></div>
       <div class="field" style="font-weight:700;color:var(--navy-2);">School Information</div>
       <div class="field"><label>School Name</label><input id="r_schoolName" placeholder="" /></div>
@@ -2667,7 +2667,7 @@ function renderSchoolRegistration() {
       <div class="field"><label>Sub-county</label><input id="r_subcounty" placeholder="" /></div>
       <div class="field"><label>District</label><input id="r_district" placeholder="" /></div>
       <div class="field"><label>School Size</label><select id="r_sizeRange"><option value="">— Select —</option>${SCHOOL_SIZE_RANGES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></div>
-      <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;">Your School ID is generated automatically once you register, and can't be changed afterwards. It'll be visible to Administrators under Settings, and is how the TransApple Mother System identifies your school.</div>
+      <div class="tiny-note" style="margin-top:-6px;margin-bottom:14px;"></div>
 
       <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">First Administrator</div>
       <div class="field" style="text-align:center;">
@@ -2685,13 +2685,13 @@ function renderSchoolRegistration() {
       <div class="field"><label>Phone Number</label><input id="r_adminPhone" placeholder="" /></div>
       <div class="field"><label>WhatsApp Number</label><input id="r_adminWhatsapp" placeholder="" /></div>
       <div class="field"><label>Email Address</label><input id="r_adminEmail" type="email" placeholder="" /></div>
-      <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;">Only an Administrator can register a new school — everyone else is added afterwards from Users &amp; Roles.</div></div>
-      <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="At least 6 characters" /></div>
-      <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="Re-enter password" /></div>
+      <div class="field"><label>Role</label><input value="Administrator" disabled style="background:var(--card-alt);color:var(--ink-soft);" /><div class="tiny-note" style="margin-top:2px;"></div></div>
+      <div class="field"><label>Password</label><input id="r_adminPassword" type="password" placeholder="" /></div>
+      <div class="field"><label>Confirm Password</label><input id="r_adminPassword2" type="password" placeholder="" /></div>
       <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="r_adminPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
 
       <button class="btn btn-primary" id="registerSchoolBtn" style="width:100%;margin-top:6px;">Register School</button>
-      <div class="tiny-note" style="text-align:center;margin-top:12px;">Already registered? <span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
+      <div class="tiny-note" style="text-align:center;margin-top:12px;"><span class="link-btn" id="toLoginFromReg" style="cursor:pointer">Log in</span></div>
     </div></div>
   `;
   document.getElementById("toLoginFromReg").onclick = () => renderLogin();
@@ -2787,8 +2787,8 @@ function renderLogin() {
         <div class="brand">${sidebarBrandHtml()}</div>
         <div id="loginMsg"></div>
         <div id="loginForm"></div>
-        <div class="tiny-note">${mode==="login" ? `Joining a school that's already registered? <span class="link-btn" id="toSignup" style="cursor:pointer">Create your account</span>` : mode==="forgot" ? "" : `Already registered? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
-        ${mode==="login" ? `<div class="tiny-note">Registering a brand-new school? <span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>` : ""}
+        <div class="tiny-note">${mode==="login" ? `<span class="link-btn" id="toSignup" style="cursor:pointer">Create your account</span>` : mode==="forgot" ? "" : `<span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
+        ${mode==="login" ? `<div class="tiny-note"><span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>` : ""}
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
@@ -2829,11 +2829,11 @@ function renderLogin() {
     } else if (mode === "forgot") {
       formDiv.innerHTML = `
         <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Reset your password</div>
-        <div class="tiny-note" style="margin-bottom:10px;">Confirm it's you with your username and PIN, then set a new password.</div>
+        <div class="tiny-note" style="margin-bottom:10px;"></div>
         <div class="field"><label>Username</label><input id="f_username" autocapitalize="none" placeholder="" /></div>
-        <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN" /></div>
-        <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="At least 6 characters" /></div>
-        <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="Repeat new password" /></div>
+        <div class="field"><label>PIN</label><input id="f_pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="" /></div>
+        <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="" /></div>
+        <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="" /></div>
         <button class="btn btn-primary" id="resetBtn" style="margin-top:6px;">Reset password</button>
         <div class="tiny-note"><span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
       `;
@@ -2882,7 +2882,7 @@ function renderLogin() {
         <div class="field">
           <label>School ID</label>
           <input id="school_code" autocapitalize="none" style="text-transform:uppercase;font-family:monospace;letter-spacing:.03em;" placeholder="" />
-          <div id="schoolCodeNote" class="tiny-note" style="margin-top:2px;">Ask your school's Administrator for this — it's shown to them under Settings.</div>
+          <div id="schoolCodeNote" class="tiny-note" style="margin-top:2px;"></div>
         </div>`;
       if (signupAccountType === "staff") {
         fieldsWrap.innerHTML = `
@@ -2891,11 +2891,11 @@ function renderLogin() {
           <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
           <div class="field"><label>Department</label><select id="department">${departmentSelectOptions("")}</select>
-            <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;">Some departments aren't shown — they're closed to new self-registrations by this school's Administration.</div>
+            <div id="deptLockNote" class="tiny-note" style="display:none;margin-top:2px;"></div>
           </div>
           <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
-          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="" /></div>
           <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Create account</button>
         `;
@@ -2906,13 +2906,13 @@ function renderLogin() {
           <div class="field"><label>Full Names</label><input id="fname" placeholder="" /></div>
           <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
           <div class="field"><label>Phone Number</label><input id="phone" placeholder="" /></div>
-          <div class="field"><label>Password</label><input id="password" type="password" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="Re-enter password" /></div>
+          <div class="field"><label>Password</label><input id="password" type="password" placeholder="" /></div>
+          <div class="field"><label>Confirm Password</label><input id="password2" type="password" placeholder="" /></div>
           <div class="field"><label>Security PIN (4–6 digits, for quick unlock and password resets)</label><input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" /></div>
           <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Link your child</div>
-          <div class="tiny-note" style="margin:0 0 6px;text-align:left;">We match your child's Student ID with their exact registered name before your account is created — nothing is created until that match succeeds.</div>
+          <div class="tiny-note" style="margin:0 0 6px;text-align:left;"></div>
           <div class="field"><label>Student ID (admission no.)</label><input id="p_adm" placeholder="" /></div>
-          <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="Full name as registered at the school" /></div>
+          <div class="field"><label>Student's exact registered name</label><input id="p_sname" placeholder="" /></div>
           <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Verify &amp; create account</button>
         `;
       }
@@ -2926,7 +2926,7 @@ function renderLogin() {
       async function resolveSchoolCode() {
         resolvedSchoolId = null;
         const raw = schoolCodeInput.value.trim();
-        if (!raw) { schoolCodeNote.textContent = "Ask your school's Administrator for this — it's shown to them under Settings."; schoolCodeNote.className = "tiny-note"; return null; }
+        if (!raw) { schoolCodeNote.textContent = ""; schoolCodeNote.className = "tiny-note"; return null; }
         if (!SCHOOL_CODE_FORMAT.test(raw)) {
           schoolCodeNote.textContent = "School ID can only contain letters, numbers, and underscores.";
           schoolCodeNote.className = "tiny-note err"; return null;
@@ -3198,7 +3198,7 @@ function renderPinUnlock() {
       <div id="loginMsg"></div>
       <div class="field"><label>Enter your PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="" autofocus /></div>
       <button class="btn btn-primary" id="unlockBtn" style="margin-top:6px;">Unlock</button>
-      <div class="tiny-note"><span class="link-btn" id="useLoginInstead" style="cursor:pointer">Not you? Log in with password</span></div>
+      <div class="tiny-note"><span class="link-btn" id="useLoginInstead" style="cursor:pointer">Log in with password</span></div>
     </div></div>
   `;
   const tryUnlock = () => {
@@ -3956,9 +3956,9 @@ async function renderParentChildren(container) {
 }
 function openAddChildModal(container) {
   openModal("Add a child", `
-    <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter the Student ID and the student's exact registered name — the school confirms the match before linking.</div>
+    <div class="tiny-note" style="margin:0 0 10px;text-align:left;"></div>
     <div class="field"><label>Student ID (admission no.)</label><input id="f_adm" placeholder=""/></div>
-    <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder="Full name as registered at the school"/></div>
+    <div class="field"><label>Student's exact registered name</label><input id="f_sname" placeholder=""/></div>
   `, async (ov) => {
     requireFields(ov, [["f_adm","Student ID"], ["f_sname","Student's name"]]);
     await linkParentChild(profile.id, val(ov,"f_adm"), val(ov,"f_sname"));
@@ -4238,9 +4238,9 @@ async function renderParentContact(container) {
     <div class="card" id="sentMsgs"><div class="center-loading">Loading…</div></div>
     <div class="card">
       <h3 style="color:var(--purple);margin-bottom:4px;">Private Contact</h3>
-      <div class="tiny-note" style="margin:0 0 12px;text-align:left;">Search for a staff member by their account/username and send a confidential message — only they will see it.</div>
+      <div class="tiny-note" style="margin:0 0 12px;text-align:left;"></div>
       <div class="row" style="gap:8px;">
-        <input id="f_staffSearch" placeholder="Search by username…" style="flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;"/>
+        <input id="f_staffSearch" placeholder="" style="flex:1;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;"/>
         <button class="btn btn-primary" id="staffSearchBtn">${ic.search || "Search"}</button>
       </div>
       <div id="staffSearchResults" style="margin-top:10px;"></div>
@@ -4321,7 +4321,7 @@ async function renderParentContact(container) {
 }
 function openPrivateMessageModal(staffMember, onSent) {
   openModal(`Private message to ${staffMember.full_name}`, `
-    <div class="tiny-note" style="text-align:left;">This is confidential — only @${staffMember.username} will see it, not the rest of the school office.</div>
+    <div class="tiny-note" style="text-align:left;"></div>
     <div class="field"><label>Subject</label><input id="f_psubject" placeholder=""/></div>
     <div class="field"><label>Message</label><textarea id="f_pmessage" rows="4" placeholder=""></textarea></div>
   `, async (ov) => {
@@ -4353,10 +4353,10 @@ async function renderParentSettings(container) {
     </div>
     <div class="card">
       <div class="section-head" style="margin-bottom:10px;"><h3 style="color:var(--indigo);margin:0;">Change password</h3></div>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Enter your PIN to confirm it's you, then set a new password.</div>
-      <div class="field"><label>PIN</label><input id="f_cpin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder="Your 4–6 digit PIN"/></div>
-      <div class="field"><label>New password</label><input id="f_cnewpass" type="password" placeholder="At least 6 characters"/></div>
-      <div class="field"><label>Confirm new password</label><input id="f_cnewpass2" type="password" placeholder="Repeat new password"/></div>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;"></div>
+      <div class="field"><label>PIN</label><input id="f_cpin" inputmode="numeric" pattern="[0-9]*" maxlength="6" type="password" placeholder=""/></div>
+      <div class="field"><label>New password</label><input id="f_cnewpass" type="password" placeholder=""/></div>
+      <div class="field"><label>Confirm new password</label><input id="f_cnewpass2" type="password" placeholder=""/></div>
       <button class="btn btn-primary" id="changePassBtn" style="width:100%;">Update password</button>
       <div id="passStatus"></div>
     </div>
@@ -4660,9 +4660,9 @@ async function renderIdFormat(body) {
       <h4 style="margin-bottom:10px;color:var(--navy);">Student IDs</h4>
       <div class="grid2">
         <div class="field"><label>Prefix</label><input id="f_s_prefix" placeholder="" value="${s.student_id_prefix||''}"/></div>
-        <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" placeholder="3" value="${s.student_id_digits??''}"/></div>
+        <div class="field"><label>Digits</label><input id="f_s_digits" type="number" min="1" max="6" placeholder="" value="${s.student_id_digits??''}"/></div>
       </div>
-      <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" placeholder="0" value="${s.student_id_seq??''}"/></div>
+      <div class="field"><label>Next number</label><input id="f_s_seq" type="number" min="0" placeholder="" value="${s.student_id_seq??''}"/></div>
       <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevSM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevSF">—</b></div>
     </div>
 
@@ -4670,9 +4670,9 @@ async function renderIdFormat(body) {
       <h4 style="margin-bottom:10px;color:var(--navy);">Teacher IDs</h4>
       <div class="grid2">
         <div class="field"><label>Prefix</label><input id="f_t_prefix" placeholder="" value="${s.teacher_id_prefix||''}"/></div>
-        <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" placeholder="3" value="${s.teacher_id_digits??''}"/></div>
+        <div class="field"><label>Digits</label><input id="f_t_digits" type="number" min="1" max="6" placeholder="" value="${s.teacher_id_digits??''}"/></div>
       </div>
-      <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" placeholder="0" value="${s.teacher_id_seq??''}"/></div>
+      <div class="field"><label>Next number</label><input id="f_t_seq" type="number" min="0" placeholder="" value="${s.teacher_id_seq??''}"/></div>
       <div style="font-size:13px;color:var(--ink-soft);">Next male ID: <b id="prevTM">—</b> &nbsp;·&nbsp; Next female ID: <b id="prevTF">—</b></div>
     </div>
 
@@ -4734,8 +4734,8 @@ function openTermModal(body, t) {
   openModal(isEdit ? "Edit term" : "New term", `
     <div class="field"><label>Term name (e.g. First Term)</label><input id="f_name" value="${t?.name||''}"/></div>
     <div class="grid2">
-      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${t?.start_date||''}"/></div>
-      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${t?.end_date||''}"/></div>
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="" value="${t?.start_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="" value="${t?.end_date||''}"/></div>
     </div>
     <div class="field"><label><input id="f_current" type="checkbox" style="width:auto;margin-right:6px;" ${t?.is_current?'checked':''}/>Set as current term</label></div>
   `, async (ov) => {
@@ -4893,7 +4893,7 @@ async function renderStudents(container, opts={}) {
   container.innerHTML = `
     <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
     <div class="search-bar">
-      <input id="searchInput" placeholder="Search by name or admission ID…" value="${search}"/>
+      <input id="searchInput" placeholder="" value="${search}"/>
       <select id="classFilterSel"><option value="">All classes</option>${classes.map(c=>`<option value="${c.id}" ${classFilter===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
       ${sortSelectHtml("sortSel", sortBy, true)}
     </div>
@@ -4948,7 +4948,7 @@ function openStudentModal(container, classes, s) {
       <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="Select date" value="${s?.dob||''}"/></div>
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="" value="${s?.dob||''}"/></div>
       <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     </div>
@@ -5048,7 +5048,7 @@ async function renderTeachers(container, opts={}) {
   container.innerHTML = `
     <h3 style="color:var(--purple);margin-bottom:12px;">Staff</h3>
     <div class="search-bar">
-      <input id="searchInput" placeholder="Search staff name…" value="${search}"/>
+      <input id="searchInput" placeholder="" value="${search}"/>
       ${sortSelectHtml("sortSel", sortBy, true)}
     </div>
     <div class="card" id="list"></div>
@@ -5174,7 +5174,7 @@ async function renderStudentAttendance(body, opts={}) {
   const classes = await dbSelectActive("classes", { order:"name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="" value="${date}"/></div>
     </div>
     <div class="card" id="classListCard"><div class="center-loading">Loading…</div></div>
   `;
@@ -5315,7 +5315,7 @@ async function renderStaffAttendance(body, opts={}) {
   const teachers = await dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" });
   body.innerHTML = `
     <div class="card">
-      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="Select date" value="${date}"/></div>
+      <div class="field"><label>Date</label><input id="attDate" type="text" class="datefield" readonly placeholder="" value="${date}"/></div>
     </div>
     <div class="card" id="staffAttCard"><div class="center-loading">Loading…</div></div>
     <button class="btn btn-primary" id="saveStaffAttBtn" style="width:100%;">Save attendance</button>
@@ -5713,7 +5713,7 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
     <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
     <div class="card">
       <h3 style="color:var(--teal-dark);margin-bottom:4px;">Payment history &amp; receipts</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Once issued, a receipt is permanent — it cannot be edited or deleted, only viewed or reprinted.</div>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;"></div>
       <div id="payList"></div>
     </div>
   `;
@@ -5741,7 +5741,7 @@ async function renderFeeReminders(body) {
   body.innerHTML = `
     <div class="card">
       <h3 style="color:var(--red);margin-bottom:4px;">Send a message</h3>
-      <div class="tiny-note" style="margin:0 0 10px;text-align:left;">Send a fee reminder to specific parents, or a finance announcement to everyone.</div>
+      <div class="tiny-note" style="margin:0 0 10px;text-align:left;"></div>
       <div class="field"><label>Type</label><select id="f_msgType"><option value="reminder">Fee reminder</option><option value="announcement">Finance announcement</option></select></div>
       <div class="field" id="f_remTargetWrap"><label>Send to</label><select id="f_remTarget"><option value="all">All parents</option><option value="student">Specific student</option></select></div>
       <div class="field" id="f_remStudentWrap" style="display:none;"><label>Student</label><select id="f_remStudent"><option value="">— Select student —</option>${students.map(s=>`<option value="${s.id}">${s.full_name} (${s.admission_no})</option>`).join("")}</select></div>
@@ -5986,7 +5986,7 @@ async function renderFeePayment(body) {
       <div class="field"><label>Note (optional)</label><input id="f_note"/></div>
       <button class="btn btn-primary" id="payBtn" style="width:100%;">Record payment</button>
       <div id="payMsg"></div>
-      <div class="tiny-note" style="margin-top:10px;text-align:left;">Once recorded, a payment and its receipt are permanent — they can't be edited or deleted afterwards, so double-check the details before saving.</div>
+      <div class="tiny-note" style="margin-top:10px;text-align:left;"></div>
     </div>`;
   const classFilterSel = document.getElementById("f_classFilter");
   const studentSel = document.getElementById("f_student");
@@ -6179,11 +6179,11 @@ function openExamModal(body, classes, terms, examTypes, existingExams, x) {
   openModal(isEdit ? "Edit exam" : "New exam", `
     <div class="field"><label>Exam type</label><select id="f_examtype">${examTypes.map(t=>`<option value="${t.id}" ${x?.exam_type_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="field"><label>Class</label><select id="f_class">${isEdit ? "" : `<option value="__all__">— All Classes —</option>`}${classes.map(c=>`<option value="${c.id}" ${x?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select>
-    ${isEdit ? "" : `<div class="tiny-note" style="margin:6px 0 0;text-align:left;">Choose "All Classes" to create this exam for every class at once (skipping any class that already has one for this type and term).</div>`}</div>
+    ${isEdit ? "" : `<div class="tiny-note" style="margin:6px 0 0;text-align:left;"></div>`}</div>
     <div class="field"><label>Term</label><select id="f_term">${terms.map(t=>`<option value="${t.id}" ${x?.term_id===t.id?'selected':''}>${t.name}</option>`).join("")}</select></div>
     <div class="grid2">
-      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_date||''}"/></div>
-      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="Select date" value="${x?.exam_end_date||''}"/></div>
+      <div class="field"><label>Start date</label><input id="f_start" type="text" class="datefield" readonly placeholder="" value="${x?.exam_date||''}"/></div>
+      <div class="field"><label>End date</label><input id="f_end" type="text" class="datefield" readonly placeholder="" value="${x?.exam_end_date||''}"/></div>
     </div>
   `, async (ov)=>{
     const exam_type_id = val(ov,"f_examtype")||null, class_id = val(ov,"f_class"), term_id = val(ov,"f_term");
@@ -6245,7 +6245,7 @@ async function renderEnterResults(body) {
         <td><input type="number" max="${maxScore}" min="0" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="markInput" value="${marksMap[s.id]??''}"/></td>
         <td>${maxScore}</td>
         <td class="gradeCell" data-sid="${s.id}" style="font-weight:700;">${initialGrade}</td>
-        <td><input type="text" placeholder="Teacher's remark…" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
+        <td><input type="text" placeholder="" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
     });
     // Live-update the Grade cell as marks are typed, using the admin-defined grade bands.
     gb.querySelectorAll(".markInput").forEach(inp => {
@@ -6575,7 +6575,7 @@ async function renderReportCard(body) {
 async function renderContactTransApple(container) {
   container.innerHTML = `
     <div class="section-head"><h3 style="color:var(--navy-2);">Contact TransApple</h3></div>
-    <div class="tiny-note" style="margin-bottom:12px;">Send a complaint, question, or support request straight to TransApple. Replies show up here — keep the conversation going until it's resolved.</div>
+    <div class="tiny-note" style="margin-bottom:12px;"></div>
     <button class="btn btn-primary btn-sm" id="newTicketBtn" style="margin-bottom:14px;">${ic.plus} New request</button>
     <div id="ticketArea"></div>`;
   document.getElementById("newTicketBtn").onclick = () => {
@@ -6619,7 +6619,7 @@ async function openSupportThread(ticket, container) {
     <h3>${ticket.subject}</h3>
     <div class="tiny-note" style="margin-bottom:8px;">Status: <b>${ticket.status}</b></div>
     <div id="threadMsgs" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
-    ${ticket.status === "resolved" ? `<div class="tiny-note" style="margin-bottom:8px;">This request is marked resolved. Sending a message reopens it.</div>` : ""}
+    ${ticket.status === "resolved" ? `<div class="tiny-note" style="margin-bottom:8px;"></div>` : ""}
     <div class="field"><textarea id="replyMsg" rows="3" placeholder=""></textarea></div>
     <div class="form-actions">
       <button class="btn btn-ghost" id="modalCancel">Close</button>
@@ -6782,14 +6782,14 @@ async function renderUsers(container) {
         </div>
         <div class="list-sub">${deptLabel || "No department"}${profile?.position ? ` · ${profile.position}` : ""}</div>
       </div>
-      <div class="tiny-note" style="margin-top:10px;">You can log in and log out any time — that's never restricted by department.</div>
+      <div class="tiny-note" style="margin-top:10px;"></div>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" style="margin-top:8px;">${ic.logout} Log out</button>
       ${isOwner(profile) ? `
-        <div class="tiny-note" style="margin-top:10px;">As the school's owner, you're the only one who can suspend or delete an entire department at once, or hand full ownership to another Administrator.</div>
+        <div class="tiny-note" style="margin-top:10px;"></div>
         <button class="btn btn-ghost btn-sm" id="transferOwnerBtn" style="margin-top:8px;">${ic.userPlus||''} Transfer ownership</button>
       ` : ""}
       ${restrictedDept ? `
-        <div class="tiny-note" style="margin-top:8px;">${deptLabel} accounts can't change department, position or role here — send Administration a request instead and they'll update it for you.</div>
+        <div class="tiny-note" style="margin-top:8px;"></div>
         <button class="btn btn-ghost btn-sm" id="reqBtn" style="margin-top:8px;">${ic.edit} Request a detail change</button>
       ` : ""}
     </div>`;
@@ -6803,7 +6803,7 @@ async function renderUsers(container) {
     const reqBtn = document.getElementById("reqBtn");
     if (reqBtn) reqBtn.onclick = () => {
       openModal("Request a detail change", `
-        <div class="tiny-note" style="text-align:left;">Tell Administration what you'd like changed (department, position, phone number, etc) and why — they'll review it and update your account.</div>
+        <div class="tiny-note" style="text-align:left;"></div>
         <div class="field"><label>What would you like changed?</label><textarea id="f_msg" rows="4" placeholder=""></textarea></div>
       `, async (ov) => {
         requireFields(ov, [["f_msg","Message"]]);
@@ -6826,23 +6826,23 @@ async function renderUsers(container) {
   const pendingRegs = profiles.filter(p => p.approval_status === "pending" && !p.deleted_at);
   container.innerHTML = meCard +
     `<div class="section-head"><h3 style="color:var(--navy-2);">Pending Registrations</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">New accounts created from the sign-in screen's "Create account" link stay Pending Approval and can't log in until you approve them here.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="pendingRegList"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Manage Accounts</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Department controls which sections of the app someone can open. Administration gets full access to everything, including this page. New staff create their own login from the sign-in screen's "Create one" link — set their department and position here afterwards. Suspend or delete an account to block its login instantly; both can be reversed any time from this list.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="list"></div>
     ${isOwner(profile) ? `
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Departments</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">As owner, click a department to see every account's full registration information, or suspend/delete the whole department at once.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="deptCards"></div>
     ` : ""}
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Pending Requests</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Detail-change requests from Academic, Finance and Parents department accounts show up here. Update the account below, then mark the request as done.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="reqList"></div>
     <div class="section-head" style="margin-top:20px;"><h3 style="color:var(--navy-2);">Registration Controls</h3></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Close registration entirely to stop every new self-signup from the sign-in screen's "Create account" flow — both Staff and Parent accounts. Existing accounts and logins are never affected.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="regToggleCard" style="margin-bottom:16px;"></div>
-    <div class="tiny-note" style="margin-bottom:10px;">Or close just one department, so a school with registration open can still keep a sensitive department (like Administration) invite-only, without shutting the whole school out.</div>
+    <div class="tiny-note" style="margin-bottom:10px;"></div>
     <div class="card" id="deptLockCard"></div>`;
   renderRegToggleCard();
   renderDeptLockCard();
@@ -6900,7 +6900,7 @@ async function renderUsers(container) {
       <div class="list-main">
         <div class="list-title">${p.full_name} ${badges}</div>
         <div class="list-sub">${roleLabel}</div>
-        ${isSelf ? "" : `<div class="tiny-note" style="margin-top:2px;">Tap to open more controls</div>`}
+        ${isSelf ? "" : `<div class="tiny-note" style="margin-top:2px;"></div>`}
       </div>
     </div>`);
     if (!isSelf) row.onclick = () => openAccountControls(p, container, deptOptions, posOptions);
@@ -6946,7 +6946,7 @@ function openAccountControls(p, container, deptOptions, posOptions) {
     ${isDeleted ? `<div class="tiny-note" style="margin-bottom:10px;">This account has been deleted.</div>` : `
       <div class="field"><label>Department</label><select id="ctrlDept">${deptOptions(p.department)}</select></div>
       <div class="field"><label>Position</label><select id="ctrlPos">${posOptions(p.department, p.position)}</select></div>
-      <div class="field"><label title="Legacy role — Administration department already grants full access on its own">Legacy role</label>
+      <div class="field"><label title="">Legacy role</label>
         <select id="ctrlRole">${["admin","teacher","accountant","staff"].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${r}</option>`).join("")}</select>
       </div>
     `}
@@ -7026,7 +7026,7 @@ function renderDeptCards(profiles, container) {
         <div class="list-title">${d.label}</div>
         <div class="list-sub">${members.length} account${members.length===1?"":"s"}</div>
       </div>
-      <div class="tiny-note">Tap to view &amp; manage</div>
+      <div class="tiny-note"></div>
     </div>`;
   }).join("");
   mount.querySelectorAll(".deptCardRow").forEach(row => {
@@ -7096,7 +7096,7 @@ function openTransferOwnershipModal(profiles, container) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>Transfer ownership</h3>
-    <div class="tiny-note" style="margin-bottom:12px;">Hand full ownership authority — including the ability to suspend or delete whole departments — to another Administrator. You'll keep your Administration access, just not the owner powers.</div>
+    <div class="tiny-note" style="margin-bottom:12px;"></div>
     ${!candidates.length ? `<div class="tiny-note">There's no other active Administration account to transfer to yet — create one from Manage Accounts first.</div>` : `
       <div class="field"><label>New owner</label><select id="newOwnerSel">${candidates.map(p=>`<option value="${p.id}">${p.full_name}${p.username?` (@${p.username})`:""}</option>`).join("")}</select></div>
       <div class="field"><label>Your password (to confirm)</label><input id="ownerConfirmPw" type="password" /></div>
@@ -7292,11 +7292,11 @@ async function renderSettings(container) {
     <div class="card">
       <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.edit}</div><div><h3 style="color:var(--navy);">Receipt number format</h3><p>Controls how receipt numbers are generated for fee payments.</p></div></div>
       <div class="grid2">
-        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="RCT" maxlength="12" value="${s.receipt_prefix||''}"/></div>
-        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" placeholder="6" value="${s.receipt_digits||''}"/></div>
+        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="" maxlength="12" value="${s.receipt_prefix||''}"/></div>
+        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" placeholder="" value="${s.receipt_digits||''}"/></div>
       </div>
       <div class="field" style="margin-bottom:0;"><label>Next receipt number</label>
-        <input id="f_rnext" type="number" min="1" placeholder="1" value="${s.receipt_next_number||''}"/>
+        <input id="f_rnext" type="number" min="1" placeholder="" value="${s.receipt_next_number||''}"/>
         <div id="receiptPreview" class="receipt-preview-chip"></div>
       </div>
     </div>
