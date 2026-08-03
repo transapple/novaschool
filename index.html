@@ -516,6 +516,8 @@ window.addEventListener("appinstalled", () => {
   if (overlay) renderPwaInstalledSuccess(overlay);
 });
 
+const PWA_ICON_URL = "https://i.postimg.cc/wxcBKtJH/20260803-155616.png";
+
 const SUPABASE_URL = "https://jdayvizeqwfnknfdeudy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
 // Max time to wait on any single Supabase request before giving up and showing
@@ -6899,7 +6901,6 @@ if ("serviceWorker" in navigator) {
    The overlay never shows again once the app is actually installed,
    and can be dismissed (for this visit, or for a while) without
    blocking access to the app itself. */
-const PWA_ICON_URL = "https://i.postimg.cc/wxcBKtJH/20260803-155616.png";
 const PWA_OPTOUT_DAYS = 21;
 
 // Small inline icons used only by this overlay (kept local rather than in the
