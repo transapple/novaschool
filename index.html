@@ -85,6 +85,21 @@
   .brand-badge{width:42px;height:42px;border-radius:12px;background:var(--teal);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;}
   .brand-name{font-size:19px;font-weight:800;color:var(--navy);}
   .brand-sub{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  /* ---- Auth form switching (login / signup / forgot): the whole form+footer
+     block is re-inserted fresh on every mode change, so a CSS animation on it
+     plays automatically each time — direction is picked in JS to feel like
+     forward/back navigation rather than a generic fade. ---- */
+  @keyframes authSlideLeftIn{0%{opacity:0;transform:translateX(22px);}100%{opacity:1;transform:translateX(0);}}
+  @keyframes authSlideRightIn{0%{opacity:0;transform:translateX(-22px);}100%{opacity:1;transform:translateX(0);}}
+  @keyframes authFadeUpIn{0%{opacity:0;transform:translateY(12px);}100%{opacity:1;transform:translateY(0);}}
+  .auth-switch{animation-duration:.32s;animation-timing-function:cubic-bezier(.22,.85,.32,1);animation-fill-mode:both;}
+  /* ---- Auth footer: every "switch mode" link lives in one consistent block
+     below the form, separated by a divider, instead of scattered tiny-notes ---- */
+  .auth-footer{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:7px;align-items:center;text-align:center;}
+  .auth-footer-row{font-size:12.5px;color:var(--ink-soft);}
+  .auth-footer-row.muted{font-size:11.5px;opacity:.85;}
+  .auth-footer .link-btn{margin-left:4px;}
+  .auth-forgot-row{text-align:right;margin-top:-6px;margin-bottom:2px;}
   /* ---- Full-screen status states: pending approval / suspended / deleted ---- */
   .status-badge-lg{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
   .status-badge-lg.tone-amber{background:var(--amber-tint);color:var(--amber-dark);}
@@ -128,6 +143,27 @@
     box-shadow:0 16px 44px rgba(16,30,60,.28);border:1px solid var(--line);
     padding:14px;width:288px;animation:riseIn .14s ease;
   }
+  /* ---------- TYPED DATE-OF-BIRTH INPUT (Day / Month / Year boxes) ---------- */
+  .dob-input{display:flex;gap:8px;}
+  .dob-input input{width:100%;padding:11px 8px;border:1.5px solid var(--line);border-radius:10px;font-size:14.5px;background:#FAFBFD;outline:none;transition:border-color .15s;text-align:center;}
+  .dob-input input:focus{border-color:var(--teal);background:#fff;}
+  .dob-input input::-webkit-outer-spin-button,.dob-input input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .dob-input input[type="number"]{-moz-appearance:textfield;}
+  .dob-input input:nth-child(3){flex:1.35;}
+
+  /* ---------- CHAT WITH PARENT ---------- */
+  .chat-icon-btn{border:none;background:var(--teal-tint);color:var(--teal-dark);width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:4px;}
+  .chat-icon-btn:hover{background:var(--teal);color:#fff;}
+  .chat-modal{display:flex;flex-direction:column;max-height:82vh;}
+  .chat-log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:8px;padding:6px 2px;margin:10px 0;min-height:180px;max-height:50vh;}
+  .chat-bubble{max-width:78%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.4;word-wrap:break-word;}
+  .chat-bubble.chat-in{align-self:flex-start;background:var(--card-alt);color:var(--ink);border-bottom-left-radius:4px;}
+  .chat-bubble.chat-out{align-self:flex-end;background:var(--teal);color:#fff;border-bottom-right-radius:4px;}
+  .chat-bubble .chat-meta{font-size:10.5px;opacity:.7;margin-top:3px;}
+  .chat-input-row{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:10px;}
+  .chat-input-row textarea{flex:1;resize:none;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;background:#FAFBFD;outline:none;max-height:90px;}
+  .chat-input-row textarea:focus{border-color:var(--teal);background:#fff;}
+  .chat-input-row .btn{flex-shrink:0;}
   .dc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .dc-title{font-size:14.5px;font-weight:800;color:var(--navy);}
   .dc-nav{background:var(--teal-tint);color:var(--teal-dark);border:none;width:30px;height:30px;border-radius:9px;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
@@ -334,6 +370,18 @@
   .settings-card-head .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .settings-card-head h3{font-size:15.5px;}
   .settings-card-head p{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  /* ---- Settings: tabbed panels (each panel keeps a distinct accent color
+     so the sections read as unique places rather than one long scroll) ---- */
+  .settings-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;margin-bottom:14px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .settings-tabs::-webkit-scrollbar{display:none;}
+  .settings-tab{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;}
+  .settings-tab svg{width:15px;height:15px;flex-shrink:0;}
+  .settings-tab:active{transform:scale(.97);}
+  .settings-tab.active{color:#fff;border-color:transparent;box-shadow:0 4px 12px -2px rgba(20,30,60,.35);}
+  .settings-panels{position:relative;}
+  .settings-panel{display:none;}
+  .settings-panel.active{display:block;animation:riseIn .16s ease;}
+  .settings-panel-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:4px 10px;border-radius:999px;margin-bottom:12px;}
   .logo-upload{width:84px;height:84px;border-radius:16px;background:var(--sky-tint);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;flex-shrink:0;overflow:hidden;font-weight:800;font-size:24px;color:var(--navy);border:2px dashed var(--line);transition:border-color .15s;}
   .logo-upload:hover{border-color:var(--teal);}
   .logo-upload img{width:100%;height:100%;object-fit:cover;}
@@ -570,7 +618,8 @@ const ic = {
   pin:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
   pulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
   lifebuoy:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M19.07 4.93l-4.24 4.24M9.17 14.83l-4.24 4.24"/></svg>`,
-  download:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`
+  download:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`,
+  chat:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>`
 };
 
 /* ---------------- SCHOOL PROFILE / BRANDING ---------------- */
@@ -1416,6 +1465,18 @@ begin
 end;
 $create_parent_account$;
 grant execute on function create_parent_account(text,text,text,text,text,text,text,text) to anon, authenticated;`;
+
+/* ---------------- CHAT WITH PARENT ----------------
+   Lets any staff member (bursar, administrator, academic, etc.) open a
+   real, two-way chat with a student's parent straight from that child's
+   record — not just parents starting a "Private Contact" thread. It
+   reuses private_messages rather than a new table: sender_role records
+   which side actually typed each message (existing rows are untouched
+   and default to 'parent', which is exactly what they always were), and
+   student_id is an optional pointer back to which child the thread is
+   about. */
+const PARENT_CHAT_SQL = `alter table private_messages add column if not exists sender_role text not null default 'parent';
+alter table private_messages add column if not exists student_id uuid references students(id) on delete set null;`;
 
 /* ---------------- MULTI-SCHOOL SETUP ----------------
    Run this ONCE in Supabase → SQL Editor to turn this single-school app into
@@ -2444,6 +2505,50 @@ function requireFields(ov, fields) {
     if (!String(elF.value || "").trim()) throw new Error(`${label} is required.`);
   }
 }
+/* ---------------- TYPED DATE-OF-BIRTH INPUT ----------------
+   Birth dates are usually years or decades in the past, so making someone
+   click "previous month" over and over on the calendar widget is painful.
+   This renders three plain boxes — Day / Month / Year — typed directly,
+   and keeps a hidden input (with the same id every other part of the app
+   already reads, e.g. f_dob) in sync with the combined "YYYY-MM-DD" value,
+   so nothing downstream (requireFields, val(), payload building) needs to
+   change at all. */
+function dobFieldHtml(id, value, label) {
+  label = label || "Date of birth";
+  let d = "", m = "", y = "";
+  if (value) {
+    const parts = String(value).split("-");
+    if (parts.length === 3) { y = parts[0]; m = String(Number(parts[1]) || ""); d = String(Number(parts[2]) || ""); }
+  }
+  return `
+    <div class="field">
+      <label>${label}</label>
+      <div class="dob-input">
+        <input id="${id}_d" type="number" inputmode="numeric" min="1" max="31" placeholder="DD" value="${d}"/>
+        <input id="${id}_m" type="number" inputmode="numeric" min="1" max="12" placeholder="MM" value="${m}"/>
+        <input id="${id}_y" type="number" inputmode="numeric" min="1900" max="2100" placeholder="YYYY" value="${y}"/>
+      </div>
+      <input type="hidden" id="${id}" value="${value||''}"/>
+    </div>`;
+}
+// Wires the Day/Month/Year boxes for a dobFieldHtml(id, ...) block so typing
+// into them keeps hidden input #id updated, and jumps focus to the next box
+// once enough digits are typed. Call this once, right after the modal
+// containing the fields has been added to the document.
+function wireDobField(scope, id) {
+  const dEl = scope.querySelector("#"+id+"_d"), mEl = scope.querySelector("#"+id+"_m"),
+        yEl = scope.querySelector("#"+id+"_y"), hidden = scope.querySelector("#"+id);
+  if (!dEl || !mEl || !yEl || !hidden) return;
+  const pad = n => String(n).padStart(2, "0");
+  const sync = () => {
+    const d = parseInt(dEl.value, 10), m = parseInt(mEl.value, 10), y = parseInt(yEl.value, 10);
+    hidden.value = (d>=1 && d<=31 && m>=1 && m<=12 && y>=1900 && y<=2100) ? `${y}-${pad(m)}-${pad(d)}` : "";
+  };
+  dEl.addEventListener("input", () => { if (dEl.value.length >= 2) mEl.focus(); sync(); });
+  mEl.addEventListener("input", () => { if (mEl.value.length >= 2) yEl.focus(); sync(); });
+  yEl.addEventListener("input", sync);
+  [dEl, mEl, yEl].forEach(x => x.addEventListener("blur", sync));
+}
 // Opens a live camera overlay and explicitly asks the browser for camera permission via
 // getUserMedia. Calls onCapture(dataUrl) with a JPEG data URL once the person snaps a photo.
 // If the browser can't do getUserMedia at all (or the person denies/it errors), calls
@@ -2780,20 +2885,33 @@ async function fetchLockedDepartments(schoolId) {
 }
 function renderLogin() {
   let mode = "login";
+  let lastMode = "login";
   let signupAccountType = "staff"; // "staff" or "parent"
+  // Picks a direction for the switch animation so it reads as forward/back
+  // navigation: signup slides in from the right, returning to login slides
+  // back in from the left, and forgot-password (a side trip, not a step in
+  // a sequence) just fades/rises in place.
+  function pickAuthAnim(newMode, oldMode) {
+    if (newMode === oldMode) return "authFadeUpIn";
+    if (newMode === "signup") return "authSlideLeftIn";
+    if (oldMode === "signup" && newMode === "login") return "authSlideRightIn";
+    return "authFadeUpIn";
+  }
   function draw() {
+    const animName = pickAuthAnim(mode, lastMode);
+    lastMode = mode;
     app().innerHTML = `
       <div class="login-wrap"><div class="login-card">
         <div class="brand">${sidebarBrandHtml()}</div>
         <div id="loginMsg"></div>
-        <div id="loginForm"></div>
-        <div class="tiny-note">${mode==="login" ? `<span class="link-btn" id="toSignup" style="cursor:pointer">Create your account</span>` : mode==="forgot" ? "" : `<span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span>`}</div>
-        ${mode==="login" ? `<div class="tiny-note"><span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>` : ""}
+        <div class="auth-switch" id="authSwitch" style="animation-name:${animName};">
+          <div id="loginForm"></div>
+          <div class="auth-footer" id="authFooter"></div>
+        </div>
       </div></div>
     `;
     const formDiv = document.getElementById("loginForm");
-    const toRegisterSchoolLink = document.getElementById("toRegisterSchool");
-    if (toRegisterSchoolLink) toRegisterSchoolLink.onclick = () => renderSchoolRegistration();
+    const footerDiv = document.getElementById("authFooter");
     if (mode === "login") {
       formDiv.innerHTML = `
         <div class="field"><label>Username</label><input id="username" autocapitalize="none" placeholder="" /></div>
@@ -2801,8 +2919,12 @@ function renderLogin() {
         <label class="row" style="gap:8px;align-items:center;font-size:13px;font-weight:600;color:var(--ink-soft);margin:4px 0 2px;">
           <input id="remember" type="checkbox" style="width:16px;height:16px;" /> Remember me on this device
         </label>
+        <div class="tiny-note auth-forgot-row"><span class="link-btn" id="toForgot" style="cursor:pointer">Forgot password?</span></div>
         <button class="btn btn-primary" id="submitBtn" style="margin-top:6px;">Log in</button>
-        <div class="tiny-note" style="text-align:right;"><span class="link-btn" id="toForgot" style="cursor:pointer">Forgot password?</span></div>
+      `;
+      footerDiv.innerHTML = `
+        <div class="auth-footer-row">New here? <span class="link-btn" id="toSignup" style="cursor:pointer">Create an account</span></div>
+        <div class="auth-footer-row muted">Don't see your school? <span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>
       `;
       document.getElementById("submitBtn").onclick = async () => {
         const username = document.getElementById("username").value.trim();
@@ -2826,6 +2948,7 @@ function renderLogin() {
       };
       document.getElementById("toSignup").onclick = () => { mode = "signup"; draw(); };
       document.getElementById("toForgot").onclick = () => { mode = "forgot"; draw(); };
+      document.getElementById("toRegisterSchool").onclick = () => renderSchoolRegistration();
     } else if (mode === "forgot") {
       formDiv.innerHTML = `
         <div class="tiny-note" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:2px;">Reset your password</div>
@@ -2835,7 +2958,9 @@ function renderLogin() {
         <div class="field"><label>New password</label><input id="f_newpass" type="password" placeholder="" /></div>
         <div class="field"><label>Confirm new password</label><input id="f_newpass2" type="password" placeholder="" /></div>
         <button class="btn btn-primary" id="resetBtn" style="margin-top:6px;">Reset password</button>
-        <div class="tiny-note"><span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
+      `;
+      footerDiv.innerHTML = `
+        <div class="auth-footer-row">Remembered it? <span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
       `;
       document.getElementById("resetBtn").onclick = async () => {
         const username = document.getElementById("f_username").value.trim();
@@ -2863,6 +2988,9 @@ function renderLogin() {
           <button type="button" class="btn ${signupAccountType==='parent'?'btn-primary':'btn-ghost'} btn-sm" id="acctParentBtn" style="flex:1;">Parent account</button>
         </div>
         <div id="signupFields"></div>
+      `;
+      footerDiv.innerHTML = `
+        <div class="auth-footer-row">Already have an account? <span class="link-btn" id="toLogin" style="cursor:pointer">Log in</span></div>
       `;
       document.getElementById("acctStaffBtn").onclick = () => { signupAccountType = "staff"; draw(); };
       document.getElementById("acctParentBtn").onclick = () => { signupAccountType = "parent"; draw(); };
@@ -3443,6 +3571,123 @@ function bindTapHold(rowEl, { onTap, onHold }) {
   rowEl.addEventListener("pointerup", () => { cancel(); if (!longFired && onTap) onTap(); });
   rowEl.addEventListener("pointercancel", cancel);
   rowEl.addEventListener("pointerleave", cancel);
+}
+
+/* ---------------- SIMPLE INFO MODAL (no Save action) ---------------- */
+function openInfoModal(title, bodyHtml, closeLabel) {
+  const overlay = el(`<div class="overlay"><div class="modal">
+    <button class="modal-close">&times;</button>
+    <h3>${title}</h3>
+    <div style="margin-top:12px;">${bodyHtml}</div>
+    <div class="form-actions"><button class="btn btn-primary" id="infoClose" style="flex:1;">${closeLabel||"Close"}</button></div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.querySelector("#infoClose").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  return overlay;
+}
+
+/* ---------------- CHAT WITH PARENT ----------------
+   Gives any staff member (bursar, administrator, academic, etc.) a direct
+   way to message a student's parent from that child's own record, instead
+   of only the parent being able to start a conversation via "Private
+   Contact". Built on top of private_messages — see PARENT_CHAT_SQL. */
+async function getLinkedParentsForStudent(studentId) {
+  const links = await dbSelect("parent_students", { student_id:`eq.${studentId}`, select:"profiles(id,full_name,username,phone,photo_url,deleted_at)" });
+  return links.map(l => l.profiles).filter(p => p && !p.deleted_at);
+}
+async function openParentChat(student) {
+  let parents = [];
+  try { parents = await getLinkedParentsForStudent(student.id); }
+  catch (e) { toast("Couldn't load this child's parent account."); return; }
+  if (!parents.length) {
+    openInfoModal("No parent account linked", `
+      <div class="tiny-note" style="text-align:left;margin:0 0 12px;">${student.full_name} isn't linked to a parent app account yet, so there's no in-app chat to open.</div>
+      ${student.guardian_name ? `<div class="view-row"><div class="vlabel">Parent/guardian</div><div class="vvalue">${student.guardian_name}</div></div>` : ""}
+      ${student.guardian_phone ? `<div class="view-row"><div class="vlabel">Phone</div><div class="vvalue">${student.guardian_phone}</div></div>` : ""}
+    `);
+    return;
+  }
+  if (parents.length === 1) { openChatThread(parents[0], student); return; }
+  const overlay = openInfoModal(`Chat with ${student.full_name}'s parent`, `
+    <div class="tiny-note" style="text-align:left;margin:0 0 10px;">More than one parent account is linked to this child. Choose who to message.</div>
+    <div id="parentPickList"></div>
+  `, "Cancel");
+  const list = overlay.querySelector("#parentPickList");
+  parents.forEach(p => {
+    const row = el(`<div class="list-row" style="cursor:pointer;">${avatarHtml(p.full_name,p.photo_url)}<div class="list-main"><div class="list-title">${p.full_name}</div><div class="list-sub">${p.phone||''}</div></div></div>`);
+    row.onclick = () => { overlay.remove(); openChatThread(p, student); };
+    list.appendChild(row);
+  });
+}
+// Shared two-way chat thread, used both when staff open it from a child's
+// record and when a parent opens it from their own "Private Contact" page.
+// `other` is the person on the far end of the conversation; `student` is
+// optional context (shown in the header, stamped on new messages).
+async function openChatThread(other, student, onClose) {
+  const meIsParent = profile.role === "parent" || profile.department === "parents";
+  const parentId = meIsParent ? profile.id : other.id;
+  const parentName = meIsParent ? profile.full_name : other.full_name;
+  const staffId = meIsParent ? other.id : profile.id;
+  const staffName = meIsParent ? other.full_name : profile.full_name;
+
+  const overlay = el(`<div class="overlay"><div class="modal chat-modal">
+    <button class="modal-close">&times;</button>
+    <h3>${ic.chat} ${other.full_name}${student ? ` <span style="font-weight:600;color:var(--ink-soft);font-size:12.5px;">— ${student.full_name}</span>` : ""}</h3>
+    <div class="chat-log" id="chatLog"><div class="center-loading">Loading…</div></div>
+    <div class="chat-input-row">
+      <textarea id="chatInput" rows="1" placeholder="Type a message…"></textarea>
+      <button class="btn btn-primary" id="chatSendBtn">Send</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(overlay);
+  enableModalKeyboardHandling(overlay);
+  const close = () => { overlay.remove(); if (onClose) onClose(); };
+  overlay.querySelector(".modal-close").onclick = close;
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+  const log = overlay.querySelector("#chatLog");
+  async function load() {
+    try {
+      const msgs = await dbSelect("private_messages", { parent_id:`eq.${parentId}`, recipient_id:`eq.${staffId}`, order:"created_at.asc", limit:"200" });
+      log.innerHTML = msgs.length ? msgs.map(m => {
+        const mine = meIsParent ? m.sender_role === "parent" : m.sender_role !== "parent";
+        return `<div class="chat-bubble ${mine?'chat-out':'chat-in'}">
+          <div>${String(m.message||'').replace(/</g,"&lt;")}</div>
+          <div class="chat-meta">${formatDate(m.created_at)}</div>
+        </div>`;
+      }).join("") : `<div class="empty" style="padding:24px 0;">${ic.empty}<div>No messages yet — say hello.</div></div>`;
+      log.scrollTop = log.scrollHeight;
+      // Now that this side has opened the thread, mark whatever the other side sent as read.
+      msgs.filter(m => m.status === "unread" && (meIsParent ? m.sender_role !== "parent" : m.sender_role === "parent"))
+        .forEach(m => { dbUpdate("private_messages", m.id, { status:"read" }).catch(()=>{}); });
+    } catch (e) {
+      log.innerHTML = missingSetupHtml("Chat isn't available for your school yet.");
+    }
+  }
+  await load();
+
+  const send = safe(async () => {
+    const input = overlay.querySelector("#chatInput");
+    const message = input.value.trim();
+    if (!message) return;
+    input.value = "";
+    await dbInsert("private_messages", {
+      parent_id: parentId, parent_name: parentName,
+      recipient_id: staffId, recipient_name: staffName,
+      subject: student ? `Chat — ${student.full_name}` : "Chat",
+      message, sender_role: meIsParent ? "parent" : "staff",
+      student_id: student ? student.id : null,
+    });
+    await load();
+  });
+  overlay.querySelector("#chatSendBtn").onclick = send;
+  overlay.querySelector("#chatInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  });
 }
 
 /* ---------------- SOFT DELETE / TRASH ---------------- */
@@ -4310,8 +4555,19 @@ async function renderParentContact(container) {
     const wrap = document.getElementById("sentPrivateMsgs");
     try {
       const msgs = await dbSelect("private_messages", { parent_id:`eq.${profile.id}`, order:"created_at.desc", limit:"20" });
-      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your private messages</h3>` +
-        (msgs.length ? msgs.map(m => `<div class="view-row"><div class="vlabel">${m.subject} <span style="color:var(--ink-soft);font-weight:600;">· to ${m.recipient_name || "staff"}</span></div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`).join("") : emptyState("No private messages sent yet."));
+      // Tap a conversation to open the full back-and-forth (and reply) —
+      // one row per staff member this parent has an open thread with.
+      const seen = new Set();
+      const threads = msgs.filter(m => { if (seen.has(m.recipient_id)) return false; seen.add(m.recipient_id); return true; });
+      wrap.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Your private messages</h3>`;
+      if (!threads.length) { wrap.innerHTML += emptyState("No private messages sent yet."); return; }
+      const list = el(`<div></div>`);
+      threads.forEach(m => {
+        const row = el(`<div class="view-row" style="cursor:pointer;"><div class="vlabel">${m.subject} <span style="color:var(--ink-soft);font-weight:600;">· to ${m.recipient_name || "staff"}</span></div><div class="vvalue" style="text-align:right;color:var(--ink-soft);font-weight:600;">${formatDate(m.created_at)}${m.status==='unread'?' · <span style="color:var(--amber-dark);">Pending</span>':' · <span style="color:var(--teal-dark);">Seen</span>'}</div></div>`);
+        row.onclick = () => openChatThread({ id: m.recipient_id, full_name: m.recipient_name }, null, loadSentPrivateMessages);
+        list.appendChild(row);
+      });
+      wrap.appendChild(list);
     } catch (e) {
       wrap.innerHTML = missingSetupHtml("Private Contact isn't available for your school yet.");
     }
@@ -4329,7 +4585,7 @@ function openPrivateMessageModal(staffMember, onSent) {
     await dbInsert("private_messages", {
       parent_id: profile.id, parent_name: profile.full_name,
       recipient_id: staffMember.id, recipient_name: staffMember.full_name,
-      subject: val(ov,"f_psubject"), message: val(ov,"f_pmessage"),
+      subject: val(ov,"f_psubject"), message: val(ov,"f_pmessage"), sender_role: "parent",
     });
     toast(`Private message sent to ${staffMember.full_name}.`, false);
     if (onSent) onSent();
@@ -4910,7 +5166,11 @@ async function renderStudents(container, opts={}) {
       <div class="list-main"><div class="list-title">${s.full_name}</div>
       <div class="list-sub">${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
       <span class="badge ${s.status==='active'?'badge-green':'badge-grey'}">${s.status}</span>
+      <button type="button" class="chat-icon-btn" title="Chat with parent">${ic.chat}</button>
     </div>`);
+    const chatBtn = row.querySelector(".chat-icon-btn");
+    chatBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    chatBtn.addEventListener("click", (e) => { e.stopPropagation(); openParentChat(s); });
     const view = () => openViewModal(s.full_name, [
       ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
       ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
@@ -4947,11 +5207,9 @@ function openStudentModal(container, classes, s) {
       <div class="field"><label>Admission no.</label><input id="f_adm" readonly value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="text" class="datefield" readonly required placeholder="" value="${s?.dob||''}"/></div>
-      <div class="field"><label>Gender</label><select id="f_gender" required>
+    ${dobFieldHtml("f_dob", s?.dob)}
+    <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
-    </div>
     <div class="field"><label>Class</label><select id="f_class" required><option value="">— Select class —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
@@ -5001,6 +5259,7 @@ function openStudentModal(container, classes, s) {
     if (isEdit) await dbUpdate("students", s.id, payload); else { await dbInsert("students", payload); await advanceIdSeq("student"); }
     renderStudents(container);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
+  wireDobField(document, "f_dob");
   const liveInput = document.getElementById("f_photo_live");
   const pickInput = document.getElementById("f_photo_pick");
   const setPreview = (dataUrl) => { document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(s?.full_name, dataUrl, 72); };
@@ -7221,106 +7480,164 @@ async function renderSettings(container) {
   const stampData = {};
   STAMP_TYPES.forEach(t => { stampData[t.key] = s[t.key] || null; });
 
+  // Each panel gets its own accent color so the sections read as distinct
+  // places you navigate to, rather than one long uniform scroll of cards.
+  const SETTINGS_PANELS = [
+    { id:"overview",  label:"Overview",      color:"var(--slate)",   tint:"var(--slate-tint)",  icon:ic.sliders },
+    { id:"brand",     label:"Brand",         color:"var(--teal)",    tint:"var(--teal-tint)",   icon:ic.settings },
+    { id:"mission",   label:"Mission",       color:"var(--indigo)",  tint:"var(--indigo-tint)", icon:ic.target },
+    { id:"contact",   label:"Contact",       color:"var(--sky)",     tint:"var(--sky-tint)",    icon:ic.mail },
+    { id:"stamps",    label:"Stamps",        color:"var(--purple)",  tint:"var(--purple-tint)", icon:ic.stamp },
+    { id:"receipts",  label:"Receipts",      color:"var(--amber-dark)", tint:"var(--amber-tint)", icon:ic.edit },
+    { id:"prefs",     label:"Preferences",   color:"var(--navy-2)",  tint:"var(--slate-tint)",  icon:ic.sliders },
+    { id:"notifs",    label:"Notifications", color:"var(--red)",     tint:"var(--red-tint)",    icon:ic.bell },
+  ];
+  const panelTag = (p) => `<div class="settings-panel-tag" style="background:${p.tint};color:${p.color};">${p.icon} ${p.label}</div>`;
+
   container.innerHTML = `
     <h3 style="color:var(--navy);margin-bottom:4px;">School Settings</h3>
     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Your school's identity — shown across the whole app, including the header everyone sees.</p>
 
-    ${motherSystemCardHtml(motherAdmins)}
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">School ID</h3><p>Generated automatically at registration. Can't be edited. Give this to staff and parents so they can create their own accounts — it's the permanent identifier the TransApple Mother System uses to identify your school. Only Administrators can see this.</p></div></div>
-      ${CURRENT_SCHOOL?.school_code ? `
-      <div class="field" style="margin-bottom:0;">
-        <div class="row" style="gap:8px;align-items:center;">
-          <input value="${CURRENT_SCHOOL.school_code}" disabled style="background:var(--card-alt);color:var(--ink-soft);font-family:monospace;font-weight:700;letter-spacing:.03em;flex:1;"/>
-          <button type="button" class="btn btn-ghost btn-sm" id="copySchoolIdBtn">Copy</button>
-        </div>
-      </div>` : `
-      <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0;">${schoolUpgradePending() ? `Not generated yet — TransApple has moved to a new registration format. Complete the upgrade above and a School ID will be generated for you automatically.` : `Not generated yet. This is usually created automatically when your school registers; contact TransApple support if this doesn't resolve itself.`}</p>`}
+    <div class="settings-tabs" id="settingsTabs">
+      ${SETTINGS_PANELS.map((p,i) => `<button type="button" class="settings-tab${i===0?' active':''}" data-panel="${p.id}" data-color="${p.color}" style="${i===0?`background:${p.color};`:''}">${p.icon}<span>${p.label}</span></button>`).join("")}
     </div>
 
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
-      <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
-        <div class="logo-upload" id="logoUpload" title="Tap to change logo">
-          ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Nova School")}</span>`}
-          <div class="cam">${ic.camera} Change</div>
-        </div>
-        <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
-        <div style="flex:1;min-width:180px;">
-          <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="" value="${s.school_name||''}"/></div>
-          <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="" maxlength="60" value="${s.motto||''}"/></div>
-        </div>
-      </div>
-      <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
-      <div class="header-preview"><div class="hp-inner" id="hpInner">
-        <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"Nova School")}</div>
-        <div><div class="hp-name" id="hpName">${s.school_name||"Nova School"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
-      </div></div>
-    </div>
-
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.target}</div><div><h3 style="color:var(--navy);">Mission &amp; vision</h3><p>What your school stands for — visible to staff on this page.</p></div></div>
-      <div class="field"><label>${ic.target} &nbsp;Mission</label><textarea id="f_mission" rows="3" placeholder="">${s.mission||''}</textarea></div>
-      <div class="field" style="margin-bottom:0;"><label>${ic.compass} &nbsp;Vision</label><textarea id="f_vision" rows="3" placeholder="">${s.vision||''}</textarea></div>
-    </div>
-
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.mail}</div><div><h3 style="color:var(--navy);">Contact details</h3><p>Shown to staff and on printed report cards.</p></div></div>
-      <div class="grid2">
-        <div class="field"><label>Phone</label><input id="f_phone" placeholder="" value="${s.phone||''}"/></div>
-        <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="" value="${s.email||''}"/></div>
-      </div>
-      <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="">${s.address||''}</textarea></div>
-    </div>
-
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.stamp}</div><div><h3 style="color:var(--navy);">Official stamps</h3><p>Upload the stamps used on receipts, reports and other official documents.</p></div></div>
-      <div class="stamp-grid" id="stampGrid">
-        ${STAMP_TYPES.map(t => `
-          <div class="stamp-tile" data-key="${t.key}">
-            <div class="logo-upload stamp-upload" data-key="${t.key}" title="Tap to upload">
-              ${s[t.key] ? `<img class="stampPreviewImg" data-key="${t.key}" src="${s[t.key]}"/>` : `<span class="stampPreviewImg" data-key="${t.key}">${ic.stamp}</span>`}
-              <div class="cam">${ic.camera} ${s[t.key] ? "Replace" : "Upload"}</div>
+    <div class="settings-panels">
+      <div class="settings-panel active" data-panel="overview">
+        ${panelTag(SETTINGS_PANELS[0])}
+        ${motherSystemCardHtml(motherAdmins)}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--slate-tint);color:var(--slate);">${ic.sliders}</div><div><h3 style="color:var(--navy);">School ID</h3><p>Generated automatically at registration. Can't be edited. Give this to staff and parents so they can create their own accounts — it's the permanent identifier the TransApple Mother System uses to identify your school. Only Administrators can see this.</p></div></div>
+          ${CURRENT_SCHOOL?.school_code ? `
+          <div class="field" style="margin-bottom:0;">
+            <div class="row" style="gap:8px;align-items:center;">
+              <input value="${CURRENT_SCHOOL.school_code}" disabled style="background:var(--card-alt);color:var(--ink-soft);font-family:monospace;font-weight:700;letter-spacing:.03em;flex:1;"/>
+              <button type="button" class="btn btn-ghost btn-sm" id="copySchoolIdBtn">Copy</button>
             </div>
-            <div class="stamp-label">${t.label}</div>
-            ${s[t.key] ? `<button type="button" class="stamp-del" data-key="${t.key}">Remove</button>` : ""}
-          </div>`).join("")}
-      </div>
-      <input type="file" id="stampFile" accept="image/*" style="display:none;"/>
-    </div>
-
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.edit}</div><div><h3 style="color:var(--navy);">Receipt number format</h3><p>Controls how receipt numbers are generated for fee payments.</p></div></div>
-      <div class="grid2">
-        <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="" maxlength="12" value="${s.receipt_prefix||''}"/></div>
-        <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" placeholder="" value="${s.receipt_digits||''}"/></div>
-      </div>
-      <div class="field" style="margin-bottom:0;"><label>Next receipt number</label>
-        <input id="f_rnext" type="number" min="1" placeholder="" value="${s.receipt_next_number||''}"/>
-        <div id="receiptPreview" class="receipt-preview-chip"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Preferences</h3><p>Fine-tune how the app looks and formats money.</p></div></div>
-      <div class="field"><label>Accent color</label>
-        <div class="swatch-row" id="swatchRow">
-          ${Object.entries(BRAND_PRESETS).map(([key,p])=>`<div class="swatch ${key===selectedColor?'on':''}" data-key="${key}" title="${p.label}" style="background:${p.base};">${ic.check}</div>`).join("")}
+          </div>` : `
+          <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0;">${schoolUpgradePending() ? `Not generated yet — TransApple has moved to a new registration format. Complete the upgrade above and a School ID will be generated for you automatically.` : `Not generated yet. This is usually created automatically when your school registers; contact TransApple support if this doesn't resolve itself.`}</p>`}
         </div>
       </div>
-      <div class="field" style="margin-bottom:0;"><label>Currency symbol</label>
-        <select id="f_currency">${CURRENCY_OPTIONS.map(c=>`<option value="${c}" ${((s.currency_symbol||'₦')===c)?'selected':''}>${c}</option>`).join("")}</select>
+
+      <div class="settings-panel" data-panel="brand">
+        ${panelTag(SETTINGS_PANELS[1])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
+          <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
+            <div class="logo-upload" id="logoUpload" title="Tap to change logo">
+              ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"Nova School")}</span>`}
+              <div class="cam">${ic.camera} Change</div>
+            </div>
+            <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
+            <div style="flex:1;min-width:180px;">
+              <div class="field" style="margin-bottom:10px;"><label>School name</label><input id="f_sname" placeholder="" value="${s.school_name||''}"/></div>
+              <div class="field" style="margin-bottom:0;"><label>Motto <span style="font-weight:400;color:var(--ink-soft);">— short tagline, shown under the name</span></label><input id="f_motto" placeholder="" maxlength="60" value="${s.motto||''}"/></div>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
+          <div class="header-preview"><div class="hp-inner" id="hpInner">
+            <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"Nova School")}</div>
+            <div><div class="hp-name" id="hpName">${s.school_name||"Nova School"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="mission">
+        ${panelTag(SETTINGS_PANELS[2])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.target}</div><div><h3 style="color:var(--navy);">Mission &amp; vision</h3><p>What your school stands for — visible to staff on this page.</p></div></div>
+          <div class="field"><label>${ic.target} &nbsp;Mission</label><textarea id="f_mission" rows="3" placeholder="">${s.mission||''}</textarea></div>
+          <div class="field" style="margin-bottom:0;"><label>${ic.compass} &nbsp;Vision</label><textarea id="f_vision" rows="3" placeholder="">${s.vision||''}</textarea></div>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="contact">
+        ${panelTag(SETTINGS_PANELS[3])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.mail}</div><div><h3 style="color:var(--navy);">Contact details</h3><p>Shown to staff and on printed report cards.</p></div></div>
+          <div class="grid2">
+            <div class="field"><label>Phone</label><input id="f_phone" placeholder="" value="${s.phone||''}"/></div>
+            <div class="field"><label>Email</label><input id="f_email" type="email" placeholder="" value="${s.email||''}"/></div>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>Address</label><textarea id="f_address" rows="2" placeholder="">${s.address||''}</textarea></div>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="stamps">
+        ${panelTag(SETTINGS_PANELS[4])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--indigo-tint);color:var(--indigo);">${ic.stamp}</div><div><h3 style="color:var(--navy);">Official stamps</h3><p>Upload the stamps used on receipts, reports and other official documents.</p></div></div>
+          <div class="stamp-grid" id="stampGrid">
+            ${STAMP_TYPES.map(t => `
+              <div class="stamp-tile" data-key="${t.key}">
+                <div class="logo-upload stamp-upload" data-key="${t.key}" title="Tap to upload">
+                  ${s[t.key] ? `<img class="stampPreviewImg" data-key="${t.key}" src="${s[t.key]}"/>` : `<span class="stampPreviewImg" data-key="${t.key}">${ic.stamp}</span>`}
+                  <div class="cam">${ic.camera} ${s[t.key] ? "Replace" : "Upload"}</div>
+                </div>
+                <div class="stamp-label">${t.label}</div>
+                ${s[t.key] ? `<button type="button" class="stamp-del" data-key="${t.key}">Remove</button>` : ""}
+              </div>`).join("")}
+          </div>
+          <input type="file" id="stampFile" accept="image/*" style="display:none;"/>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="receipts">
+        ${panelTag(SETTINGS_PANELS[5])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--sky-tint);color:var(--sky);">${ic.edit}</div><div><h3 style="color:var(--navy);">Receipt number format</h3><p>Controls how receipt numbers are generated for fee payments.</p></div></div>
+          <div class="grid2">
+            <div class="field"><label>Prefix</label><input id="f_rprefix" placeholder="" maxlength="12" value="${s.receipt_prefix||''}"/></div>
+            <div class="field"><label>Digits (padding)</label><input id="f_rdigits" type="number" min="1" max="10" placeholder="" value="${s.receipt_digits||''}"/></div>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>Next receipt number</label>
+            <input id="f_rnext" type="number" min="1" placeholder="" value="${s.receipt_next_number||''}"/>
+            <div id="receiptPreview" class="receipt-preview-chip"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="prefs">
+        ${panelTag(SETTINGS_PANELS[6])}
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Preferences</h3><p>Fine-tune how the app looks and formats money.</p></div></div>
+          <div class="field"><label>Accent color</label>
+            <div class="swatch-row" id="swatchRow">
+              ${Object.entries(BRAND_PRESETS).map(([key,p])=>`<div class="swatch ${key===selectedColor?'on':''}" data-key="${key}" title="${p.label}" style="background:${p.base};">${ic.check}</div>`).join("")}
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>Currency symbol</label>
+            <select id="f_currency">${CURRENCY_OPTIONS.map(c=>`<option value="${c}" ${((s.currency_symbol||'₦')===c)?'selected':''}>${c}</option>`).join("")}</select>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-panel" data-panel="notifs">
+        ${panelTag(SETTINGS_PANELS[7])}
+        ${pushNotifCardHtml()}
+        ${updateCardHtml(latestChangelog)}
       </div>
     </div>
-
-    ${pushNotifCardHtml()}
-    ${updateCardHtml(latestChangelog)}
 
     <button class="btn btn-primary" id="saveSettingsBtn" style="width:100%;">Save changes</button>
     <div id="settingsMsg" style="margin-top:10px;"></div>
   `;
   wirePushNotifCard(container);
   wireUpdateCard(container, latestChangelog);
+
+  /* ---- Tab switching: swap the active panel + recolor the active tab pill
+     so each section keeps its own accent as you move between them ---- */
+  container.querySelectorAll(".settings-tab").forEach(tabBtn => {
+    tabBtn.onclick = () => {
+      const targetId = tabBtn.dataset.panel;
+      container.querySelectorAll(".settings-tab").forEach(t => { t.classList.remove("active"); t.style.background = ""; });
+      tabBtn.classList.add("active");
+      tabBtn.style.background = tabBtn.dataset.color;
+      container.querySelectorAll(".settings-panel").forEach(p => p.classList.toggle("active", p.dataset.panel === targetId));
+      const tabsWrap = document.getElementById("settingsTabs");
+      if (tabsWrap) tabBtn.scrollIntoView({ behavior:"smooth", inline:"center", block:"nearest" });
+    };
+  });
 
   function updatePreview() {
     const name = val(container,"f_sname") || "Nova School";
