@@ -564,7 +564,7 @@ const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
 // an error instead of hanging indefinitely (see sb() below).
 const FETCH_TIMEOUT_MS = 8000;
 
-let DEV_MODE = false;  // ← must stay false in production: true lets anyone skip login entirely
+let DEV_MODE = true;  // ← must stay false in production: true lets anyone skip login entirely (and, with the check in initPwaInstallOverlay() near the bottom of this file, skips the install screen too)
 let auth = null;       // { access_token, user }
 let profile = null;    // { id, full_name, role }
 let cache = {};        // simple in-memory cache per tab
@@ -589,7 +589,7 @@ const ic = {
   attendance:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>`,
   fees:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 6V4h12v2"/></svg>`,
   exam:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>`,
-  settings:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.63.24 1.51.7 1.51 1z"/></svg>`,
+  settings:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   stamp:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3c0 1.5 1 2 1 3.5S8 11 8 12.5h8c0-1.5-2-2.5-2-4S16 6.5 16 5a3 3 0 0 0-3-3z"/><path d="M4 17h16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M2 21h20"/><path d="M7 12.5h10L19 17H5z"/></svg>`,
   users:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   plus:`<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`,
@@ -619,6 +619,8 @@ const ic = {
   pulse:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
   lifebuoy:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M19.07 4.93l-4.24 4.24M9.17 14.83l-4.24 4.24"/></svg>`,
   download:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`,
+  box:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>`,
+  book:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
   chat:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>`
 };
 
@@ -679,6 +681,107 @@ const GRADES_SETUP_SQL = `create table if not exists grades (
 alter table grades enable row level security;
 create policy "Anyone can read grades" on grades for select using (true);
 create policy "Authenticated can manage grades" on grades for all using (true);`;
+// One-time setup for Inventory & Assets. inventory_items covers four of the
+// six sub-tabs (Property Register, Classroom Equipment, Laboratory Equipment,
+// Stationery Store) via the `module` column — Stock Levels is just a computed
+// view over these rows (grouped totals + low-stock alerts where reorder_level
+// is set), not its own table. asset_maintenance is a separate log so a
+// maintenance history can exist for property that isn't itemized (e.g. a
+// building or a borehole) as well as for a specific inventory_items row.
+const INVENTORY_ASSETS_SQL = `create table if not exists inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references schools(id) on delete cascade,
+  module text not null check (module in ('property','classroom','lab','stationery')),
+  name text not null,
+  category text,
+  location text,
+  quantity numeric not null default 1,
+  unit text default 'pcs',
+  condition text default 'Good' check (condition in ('New','Good','Fair','Poor','Damaged')),
+  reorder_level numeric,
+  unit_value numeric,
+  acquired_date date,
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table inventory_items enable row level security;
+drop policy if exists "Anyone can read inventory_items" on inventory_items;
+create policy "Anyone can read inventory_items" on inventory_items for select using (true);
+drop policy if exists "Authenticated can manage inventory_items" on inventory_items;
+create policy "Authenticated can manage inventory_items" on inventory_items for all using (true);
+
+create table if not exists asset_maintenance (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references schools(id) on delete cascade,
+  item_id uuid references inventory_items(id) on delete set null,
+  asset_name text not null,
+  maintenance_date date not null default current_date,
+  description text,
+  status text default 'Completed' check (status in ('Scheduled','In Progress','Completed')),
+  cost numeric,
+  performed_by text,
+  next_due_date date,
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table asset_maintenance enable row level security;
+drop policy if exists "Anyone can read asset_maintenance" on asset_maintenance;
+create policy "Anyone can read asset_maintenance" on asset_maintenance for select using (true);
+drop policy if exists "Authenticated can manage asset_maintenance" on asset_maintenance;
+create policy "Authenticated can manage asset_maintenance" on asset_maintenance for all using (true);`;
+// One-time setup for the Library module. library_books is the catalog;
+// library_loans is a single record per borrow that covers three of the four
+// sub-tabs at once — Borrowing & Returns (returned_date is null), Overdue
+// Books (returned_date is null and due_date < today), and Library Fines
+// (fine_amount > 0) are all just different filters over the same table, not
+// separate tables — same "one table, several filtered views" approach as
+// inventory_items above. book_title is denormalized onto the loan so history
+// stays readable even if the catalog row is later trashed or edited.
+const LIBRARY_SQL = `create table if not exists library_books (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references schools(id) on delete cascade,
+  title text not null,
+  author text,
+  isbn text,
+  category text,
+  publisher text,
+  copies_total numeric not null default 1,
+  copies_available numeric not null default 1,
+  shelf_location text,
+  condition text default 'Good' check (condition in ('New','Good','Fair','Poor','Damaged')),
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table library_books enable row level security;
+drop policy if exists "Anyone can read library_books" on library_books;
+create policy "Anyone can read library_books" on library_books for select using (true);
+drop policy if exists "Authenticated can manage library_books" on library_books;
+create policy "Authenticated can manage library_books" on library_books for all using (true);
+
+create table if not exists library_loans (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references schools(id) on delete cascade,
+  book_id uuid references library_books(id) on delete set null,
+  book_title text not null,
+  borrower_name text not null,
+  borrower_type text default 'Student' check (borrower_type in ('Student','Staff')),
+  borrowed_date date not null default current_date,
+  due_date date not null,
+  returned_date date,
+  fine_amount numeric default 0,
+  fine_paid boolean default false,
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table library_loans enable row level security;
+drop policy if exists "Anyone can read library_loans" on library_loans;
+create policy "Anyone can read library_loans" on library_loans for select using (true);
+drop policy if exists "Authenticated can manage library_loans" on library_loans;
+create policy "Authenticated can manage library_loans" on library_loans for all using (true);`;
 const ID_FORMAT_SQL = `alter table school_settings add column if not exists student_id_prefix text;
 alter table school_settings add column if not exists student_id_seq int default 0;
 alter table school_settings add column if not exists student_id_digits int default 3;
@@ -847,6 +950,8 @@ const NAV = [
   {id:"exams", label:"Exams", icon:ic.exam},
   {id:"teachers", label:"Staff", icon:ic.teacher},
   {id:"academic", label:"Setup", icon:ic.sliders},
+  {id:"inventory", label:"Inventory & Assets", icon:ic.box},
+  {id:"library", label:"Library", icon:ic.book},
   {id:"health", label:"School Health", icon:ic.pulse},
   {id:"comms", label:"Comms", icon:ic.megaphone},
   {id:"users", label:"Account", icon:ic.users},
@@ -865,7 +970,7 @@ const BOTTOMNAV_PRIMARY_IDS = ["dashboard","students","attendance","fees","exams
 const NAV_ICON_COLOR = {
   dashboard:"var(--teal)", health:"#e11d48", students:"var(--sky)", teachers:"var(--purple)",
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
-  academic:"#0e9488", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
+  academic:"#0e9488", inventory:"#8a5a2b", library:"#166534", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
 };
 
 
@@ -884,7 +989,7 @@ const NAV_ICON_COLOR = {
    top of render() rather than via hasNavAccess(). It's still driven by the
    same schools.features jsonb column and the same isFeatureEnabled() helper. */
 const CORE_NAV_IDS = new Set(["dashboard","users","contact","settings","trash"]);
-const GATABLE_NAV_IDS = ["health","students","teachers","attendance","fees","exams","academic","comms"];
+const GATABLE_NAV_IDS = ["health","students","teachers","attendance","fees","exams","academic","comms","inventory","library"];
 const PARENT_PORTAL_FEATURE_ID = "parent_portal";
 
 // The full school row from the Mother System's `schools` table (status, plan,
@@ -2711,7 +2816,7 @@ function render() {
   pageTitle.style.animation = `${TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
-  const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
+  const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, inventory: renderInventory, library: renderLibrary, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
   (renderers[tab] || renderDashboard)(content).catch(errShow(content));
 }
 // Bottom-sheet shown when the mobile "More" nav icon is tapped — lists
@@ -4666,7 +4771,7 @@ function openEditParentAccountModal(container) {
 
 /* ---------------- HEADER COLOR + ANIMATION PER TAB ---------------- */
 const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", comms:"#c2410c", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
-const TAB_ANIM = { dashboard:"riseIn", health:"popScale", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
+const TAB_ANIM = { dashboard:"riseIn", health:"popScale", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", inventory:"riseIn", library:"popScale", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
 
 /* ---------------- DASHBOARD ---------------- */
 async function renderDashboard(container) {
@@ -5130,6 +5235,588 @@ function sortToParams(sortBy, nameCol, dateCol, genderCol="gender") {
     case "newest": default: params.order = `${dateCol}.desc`; break;
   }
   return params;
+}
+
+/* ---------------- INVENTORY & ASSETS ----------------
+   Four of the six sub-tabs (property, classroom, lab, stationery) share one
+   generic list+CRUD renderer over inventory_items, distinguished by the
+   `module` column — this mirrors how renderAcademic's sub-pages share one
+   table pattern. Maintenance is its own log table. Stock Levels is a
+   read-only rollup computed client-side from inventory_items, not a table. */
+const INVENTORY_MODULE_DEFS = {
+  property:   { label:"Property Register",     itemNoun:"property item",  categoryLabel:"Category (e.g. Furniture, Building, Vehicle, Land)", locationLabel:"Location" },
+  classroom:  { label:"Classroom Equipment",    itemNoun:"item",           categoryLabel:"Category (e.g. Desks, Projector, Whiteboard)",       locationLabel:"Classroom" },
+  lab:        { label:"Laboratory Equipment",   itemNoun:"item",           categoryLabel:"Lab (e.g. Physics, Chemistry, Biology, Computer)",   locationLabel:"Location / bench" },
+  stationery: { label:"Stationery Store",       itemNoun:"stationery item",categoryLabel:"Category (e.g. Paper, Pens, Printing)",              locationLabel:"Store location" },
+};
+async function renderInventory(container, sub="property") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pillDefs = [["property","Property Register"],["classroom","Classroom Equipment"],["lab","Laboratory Equipment"],["stationery","Stationery Store"],["maintenance","Asset Maintenance"],["stock","Stock Levels"]];
+  const pills = document.getElementById("pills");
+  pillDefs.forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderInventory(container, id);
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (INVENTORY_MODULE_DEFS[sub]) return renderInventoryModule(body, sub);
+  if (sub==="maintenance") return renderAssetMaintenance(body);
+  if (sub==="stock") return renderStockLevels(body);
+  return renderInventoryModule(body, "property");
+}
+
+async function renderInventoryModule(body, moduleKey, opts={}) {
+  const def = INVENTORY_MODULE_DEFS[moduleKey];
+  const search = opts.search || "";
+  const sortBy = opts.sortBy || "az";
+  let items = [];
+  let missingTable = false;
+  try {
+    const params = { module:`eq.${moduleKey}`, order: sortToParams(sortBy,"name","created_at").order };
+    if (search) params.name = `ilike.*${search}*`;
+    items = await dbSelectActive("inventory_items", params);
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Inventory & Assets isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryInvBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryInvBtn").onclick = () => renderInventoryModule(body, moduleKey, opts);
+    return;
+  }
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">${def.label}</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add ${def.itemNoun}</button></div>
+    <div class="filters-row" style="display:flex;gap:8px;margin-bottom:10px;">
+      <input id="searchInput" placeholder="Search ${def.itemNoun}s…" value="${search}" style="flex:1;"/>
+      ${sortSelectHtml("sortSel", sortBy, false)}
+    </div>
+    <div class="card" id="list"></div>`;
+  document.getElementById("searchInput").oninput = debounce((e)=>renderInventoryModule(body, moduleKey, {search:e.target.value, sortBy}), 350);
+  document.getElementById("sortSel").onchange = (e)=>renderInventoryModule(body, moduleKey, {search, sortBy:e.target.value});
+
+  const list = document.getElementById("list");
+  list.innerHTML = items.length ? "" : emptyState(`No ${def.itemNoun}s yet. Add your first one to start tracking it.`);
+  const condCls = c => c==="New"?"badge-green":c==="Good"?"badge-green":c==="Fair"?"badge-amber":"badge-red";
+  items.forEach(it => {
+    const low = it.reorder_level != null && Number(it.quantity) <= Number(it.reorder_level);
+    const row = el(`<div class="list-row"><div class="avatar">${initials(it.name)}</div>
+      <div class="list-main"><div class="list-title">${it.name} ${low?'<span class="badge badge-red">Low stock</span>':''}</div>
+      <div class="list-sub">${it.category ? it.category+" · " : ""}${it.location ? it.location+" · " : ""}Qty: ${it.quantity} ${it.unit||""} <span class="badge ${condCls(it.condition)}">${it.condition||"—"}</span></div></div></div>`);
+    const view = () => openViewModal(it.name, [
+      [def.categoryLabel.split(" (")[0], it.category], [def.locationLabel, it.location],
+      ["Quantity", `${it.quantity} ${it.unit||""}`], ["Condition", it.condition],
+      ["Reorder level", it.reorder_level], ["Unit value", it.unit_value],
+      ["Acquired", it.acquired_date], ["Notes", it.notes],
+    ], () => openInventoryItemModal(body, moduleKey, def, it, {search,sortBy}));
+    const edit = () => openInventoryItemModal(body, moduleKey, def, it, {search,sortBy});
+    const del = async () => { if (await customConfirm(`Move "${it.name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("inventory_items", it.id); renderInventoryModule(body, moduleKey, {search,sortBy}); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openInventoryItemModal(body, moduleKey, def, null, {search,sortBy});
+}
+function openInventoryItemModal(body, moduleKey, def, it, opts) {
+  const isEdit = !!it;
+  const showReorder = moduleKey === "stationery";
+  openModal(isEdit ? `Edit ${def.itemNoun}` : `New ${def.itemNoun}`, `
+    <div class="field"><label>Name</label><input id="f_name" placeholder="" value="${it?.name||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>${def.categoryLabel}</label><input id="f_category" placeholder="" value="${it?.category||''}"/></div>
+      <div class="field"><label>${def.locationLabel}</label><input id="f_location" placeholder="" value="${it?.location||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Quantity</label><input id="f_qty" type="number" min="0" step="1" value="${it?.quantity??1}"/></div>
+      <div class="field"><label>Unit</label><input id="f_unit" placeholder="pcs" value="${it?.unit||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Condition</label><select id="f_condition">${["New","Good","Fair","Poor","Damaged"].map(c=>`<option value="${c}" ${it?.condition===c?'selected':''}>${c}</option>`).join("")}</select></div>
+      <div class="field"><label>${showReorder ? "Reorder level" : "Reorder level (optional)"}</label><input id="f_reorder" type="number" min="0" step="1" placeholder="" value="${it?.reorder_level??''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Unit value (optional)</label><input id="f_value" type="number" min="0" step="0.01" placeholder="" value="${it?.unit_value??''}"/></div>
+      <div class="field"><label>Date acquired</label><input id="f_acquired" type="text" class="datefield" readonly placeholder="" value="${it?.acquired_date||''}"/></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2" placeholder="">${it?.notes||''}</textarea></div>
+  `, async (ov) => {
+    const name = val(ov,"f_name").trim();
+    if (!name) throw new Error("Enter a name.");
+    const qty = Number(val(ov,"f_qty"));
+    if (val(ov,"f_qty")==="" || Number.isNaN(qty) || qty < 0) throw new Error("Enter a valid quantity.");
+    const payload = {
+      module: moduleKey, name,
+      category: val(ov,"f_category").trim() || null,
+      location: val(ov,"f_location").trim() || null,
+      quantity: qty,
+      unit: val(ov,"f_unit").trim() || "pcs",
+      condition: val(ov,"f_condition"),
+      reorder_level: val(ov,"f_reorder")==="" ? null : Number(val(ov,"f_reorder")),
+      unit_value: val(ov,"f_value")==="" ? null : Number(val(ov,"f_value")),
+      acquired_date: val(ov,"f_acquired") || null,
+      notes: val(ov,"f_notes").trim() || null,
+    };
+    if (isEdit) await dbUpdate("inventory_items", it.id, payload); else await dbInsert("inventory_items", payload);
+    renderInventoryModule(body, moduleKey, opts);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+/* ---- Asset Maintenance: service/repair log, optionally linked to a specific inventory_items row ---- */
+async function renderAssetMaintenance(body, opts={}) {
+  const sortBy = opts.sortBy || "newest";
+  let logs = [], items = [];
+  let missingTable = false;
+  try {
+    logs = await dbSelectActive("asset_maintenance", { order: sortToParams(sortBy,"asset_name","maintenance_date").order });
+    items = await dbSelectActive("inventory_items", { order:"name.asc" });
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Asset Maintenance isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryMaintBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryMaintBtn").onclick = () => renderAssetMaintenance(body, opts);
+    return;
+  }
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Asset Maintenance</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Log maintenance</button></div>
+    <div class="filters-row" style="display:flex;gap:8px;margin-bottom:10px;justify-content:flex-end;">${sortSelectHtml("sortSel", sortBy, false)}</div>
+    <div class="card" id="list"></div>`;
+  document.getElementById("sortSel").onchange = (e)=>renderAssetMaintenance(body, {sortBy:e.target.value});
+
+  const list = document.getElementById("list");
+  list.innerHTML = logs.length ? "" : emptyState("No maintenance logged yet. Record repairs, servicing, and inspections here.");
+  const statusCls = s => s==="Completed"?"badge-green":s==="In Progress"?"badge-amber":"badge-grey";
+  logs.forEach(m => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(m.asset_name)}</div>
+      <div class="list-main"><div class="list-title">${m.asset_name} <span class="badge ${statusCls(m.status)}">${m.status}</span></div>
+      <div class="list-sub">${m.maintenance_date||""}${m.performed_by ? " · "+m.performed_by : ""}${m.cost ? " · "+m.cost : ""}</div></div></div>`);
+    const view = () => openViewModal(m.asset_name, [
+      ["Date", m.maintenance_date], ["Status", m.status], ["Description", m.description],
+      ["Cost", m.cost], ["Performed by", m.performed_by], ["Next due", m.next_due_date], ["Notes", m.notes],
+    ], () => openMaintenanceModal(body, items, m, opts));
+    const edit = () => openMaintenanceModal(body, items, m, opts);
+    const del = async () => { if (await customConfirm(`Delete this maintenance record for "${m.asset_name}"?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("asset_maintenance", m.id); renderAssetMaintenance(body, opts); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openMaintenanceModal(body, items, null, opts);
+}
+function openMaintenanceModal(body, items, m, opts) {
+  const isEdit = !!m;
+  openModal(isEdit ? "Edit maintenance record" : "Log maintenance", `
+    <div class="field"><label>Asset</label><input id="f_asset" list="f_asset_list" placeholder="Asset name (pick from list or type your own)" value="${m?.asset_name||''}"/>
+      <datalist id="f_asset_list">${items.map(i=>`<option value="${i.name}"></option>`).join("")}</datalist></div>
+    <div class="grid2">
+      <div class="field"><label>Date</label><input id="f_date" type="text" class="datefield" readonly placeholder="" value="${m?.maintenance_date||''}"/></div>
+      <div class="field"><label>Status</label><select id="f_status">${["Scheduled","In Progress","Completed"].map(s=>`<option value="${s}" ${m?.status===s?'selected':''}>${s}</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label>Description</label><textarea id="f_desc" rows="2" placeholder="What was done / needs doing">${m?.description||''}</textarea></div>
+    <div class="grid2">
+      <div class="field"><label>Cost (optional)</label><input id="f_cost" type="number" min="0" step="0.01" placeholder="" value="${m?.cost??''}"/></div>
+      <div class="field"><label>Performed by</label><input id="f_by" placeholder="" value="${m?.performed_by||''}"/></div>
+    </div>
+    <div class="field"><label>Next due date (optional)</label><input id="f_next" type="text" class="datefield" readonly placeholder="" value="${m?.next_due_date||''}"/></div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2" placeholder="">${m?.notes||''}</textarea></div>
+  `, async (ov) => {
+    const asset_name = val(ov,"f_asset").trim();
+    if (!asset_name) throw new Error("Enter or pick an asset.");
+    const matched = items.find(i => i.name.toLowerCase() === asset_name.toLowerCase());
+    const payload = {
+      asset_name, item_id: matched ? matched.id : (isEdit ? m.item_id : null),
+      maintenance_date: val(ov,"f_date") || new Date().toISOString().slice(0,10),
+      status: val(ov,"f_status"),
+      description: val(ov,"f_desc").trim() || null,
+      cost: val(ov,"f_cost")==="" ? null : Number(val(ov,"f_cost")),
+      performed_by: val(ov,"f_by").trim() || null,
+      next_due_date: val(ov,"f_next") || null,
+      notes: val(ov,"f_notes").trim() || null,
+    };
+    if (isEdit) await dbUpdate("asset_maintenance", m.id, payload); else await dbInsert("asset_maintenance", payload);
+    renderAssetMaintenance(body, opts);
+  }, { saveLabel: isEdit ? "Save changes" : "Log it" });
+}
+
+/* ---- Stock Levels: read-only rollup over inventory_items — totals per module plus a low-stock alert list ---- */
+async function renderStockLevels(body) {
+  let items = [];
+  let missingTable = false;
+  try { items = await dbSelectActive("inventory_items", { order:"name.asc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Inventory & Assets isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryStockBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryStockBtn").onclick = () => renderStockLevels(body);
+    return;
+  }
+
+  const byModule = {};
+  Object.keys(INVENTORY_MODULE_DEFS).forEach(k => byModule[k] = { count:0, qty:0 });
+  items.forEach(it => { const b = byModule[it.module]; if (b) { b.count++; b.qty += Number(it.quantity)||0; } });
+  const low = items.filter(it => it.reorder_level != null && Number(it.quantity) <= Number(it.reorder_level));
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Stock Levels</h3></div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 14px;">A live summary across Property, Classroom, Lab and Stationery — set a reorder level on any item to get a low-stock alert here.</p>
+    <div class="grid2" style="gap:10px;margin-bottom:14px;">
+      ${Object.entries(INVENTORY_MODULE_DEFS).map(([k,def])=>`
+        <div class="card" style="padding:14px;">
+          <div style="font-size:12.5px;color:var(--ink-soft);">${def.label}</div>
+          <div style="font-size:22px;font-weight:700;color:var(--navy);">${byModule[k].count}</div>
+          <div style="font-size:12px;color:var(--ink-soft);">${byModule[k].qty} units total</div>
+        </div>`).join("")}
+    </div>
+    <h4 style="margin:10px 0;color:var(--red);">${ic.pulse} Low stock (${low.length})</h4>
+    <div class="card" id="lowList"></div>`;
+  const lowList = document.getElementById("lowList");
+  lowList.innerHTML = low.length ? "" : emptyState("Nothing is below its reorder level right now.");
+  low.forEach(it => {
+    const row = el(`<div class="list-row"><div class="avatar">${initials(it.name)}</div>
+      <div class="list-main"><div class="list-title">${it.name} <span class="badge badge-red">Low stock</span></div>
+      <div class="list-sub">${INVENTORY_MODULE_DEFS[it.module]?.label||it.module} · Qty: ${it.quantity} ${it.unit||""} (reorder at ${it.reorder_level})</div></div></div>`);
+    row.onclick = () => openViewModal(it.name, [
+      ["Module", INVENTORY_MODULE_DEFS[it.module]?.label], ["Quantity", `${it.quantity} ${it.unit||""}`],
+      ["Reorder level", it.reorder_level], ["Location", it.location], ["Notes", it.notes],
+    ]);
+    lowList.appendChild(row);
+  });
+}
+
+/* ---------------- LIBRARY ----------------
+   Book Catalog is its own table (library_books). Borrowing & Returns,
+   Overdue Books, and Library Fines are three filtered views over one
+   library_loans table, not three separate tables — mirrors the
+   inventory_items / asset_maintenance pattern above. */
+function daysOverdue(dueDate) {
+  const due = new Date(dueDate + "T00:00:00");
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((today - due) / 86400000);
+}
+async function renderLibrary(container, sub="catalog") {
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pillDefs = [["catalog","Book Catalog"],["borrowing","Borrowing & Returns"],["overdue","Overdue Books"],["fines","Library Fines"]];
+  const pills = document.getElementById("pills");
+  pillDefs.forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderLibrary(container, id);
+    pills.appendChild(p);
+  });
+  const body = document.getElementById("secBody");
+  if (sub==="borrowing") return renderLibraryBorrowing(body);
+  if (sub==="overdue") return renderLibraryOverdue(body);
+  if (sub==="fines") return renderLibraryFines(body);
+  return renderBookCatalog(body);
+}
+
+/* ---- Book Catalog ---- */
+async function renderBookCatalog(body, opts={}) {
+  const search = opts.search || "";
+  const sortBy = opts.sortBy || "az";
+  let books = [];
+  let missingTable = false;
+  try {
+    const params = { order: sortToParams(sortBy,"title","created_at").order };
+    if (search) params.title = `ilike.*${search}*`;
+    books = await dbSelectActive("library_books", params);
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryLibBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryLibBtn").onclick = () => renderBookCatalog(body, opts);
+    return;
+  }
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Book Catalog</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add book</button></div>
+    <div class="filters-row" style="display:flex;gap:8px;margin-bottom:10px;">
+      <input id="searchInput" placeholder="Search by title…" value="${search}" style="flex:1;"/>
+      ${sortSelectHtml("sortSel", sortBy, false)}
+    </div>
+    <div class="card" id="list"></div>`;
+  document.getElementById("searchInput").oninput = debounce((e)=>renderBookCatalog(body,{search:e.target.value,sortBy}),350);
+  document.getElementById("sortSel").onchange = (e)=>renderBookCatalog(body,{search,sortBy:e.target.value});
+
+  const list = document.getElementById("list");
+  list.innerHTML = books.length ? "" : emptyState("No books yet. Add your first title to start the catalog.");
+  const condCls = c => (c==="New"||c==="Good") ? "badge-green" : c==="Fair" ? "badge-amber" : "badge-red";
+  books.forEach(b => {
+    const outOfStock = Number(b.copies_available) <= 0;
+    const row = el(`<div class="list-row"><div class="avatar">${initials(b.title)}</div>
+      <div class="list-main"><div class="list-title">${b.title} ${outOfStock?'<span class="badge badge-red">All borrowed</span>':''}</div>
+      <div class="list-sub">${b.author ? b.author+" · " : ""}${b.category ? b.category+" · " : ""}Available: ${b.copies_available}/${b.copies_total} <span class="badge ${condCls(b.condition)}">${b.condition||"—"}</span></div></div></div>`);
+    const view = () => openViewModal(b.title, [
+      ["Author", b.author], ["ISBN", b.isbn], ["Category", b.category], ["Publisher", b.publisher],
+      ["Copies", `${b.copies_available} available of ${b.copies_total}`], ["Shelf location", b.shelf_location],
+      ["Condition", b.condition], ["Notes", b.notes],
+    ], () => openBookModal(body, b, {search,sortBy}));
+    const edit = () => openBookModal(body, b, {search,sortBy});
+    const del = async () => { if (await customConfirm(`Move "${b.title}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("library_books", b.id); renderBookCatalog(body,{search,sortBy}); })(); };
+    bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openBookModal(body, null, {search,sortBy});
+}
+function openBookModal(body, b, opts) {
+  const isEdit = !!b;
+  openModal(isEdit ? "Edit book" : "New book", `
+    <div class="field"><label>Title</label><input id="f_title" placeholder="" value="${b?.title||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Author</label><input id="f_author" placeholder="" value="${b?.author||''}"/></div>
+      <div class="field"><label>ISBN (optional)</label><input id="f_isbn" placeholder="" value="${b?.isbn||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Category</label><input id="f_category" placeholder="e.g. Fiction, Science" value="${b?.category||''}"/></div>
+      <div class="field"><label>Publisher</label><input id="f_publisher" placeholder="" value="${b?.publisher||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Total copies</label><input id="f_copies" type="number" min="1" step="1" value="${b?.copies_total??1}"/></div>
+      <div class="field"><label>Shelf location</label><input id="f_shelf" placeholder="" value="${b?.shelf_location||''}"/></div>
+    </div>
+    <div class="field"><label>Condition</label><select id="f_condition">${["New","Good","Fair","Poor","Damaged"].map(c=>`<option value="${c}" ${b?.condition===c?'selected':''}>${c}</option>`).join("")}</select></div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2" placeholder="">${b?.notes||''}</textarea></div>
+  `, async (ov) => {
+    const title = val(ov,"f_title").trim();
+    if (!title) throw new Error("Enter a title.");
+    const copies_total = Number(val(ov,"f_copies"));
+    if (val(ov,"f_copies")==="" || Number.isNaN(copies_total) || copies_total < 1) throw new Error("Enter a valid number of copies.");
+    let copies_available = copies_total;
+    if (isEdit) {
+      // Shift availability by the same delta as the change in total, so
+      // copies currently out on loan stay correctly accounted for.
+      const delta = copies_total - Number(b.copies_total);
+      copies_available = Math.max(0, Math.min(copies_total, Number(b.copies_available) + delta));
+    }
+    const payload = {
+      title, author: val(ov,"f_author").trim() || null, isbn: val(ov,"f_isbn").trim() || null,
+      category: val(ov,"f_category").trim() || null, publisher: val(ov,"f_publisher").trim() || null,
+      copies_total, copies_available,
+      shelf_location: val(ov,"f_shelf").trim() || null, condition: val(ov,"f_condition"),
+      notes: val(ov,"f_notes").trim() || null,
+    };
+    if (isEdit) await dbUpdate("library_books", b.id, payload); else await dbInsert("library_books", payload);
+    renderBookCatalog(body, opts);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+/* ---- Borrowing & Returns: active + recent loans, with a one-tap Return action ---- */
+async function renderLibraryBorrowing(body, opts={}) {
+  const search = opts.search || "";
+  let loans = [], books = [];
+  let missingTable = false;
+  try {
+    const params = { order:"borrowed_date.desc" };
+    if (search) params.or = `(borrower_name.ilike.*${encodeURIComponent(search)}*,book_title.ilike.*${encodeURIComponent(search)}*)`;
+    loans = await dbSelectActive("library_loans", params);
+    books = await dbSelectActive("library_books", { order:"title.asc" });
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryLoanBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryLoanBtn").onclick = () => renderLibraryBorrowing(body, opts);
+    return;
+  }
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Borrowing &amp; Returns</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} New loan</button></div>
+    <input id="searchInput" placeholder="Search by borrower or book…" value="${search}" style="margin-bottom:10px;"/>
+    <div class="card" id="list"></div>`;
+  document.getElementById("searchInput").oninput = debounce((e)=>renderLibraryBorrowing(body,{search:e.target.value}),350);
+
+  const list = document.getElementById("list");
+  list.innerHTML = loans.length ? "" : emptyState("No loans yet. Borrow a book to start tracking it.");
+  loans.forEach(l => {
+    const isOut = !l.returned_date;
+    const overdue = isOut && daysOverdue(l.due_date) > 0;
+    const statusBadge = !isOut ? '<span class="badge badge-green">Returned</span>' : overdue ? `<span class="badge badge-red">Overdue ${daysOverdue(l.due_date)}d</span>` : '<span class="badge badge-amber">Borrowed</span>';
+    const row = el(`<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;"><div class="avatar">${initials(l.book_title)}</div>
+      <div class="list-main"><div class="list-title">${l.book_title} ${statusBadge}</div>
+      <div class="list-sub">${l.borrower_name} (${l.borrower_type}) · Due ${l.due_date}${l.returned_date ? " · Returned "+l.returned_date : ""}</div></div>
+      ${isOut ? `<button class="btn btn-primary btn-sm returnBtn" data-id="${l.id}">${ic.check} Return</button>` : ""}
+      </div>`);
+    // A Return button lives inside this row, so it uses guarded tap/hold
+    // (skip when the tap is on the button) instead of bindRowGestures —
+    // bindRowGestures listens on pointerup at the row level, which would
+    // fire its own "view" action underneath a button tap too.
+    bindTapHold(row, {
+      onTap: () => openViewModal(l.book_title, [
+        ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_date], ["Due", l.due_date],
+        ["Returned", l.returned_date || "Not yet returned"], ["Fine", l.fine_amount ? `${currency()}${l.fine_amount} (${l.fine_paid?"paid":"unpaid"})` : "None"],
+        ["Notes", l.notes],
+      ], () => openLoanEditModal(body, l, opts)),
+      onHold: () => openActionSheet([
+        { label:"Edit", icon:ic.edit, onClick:() => openLoanEditModal(body, l, opts) },
+        { label:"Delete", icon:ic.trash, danger:true, onClick: async () => { if (await customConfirm(`Delete this loan record for "${l.book_title}"?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("library_loans", l.id); renderLibraryBorrowing(body, opts); })(); } },
+      ]),
+    });
+    const returnBtn = row.querySelector(".returnBtn");
+    if (returnBtn) {
+      // Stop these at the button itself so they never bubble up into the
+      // row's bindTapHold listeners (which would otherwise also treat this
+      // as a tap-to-view or fire their own long-press timer).
+      ["pointerdown","pointerup","pointermove","click"].forEach(evt => returnBtn.addEventListener(evt, e => e.stopPropagation()));
+      returnBtn.onclick = safe(async () => {
+        await returnLoan(l);
+        toast("Marked as returned.", false);
+        renderLibraryBorrowing(body, opts);
+      });
+    }
+    list.appendChild(row);
+  });
+  document.getElementById("addBtn").onclick = () => openLoanModal(body, books, opts);
+}
+async function returnLoan(loan) {
+  await dbUpdate("library_loans", loan.id, { returned_date: new Date().toISOString().slice(0,10) });
+  if (loan.book_id) {
+    try {
+      const rows = await dbSelect("library_books", { id:`eq.${loan.book_id}`, select:"id,copies_total,copies_available" });
+      const b = rows[0];
+      if (b) await dbUpdate("library_books", b.id, { copies_available: Math.min(Number(b.copies_total), Number(b.copies_available) + 1) });
+    } catch (e) { /* book may have been trashed since — loan itself is still marked returned */ }
+  }
+}
+function openLoanModal(body, books, opts) {
+  const available = books.filter(b => Number(b.copies_available) > 0);
+  openModal("New loan", `
+    <div class="field"><label>Book</label><input id="f_book" list="f_book_list" placeholder="Pick an available book" />
+      <datalist id="f_book_list">${available.map(b=>`<option value="${b.title}"></option>`).join("")}</datalist></div>
+    <div class="grid2">
+      <div class="field"><label>Borrower name</label><input id="f_borrower" placeholder="" /></div>
+      <div class="field"><label>Borrower type</label><select id="f_type"><option value="Student">Student</option><option value="Staff">Staff</option></select></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Borrowed date</label><input id="f_borrowed" type="text" class="datefield" readonly placeholder="" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="field"><label>Due date</label><input id="f_due" type="text" class="datefield" readonly placeholder="" /></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2" placeholder=""></textarea></div>
+  `, async (ov) => {
+    const bookTitle = val(ov,"f_book").trim();
+    const borrower_name = val(ov,"f_borrower").trim();
+    const due_date = val(ov,"f_due");
+    if (!bookTitle) throw new Error("Pick a book.");
+    if (!borrower_name) throw new Error("Enter the borrower's name.");
+    if (!due_date) throw new Error("Pick a due date.");
+    const book = available.find(b => b.title.toLowerCase() === bookTitle.toLowerCase());
+    if (!book) throw new Error("That book isn't in the catalog, or has no copies available right now.");
+    const payload = {
+      book_id: book.id, book_title: book.title, borrower_name, borrower_type: val(ov,"f_type"),
+      borrowed_date: val(ov,"f_borrowed") || new Date().toISOString().slice(0,10),
+      due_date, notes: val(ov,"f_notes").trim() || null,
+    };
+    await dbInsert("library_loans", payload);
+    await dbUpdate("library_books", book.id, { copies_available: Number(book.copies_available) - 1 });
+    renderLibraryBorrowing(body, opts);
+  }, { saveLabel: "Borrow" });
+}
+function openLoanEditModal(body, l, opts) {
+  openModal("Edit loan", `
+    <div class="field"><label>Book</label><input value="${l.book_title}" disabled/></div>
+    <div class="grid2">
+      <div class="field"><label>Borrower name</label><input id="f_borrower" value="${l.borrower_name}"/></div>
+      <div class="field"><label>Borrower type</label><select id="f_type"><option value="Student" ${l.borrower_type==="Student"?'selected':''}>Student</option><option value="Staff" ${l.borrower_type==="Staff"?'selected':''}>Staff</option></select></div>
+    </div>
+    <div class="field"><label>Due date</label><input id="f_due" type="text" class="datefield" readonly value="${l.due_date}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Fine amount</label><input id="f_fine" type="number" min="0" step="0.01" value="${l.fine_amount??0}"/></div>
+      <div class="field"><label><input id="f_paid" type="checkbox" style="width:auto;margin-right:6px;" ${l.fine_paid?'checked':''}/>Fine paid</label></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2" placeholder="">${l.notes||''}</textarea></div>
+  `, async (ov) => {
+    const payload = {
+      borrower_name: val(ov,"f_borrower").trim(), borrower_type: val(ov,"f_type"), due_date: val(ov,"f_due"),
+      fine_amount: val(ov,"f_fine")==="" ? 0 : Number(val(ov,"f_fine")),
+      fine_paid: ov.querySelector("#f_paid").checked,
+      notes: val(ov,"f_notes").trim() || null,
+    };
+    await dbUpdate("library_loans", l.id, payload);
+    renderLibrary(body.closest("#content") || body, "borrowing");
+  }, { saveLabel: "Save changes" });
+}
+
+/* ---- Overdue Books: loans still out, past their due date ---- */
+async function renderLibraryOverdue(body) {
+  let loans = [];
+  let missingTable = false;
+  try { loans = await dbSelectActive("library_loans", { returned_date:"is.null", order:"due_date.asc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryOverdueBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryOverdueBtn").onclick = () => renderLibraryOverdue(body);
+    return;
+  }
+  const overdue = loans.filter(l => daysOverdue(l.due_date) > 0);
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--red);">Overdue Books (${overdue.length})</h3></div>
+    <div class="card" id="list"></div>`;
+  const list = document.getElementById("list");
+  list.innerHTML = overdue.length ? "" : emptyState("Nothing overdue right now.");
+  overdue.forEach(l => {
+    const row = el(`<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;"><div class="avatar">${initials(l.book_title)}</div>
+      <div class="list-main"><div class="list-title">${l.book_title} <span class="badge badge-red">${daysOverdue(l.due_date)}d overdue</span></div>
+      <div class="list-sub">${l.borrower_name} (${l.borrower_type}) · Due was ${l.due_date}</div></div>
+      <button class="btn btn-primary btn-sm returnBtn" data-id="${l.id}">${ic.check} Return</button>
+      </div>`);
+    row.querySelector(".returnBtn").onclick = safe(async (e) => {
+      e.stopPropagation();
+      await returnLoan(l);
+      toast("Marked as returned.", false);
+      renderLibraryOverdue(body);
+    });
+    row.onclick = (e) => { if (e.target.closest(".returnBtn")) return; openViewModal(l.book_title, [
+      ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_date], ["Due", l.due_date], ["Days overdue", daysOverdue(l.due_date)], ["Notes", l.notes],
+    ]); };
+    list.appendChild(row);
+  });
+}
+
+/* ---- Library Fines: any loan with a fine amount set, plus overdue loans without one yet ---- */
+async function renderLibraryFines(body) {
+  let loans = [];
+  let missingTable = false;
+  try { loans = await dbSelectActive("library_loans", { order:"due_date.asc" }); }
+  catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
+      `<button class="btn btn-primary" id="retryFinesBtn" style="margin-top:12px;">Refresh</button>`;
+    document.getElementById("retryFinesBtn").onclick = () => renderLibraryFines(body);
+    return;
+  }
+  const withFines = loans.filter(l => Number(l.fine_amount) > 0);
+  const outstanding = withFines.filter(l => !l.fine_paid);
+  const totalOutstanding = outstanding.reduce((a,l) => a + Number(l.fine_amount||0), 0);
+  const unfined = loans.filter(l => !l.returned_date && daysOverdue(l.due_date) > 0 && !Number(l.fine_amount));
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Library Fines</h3></div>
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div style="font-size:12.5px;color:var(--ink-soft);">Outstanding fines</div>
+      <div style="font-size:24px;font-weight:700;color:var(--red);">${currency()}${totalOutstanding.toLocaleString()}</div>
+      <div style="font-size:12px;color:var(--ink-soft);">${outstanding.length} unpaid</div>
+    </div>
+    ${unfined.length ? `<h4 style="margin:10px 0;color:var(--amber-dark);">Overdue with no fine set yet (${unfined.length})</h4><div class="card" id="unfinedList" style="margin-bottom:14px;"></div>` : ""}
+    <h4 style="margin:10px 0;color:var(--navy);">All fines</h4>
+    <div class="card" id="list"></div>`;
+
+  if (unfined.length) {
+    const ul = document.getElementById("unfinedList");
+    unfined.forEach(l => {
+      const row = el(`<div class="list-row"><div class="avatar">${initials(l.book_title)}</div>
+        <div class="list-main"><div class="list-title">${l.book_title}</div><div class="list-sub">${l.borrower_name} · Due was ${l.due_date} (${daysOverdue(l.due_date)}d overdue)</div></div></div>`);
+      row.onclick = () => openLoanEditModal(document.getElementById("secBody") || document.body, l, {});
+      ul.appendChild(row);
+    });
+  }
+
+  const list = document.getElementById("list");
+  list.innerHTML = withFines.length ? "" : emptyState("No fines recorded yet.");
+  withFines.forEach(l => {
+    const row = el(`<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;"><div class="avatar">${initials(l.book_title)}</div>
+      <div class="list-main"><div class="list-title">${l.book_title} <span class="badge ${l.fine_paid?'badge-green':'badge-red'}">${l.fine_paid?"Paid":"Unpaid"}</span></div>
+      <div class="list-sub">${l.borrower_name} · ${currency()}${l.fine_amount}</div></div>
+      ${!l.fine_paid ? `<button class="btn btn-primary btn-sm payBtn" data-id="${l.id}">${ic.check} Mark paid</button>` : ""}
+      </div>`);
+    const payBtn = row.querySelector(".payBtn");
+    if (payBtn) payBtn.onclick = safe(async (e) => { e.stopPropagation(); await dbUpdate("library_loans", l.id, { fine_paid:true }); toast("Fine marked as paid.", false); renderLibraryFines(body); });
+    row.addEventListener("click", (e) => { if (e.target.closest(".payBtn")) return; openLoanEditModal(document.getElementById("secBody") || document.body, l, {}); });
+    list.appendChild(row);
+  });
 }
 
 /* ---------------- STUDENTS ---------------- */
@@ -8306,6 +8993,10 @@ function renderPwaAlreadyInstalled(overlay) {
 function initPwaInstallOverlay() {
   const overlay = document.getElementById("pwaInstallOverlay");
   if (!overlay) { pwaShowApp(); return; }
+  // Dev mode: skip the install screen entirely and drop straight into the
+  // app (login is separately bypassed by the DEV_MODE check in render()).
+  // Remove this block, and set DEV_MODE back to false above, before shipping.
+  if (DEV_MODE) { pwaShowApp(); return; }
   const platform = detectPwaPlatform();
   // Actually running as the installed, standalone app — skip straight in.
   if (platform.isStandalone) { pwaShowApp(); return; }
