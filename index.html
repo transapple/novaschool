@@ -8307,8 +8307,12 @@ function initPwaInstallOverlay() {
   const overlay = document.getElementById("pwaInstallOverlay");
   if (!overlay) { pwaShowApp(); return; }
   const platform = detectPwaPlatform();
-  // Already running as the installed app (or previously installed) — skip straight in.
-  if (platform.isStandalone || pwaWasInstalled()) { pwaShowApp(); return; }
+  // Actually running as the installed, standalone app — skip straight in.
+  if (platform.isStandalone) { pwaShowApp(); return; }
+  // Installed previously but opened in a plain browser tab this time — this
+  // tab can't show school data, so nudge back to the installed app instead
+  // of silently unlocking it here.
+  if (pwaWasInstalled()) { overlay.style.display = "flex"; renderPwaAlreadyInstalled(overlay); return; }
   overlay.style.display = "flex";
   renderPwaChecking(overlay);
   // Give Chromium a brief moment to fire "beforeinstallprompt" before painting
