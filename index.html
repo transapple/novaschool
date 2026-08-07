@@ -564,7 +564,16 @@ const SUPABASE_KEY = "sb_publishable_NfJkiWiV3eGOTWrQrztTJA_xOeby6ae";
 // an error instead of hanging indefinitely (see sb() below).
 const FETCH_TIMEOUT_MS = 8000;
 
-let DEV_MODE = true;  // ← must stay false in production: true lets anyone skip login entirely (and, with the check in initPwaInstallOverlay() near the bottom of this file, skips the install screen too)
+// DEV_MODE itself can still be flipped to true below for local testing, but
+// this guard makes that flip harmless if it's ever accidentally left in and
+// pushed to GitHub Pages (or any other real host) — it's forced back to
+// false on any hostname other than localhost/127.0.0.1/file://, which is
+// what actually matters, since that's what an installed/deployed app runs
+// against. This is the safety net; the intent is still that the line below
+// stays false in the committed code.
+const IS_LOCAL_HOST = ["localhost","127.0.0.1",""].includes(location.hostname) || location.protocol === "file:";
+let DEV_MODE = false;  // ← MUST stay false whenever real school data is in play: true skips login entirely, which means CURRENT_SCHOOL_ID never gets set — and since scopedParams()/scopedBody() only add the school_id filter when CURRENT_SCHOOL_ID is truthy, every table becomes fully unscoped across every school. Only flip this on against a throwaway/empty database.
+if (!IS_LOCAL_HOST) DEV_MODE = false;
 let auth = null;       // { access_token, user }
 let profile = null;    // { id, full_name, role }
 let cache = {};        // simple in-memory cache per tab
