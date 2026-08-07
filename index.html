@@ -3605,7 +3605,7 @@ function openModal(title, fieldsHtml, onSave, opts={}) {
 const val = (overlay, id) => overlay.querySelector("#"+id).value;
 
 /* ---------------- VIEW MODAL (short click) ---------------- */
-function openViewModal(title, rows, onEdit) {
+function openViewModal(title, rows, onEdit, extraButtons=[]) {
   const overlay = el(`<div class="overlay"><div class="modal">
     <button class="modal-close">&times;</button>
     <h3>${title}</h3>
@@ -3614,6 +3614,7 @@ function openViewModal(title, rows, onEdit) {
     `).join("")}</div>
     <div class="form-actions">
       <button class="btn btn-ghost" id="modalCancel">Close</button>
+      ${extraButtons.map((b,i)=>`<button class="btn ${b.primary?'btn-primary':'btn-ghost'}" id="modalExtra${i}">${b.icon||''} ${b.label}</button>`).join("")}
       ${onEdit ? `<button class="btn btn-primary" id="modalEditBtn">${ic.edit} Edit</button>` : ""}
     </div>
   </div></div>`);
@@ -3623,6 +3624,7 @@ function openViewModal(title, rows, onEdit) {
   overlay.querySelector(".modal-close").onclick = close;
   overlay.querySelector("#modalCancel").onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  extraButtons.forEach((b,i) => { overlay.querySelector(`#modalExtra${i}`).onclick = () => { close(); b.onClick(); }; });
   const editBtn = overlay.querySelector("#modalEditBtn");
   if (editBtn) editBtn.onclick = () => { close(); onEdit(); };
   return overlay;
@@ -5862,11 +5864,7 @@ async function renderStudents(container, opts={}) {
       <div class="list-main"><div class="list-title">${s.full_name}</div>
       <div class="list-sub">${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
       <span class="badge ${s.status==='active'?'badge-green':'badge-grey'}">${s.status}</span>
-      <button type="button" class="chat-icon-btn" title="Chat with parent">${ic.chat}</button>
     </div>`);
-    const chatBtn = row.querySelector(".chat-icon-btn");
-    chatBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-    chatBtn.addEventListener("click", (e) => { e.stopPropagation(); openParentChat(s); });
     const view = () => openViewModal(s.full_name, [
       ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
       ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
@@ -5876,7 +5874,8 @@ async function renderStudents(container, opts={}) {
       ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
       ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
       ["Status", s.status],
-    ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null);
+    ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null,
+      [{ label:"Chat with parent", icon:ic.chat, primary:true, onClick:() => openParentChat(s) }]);
     const edit = canManageStudents ? (() => openStudentModal(container, classes, s)) : null;
     const del = canManageStudents ? (async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter,sortBy}); })(); }) : null;
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
@@ -7312,14 +7311,61 @@ const COMMS_MESSAGE_TYPES = [
 async function renderComms(container, sub="messages") {
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
-  [["messages","Messages"],["meeting","Meetings"]].forEach(([id,label])=>{
+  [["messages","Messages"],["meeting","Meetings"],["chats","Chat History"]].forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
     p.onclick = () => renderComms(container, id);
     pills.appendChild(p);
   });
   const body = document.getElementById("secBody");
   if (sub === "meeting") renderMeetingsAdminList(body, container);
+  else if (sub === "chats") renderChatHistory(body, container);
   else renderCommsList(body, container);
+}
+/* ---- Chat History: every parent-chat thread this staff member has been part
+   of (see openChatThread / openParentChat) — private_messages already keeps
+   every message permanently, this just gives it a browsable home instead of
+   only being reachable by reopening a specific student's profile. ---- */
+async function renderChatHistory(body, container) {
+  let msgs = [];
+  let missingTable = false;
+  try {
+    msgs = await dbSelect("private_messages", { recipient_id:`eq.${profile.id}`, order:"created_at.desc", limit:"500", select:"*,students(full_name,photo_url)" });
+  } catch (e) { missingTable = true; }
+
+  if (missingTable) {
+    body.innerHTML = missingSetupHtml("Chat isn't available for your school yet.");
+    return;
+  }
+
+  // Group into threads by (parent + student) — that's the same key
+  // openChatThread queries by, so each group here is exactly one thread.
+  const threads = new Map();
+  msgs.forEach(m => {
+    const key = `${m.parent_id}::${m.student_id||''}`;
+    if (!threads.has(key)) threads.set(key, { parent_id:m.parent_id, parent_name:m.parent_name, student_id:m.student_id, student_name: m.students?.full_name || null, messages:[] });
+    threads.get(key).messages.push(m);
+  });
+  const list = [...threads.values()].map(t => {
+    const last = t.messages[0]; // already sorted desc
+    const unread = t.messages.filter(m => m.status === "unread" && m.sender_role === "parent").length;
+    return { ...t, last, unread };
+  }).sort((a,b) => new Date(b.last.created_at) - new Date(a.last.created_at));
+
+  body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Chat History</h3></div>
+    <div class="card" id="threadList"></div>`;
+  const threadList = document.getElementById("threadList");
+  threadList.innerHTML = list.length ? "" : emptyState("No parent chats yet — start one from a student's full profile.");
+  list.forEach(t => {
+    const row = el(`<div class="list-row">${avatarHtml(t.parent_name, null)}
+      <div class="list-main"><div class="list-title">${t.parent_name}${t.student_name ? ` <span style="font-weight:600;color:var(--ink-soft);font-size:12.5px;">— ${t.student_name}</span>` : ""} ${t.unread ? `<span class="badge badge-red">${t.unread} new</span>` : ""}</div>
+      <div class="list-sub">${(t.last.sender_role==="parent"?"":"You: ")}${String(t.last.message||"").slice(0,60)}${String(t.last.message||"").length>60?"…":""} · ${formatDate(t.last.created_at)}</div></div></div>`);
+    row.onclick = () => openChatThread(
+      { id:t.parent_id, full_name:t.parent_name },
+      t.student_id ? { id:t.student_id, full_name:t.student_name } : null,
+      () => renderChatHistory(body, container)
+    );
+    threadList.appendChild(row);
+  });
 }
 async function renderCommsList(body, container) {
   let items = [];
