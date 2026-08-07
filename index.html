@@ -586,6 +586,7 @@ let cache = {};        // simple in-memory cache per tab
 let CURRENT_SCHOOL_ID = null;
 const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff", "school_support_messages"]);
 let tab = "dashboard";
+let pendingSubTab = null; // set just before render() to land a tab straight on a specific sub-page (see goToChatHistory)
 let loading = false;
 let pinLocked = false; // true when a remembered session was restored and is waiting on a PIN unlock
 let showSupportPortal = false; // true when someone taps "Contact" from the suspension screen, to reach TransApple support even while the school is blocked
@@ -2826,7 +2827,16 @@ function render() {
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
   const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, inventory: renderInventory, library: renderLibrary, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
-  (renderers[tab] || renderDashboard)(content).catch(errShow(content));
+  const initialSub = pendingSubTab; pendingSubTab = null;
+  (renderers[tab] || renderDashboard)(content, initialSub || undefined).catch(errShow(content));
+}
+// Jumps straight to Comms → Chat History — used after sending a quick
+// message from a student's profile (see openParentQuickCompose) so the
+// staff member lands on the full, persistent record of every parent chat.
+function goToChatHistory() {
+  pendingSubTab = "chats";
+  tab = "comms";
+  render();
 }
 // Bottom-sheet shown when the mobile "More" nav icon is tapped — lists
 // whatever didn't fit in BOTTOMNAV_PRIMARY_IDS (Staff, Setup, School Health,
@@ -3715,7 +3725,11 @@ async function getLinkedParentsForStudent(studentId) {
   const links = await dbSelect("parent_students", { student_id:`eq.${studentId}`, select:"profiles(id,full_name,username,phone,photo_url,deleted_at)" });
   return links.map(l => l.profiles).filter(p => p && !p.deleted_at);
 }
-async function openParentChat(student) {
+// Resolves which parent account a message about `student` should go to —
+// shared by both the full chat thread entry point (openParentChat) and the
+// quick-compose FAB (openParentQuickCompose) below, so the "no account
+// linked yet" / "which parent?" handling only lives in one place.
+async function resolveParentForStudent(student, onResolved) {
   let parents = [];
   try { parents = await getLinkedParentsForStudent(student.id); }
   catch (e) { toast("Couldn't load this child's parent account."); return; }
@@ -3727,18 +3741,97 @@ async function openParentChat(student) {
     `);
     return;
   }
-  if (parents.length === 1) { openChatThread(parents[0], student); return; }
-  const overlay = openInfoModal(`Chat with ${student.full_name}'s parent`, `
+  if (parents.length === 1) { onResolved(parents[0]); return; }
+  const overlay = openInfoModal(`Message ${student.full_name}'s parent`, `
     <div class="tiny-note" style="text-align:left;margin:0 0 10px;">More than one parent account is linked to this child. Choose who to message.</div>
     <div id="parentPickList"></div>
   `, "Cancel");
   const list = overlay.querySelector("#parentPickList");
   parents.forEach(p => {
     const row = el(`<div class="list-row" style="cursor:pointer;">${avatarHtml(p.full_name,p.photo_url)}<div class="list-main"><div class="list-title">${p.full_name}</div><div class="list-sub">${p.phone||''}</div></div></div>`);
-    row.onclick = () => { overlay.remove(); openChatThread(p, student); };
+    row.onclick = () => { overlay.remove(); onResolved(p); };
     list.appendChild(row);
   });
 }
+async function openParentChat(student) {
+  resolveParentForStudent(student, (p) => openChatThread(p, student));
+}
+
+/* ---- Floating draggable chat FAB + quick-compose ----
+   Entry point for texting a parent from a student's full profile: a small
+   circular button that floats over the screen (drag it out of the way if
+   it's covering something), a short tap opens a lightweight "type and send"
+   panel (not the full scrollable thread — that's for revisiting history),
+   and sending drops the staff member straight into Comms → Chat History so
+   they land on the full, permanent record of every parent conversation. */
+function attachDraggableChatFab(onTap) {
+  // Anchored bottom-left by default — the existing "+" add FAB already
+  // lives bottom-right (see addFab), so this avoids the two overlapping.
+  const fab = el(`<button type="button" class="fab chat-fab" style="left:18px;right:auto;bottom:110px;">${ic.chat}</button>`);
+  fab.style.zIndex = 200; // above the .overlay (z-index 100) it floats over
+  document.body.appendChild(fab);
+  let startX=0, startY=0, origLeft=0, origBottom=0, moved=false;
+  const DRAG_TOL = 8;
+  fab.addEventListener("pointerdown", (e) => {
+    moved = false;
+    startX = e.clientX; startY = e.clientY;
+    const rect = fab.getBoundingClientRect();
+    origLeft = rect.left;
+    origBottom = window.innerHeight - rect.bottom;
+    fab.setPointerCapture(e.pointerId);
+  });
+  fab.addEventListener("pointermove", (e) => {
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (Math.abs(dx) > DRAG_TOL || Math.abs(dy) > DRAG_TOL) moved = true;
+    if (moved) {
+      fab.style.left = Math.min(window.innerWidth - 60, Math.max(6, origLeft + dx)) + "px";
+      fab.style.bottom = Math.max(6, origBottom + dy) + "px";
+    }
+  });
+  fab.addEventListener("pointerup", () => { if (!moved) onTap(); });
+  return fab;
+}
+function openParentQuickCompose(student) {
+  const fab = attachDraggableChatFab(() => {
+    resolveParentForStudent(student, (parent) => {
+      fab.style.display = "none";
+      const overlay = el(`<div class="overlay"><div class="modal" style="max-width:420px;">
+        <button class="modal-close">&times;</button>
+        <h3>${ic.chat} Message ${parent.full_name}</h3>
+        <div class="tiny-note" style="text-align:left;margin:0 0 10px;">Regarding ${student.full_name}</div>
+        <textarea id="quickMsg" rows="4" placeholder="Type your message…" style="width:100%;"></textarea>
+        <div class="form-actions">
+          <button class="btn btn-ghost" id="qCancel">Cancel</button>
+          <button class="btn btn-primary" id="qSend">${ic.chat} Send</button>
+        </div>
+      </div></div>`);
+      document.body.appendChild(overlay);
+      enableModalKeyboardHandling(overlay);
+      const closeCompose = () => { overlay.remove(); fab.style.display = ""; };
+      overlay.querySelector(".modal-close").onclick = closeCompose;
+      overlay.querySelector("#qCancel").onclick = closeCompose;
+      overlay.onclick = (e) => { if (e.target === overlay) closeCompose(); };
+      overlay.querySelector("#qSend").onclick = safe(async () => {
+        const message = overlay.querySelector("#quickMsg").value.trim();
+        if (!message) throw new Error("Type a message first.");
+        await dbInsert("private_messages", {
+          parent_id: parent.id, parent_name: parent.full_name,
+          recipient_id: profile.id, recipient_name: profile.full_name,
+          subject: `Chat — ${student.full_name}`,
+          message, sender_role: "staff",
+          student_id: student.id,
+        });
+        overlay.remove();
+        fab.remove();
+        document.querySelectorAll(".overlay").forEach(o => o.remove()); // also closes the student profile modal underneath
+        toast("Message sent.", false);
+        goToChatHistory();
+      });
+    });
+  });
+  return fab;
+}
+
 // Shared two-way chat thread, used both when staff open it from a child's
 // record and when a parent opens it from their own "Private Contact" page.
 // `other` is the person on the far end of the conversation; `student` is
@@ -5865,17 +5958,28 @@ async function renderStudents(container, opts={}) {
       <div class="list-sub">${s.admission_no} · ${s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'}</div></div>
       <span class="badge ${s.status==='active'?'badge-green':'badge-grey'}">${s.status}</span>
     </div>`);
-    const view = () => openViewModal(s.full_name, [
-      ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
-      ["Gender", s.gender], ["Date of birth", s.dob],
-      ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
-      ["Medical information", s.medical_info],
-      ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
-      ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
-      ["Status", s.status],
-    ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null,
-      [{ label:"Chat with parent", icon:ic.chat, primary:true, onClick:() => openParentChat(s) }]);
+    const view = () => {
+      const overlay = openViewModal(s.full_name, [
+        ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
+        ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
+        ["Gender", s.gender], ["Date of birth", s.dob],
+        ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
+        ["Medical information", s.medical_info],
+        ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
+        ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
+        ["Status", s.status],
+      ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null);
+      // Floating, draggable "message parent" bubble over this student's
+      // profile — a short tap opens a quick compose panel; it's removed
+      // whichever way the profile modal closes (X, Cancel, backdrop, Edit).
+      const fab = openParentQuickCompose(s);
+      const cleanup = () => fab.remove();
+      overlay.querySelector(".modal-close").addEventListener("click", cleanup);
+      overlay.querySelector("#modalCancel").addEventListener("click", cleanup);
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) cleanup(); });
+      const editBtn = overlay.querySelector("#modalEditBtn");
+      if (editBtn) editBtn.addEventListener("click", cleanup);
+    };
     const edit = canManageStudents ? (() => openStudentModal(container, classes, s)) : null;
     const del = canManageStudents ? (async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter,sortBy}); })(); }) : null;
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
