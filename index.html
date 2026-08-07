@@ -8767,7 +8767,24 @@ if ("serviceWorker" in navigator) {
   const swBlob = new Blob([swSource], { type: "application/javascript" });
   const swUrl = URL.createObjectURL(swBlob);
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(swUrl).catch((err) => console.warn("SW registration failed:", err));
+    navigator.serviceWorker.register(swUrl).then((reg) => {
+      // Re-check for a new service worker (i.e. new deployed code) every
+      // time the installed app is brought back to the foreground — this is
+      // what makes an already-installed PWA actually notice an update
+      // instead of running whatever it happened to load at last launch.
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(()=>{}); });
+    }).catch((err) => console.warn("SW registration failed:", err));
+  });
+  // Once a new service worker activates and takes control (skipWaiting() +
+  // clients.claim() in the SW above make this happen promptly), reload so
+  // the already-open app actually picks up the new HTML/JS instead of
+  // continuing to run the old version it has in memory. Guarded so a
+  // fresh install (no prior controller) doesn't trigger a pointless reload.
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swReloaded) return;
+    swReloaded = true;
+    window.location.reload();
   });
 }
 
