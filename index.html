@@ -1282,7 +1282,7 @@ create function reset_password(p_username text, p_pin text, p_new_password text)
 language plpgsql security definer as $reset_password$
 declare found_row profiles;
 begin
-  select * into found_row from profiles where username = p_username;
+  select * into found_row from profiles where lower(username) = lower(p_username);
   if found_row.id is null then
     raise exception 'No account found with that username.';
   end if;
@@ -1884,7 +1884,7 @@ begin
   return new_admin;
 end;
 $register_school$;
-grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;
+grant execute on function register_school(text,text,text,text,text,text,text,text,text,text,text,text,text,text) to anon, authenticated;
 
 -- Moves full ownership authority from the current owner to another active
 -- Administration-department account at the same school. Verified against the
@@ -2070,7 +2070,7 @@ create function verify_login(p_username text, p_password text) returns profiles
 language plpgsql security definer as $verify_login$
 declare found_row profiles; school_row schools;
 begin
-  select * into found_row from profiles where username = p_username;
+  select * into found_row from profiles where lower(username) = lower(p_username);
   if found_row.id is null or found_row.password_hash is null
      or crypt(p_password, found_row.password_hash) <> found_row.password_hash then
     if to_regclass('school_login_log') is not null then
@@ -2955,7 +2955,7 @@ function renderSchoolRegistration() {
     const schoolDistrict = document.getElementById("r_district").value.trim();
     const schoolSizeRange = document.getElementById("r_sizeRange").value;
     const adminFullName = document.getElementById("r_adminName").value.trim();
-    const adminUsername = document.getElementById("r_adminUsername").value.trim();
+    const adminUsername = document.getElementById("r_adminUsername").value.trim().toLowerCase();
     const adminPhone = document.getElementById("r_adminPhone").value.trim();
     const adminWhatsapp = document.getElementById("r_adminWhatsapp").value.trim();
     const adminEmail = document.getElementById("r_adminEmail").value.trim();
@@ -3051,7 +3051,7 @@ function renderLogin() {
         <div class="auth-footer-row muted">Don't see your school? <span class="link-btn" id="toRegisterSchool" style="cursor:pointer">Register it here</span></div>
       `;
       document.getElementById("submitBtn").onclick = async () => {
-        const username = document.getElementById("username").value.trim();
+        const username = document.getElementById("username").value.trim().toLowerCase();
         const password = document.getElementById("password").value;
         const remember = document.getElementById("remember").checked;
         const msg = document.getElementById("loginMsg");
@@ -3087,7 +3087,7 @@ function renderLogin() {
         <div class="auth-footer-row">Remembered it? <span class="link-btn" id="toLogin2" style="cursor:pointer">Back to log in</span></div>
       `;
       document.getElementById("resetBtn").onclick = async () => {
-        const username = document.getElementById("f_username").value.trim();
+        const username = document.getElementById("f_username").value.trim().toLowerCase();
         const pin = document.getElementById("f_pin").value.trim();
         const new_password = document.getElementById("f_newpass").value;
         const confirmPass = document.getElementById("f_newpass2").value;
@@ -3237,7 +3237,7 @@ function renderLogin() {
       };
       document.getElementById("submitBtn").onclick = async () => {
         const full_name = document.getElementById("fname").value.trim();
-        const username = document.getElementById("username").value.trim();
+        const username = document.getElementById("username").value.trim().toLowerCase();
         const phone = document.getElementById("phone").value.trim();
         const password = document.getElementById("password").value;
         const password2 = document.getElementById("password2").value;
