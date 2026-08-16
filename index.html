@@ -6133,7 +6133,9 @@ async function renderTeachers(container, opts={}) {
       ["Emergency contact", t.emergency_name], ["Emergency relationship", t.emergency_relationship], ["Emergency phone", t.emergency_phone],
       ["Class teacher of", classNames || "Not assigned to a class"],
       ["Status", t.status],
-    ], () => openTeacherModal(container, t));
+    ], () => openTeacherModal(container, t), [
+      { label:"Full profile", icon:ic.teacher, onClick: () => renderTeacherProfile(container, t).catch(errShow(container)) },
+    ]);
     const edit = () => openTeacherModal(container, t);
     const del = async () => { if (await customConfirm(`Move ${t.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teachers", t.id); renderTeachers(container,{search,sortBy}); })(); };
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
@@ -6209,6 +6211,265 @@ function openTeacherModal(container, t) {
     const genderSelect = document.getElementById("f_gender");
     genderSelect.onchange = () => { staffInput.value = nextIdFor("teacher", genderSelect.value); };
   }
+}
+
+/* ---------------- TEACHER PROFESSIONAL PROFILE ----------------
+   Extends a "teachers" (Staff) record with career detail, qualifications and
+   documents, WITHOUT adding any columns to the existing `teachers` table and
+   WITHOUT a new nav id — it's reached via "Full profile" inside the existing
+   Staff list's view modal, so no changes to DEPARTMENTS/NAV/access control
+   were needed. Reuses the same dbSelect/dbInsert/dbUpdate/softDelete helpers,
+   modal/list-row/pill patterns, and school_id auto-scoping as every other
+   module in this app.
+   Run TEACHER_PROFILE_SQL once in Supabase → SQL Editor before using this. */
+const TEACHER_PROFILE_SQL = `-- Teacher Professional Profile: run once in Supabase -> SQL Editor.
+-- Adds new tables only; does not alter the existing teachers table.
+
+create table if not exists teacher_profiles (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null,
+  teacher_id uuid not null references teachers(id) on delete cascade,
+  date_of_birth date,
+  date_joined date,
+  employment_type text,
+  professional_reg_no text,
+  years_experience int,
+  subjects_specialization text,
+  bio text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (teacher_id)
+);
+alter table teacher_profiles enable row level security;
+drop policy if exists "Anyone can read teacher_profiles" on teacher_profiles;
+create policy "Anyone can read teacher_profiles" on teacher_profiles for select using (true);
+drop policy if exists "Authenticated can manage teacher_profiles" on teacher_profiles;
+create policy "Authenticated can manage teacher_profiles" on teacher_profiles for all using (true);
+
+create table if not exists teacher_qualifications (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null,
+  teacher_id uuid not null references teachers(id) on delete cascade,
+  qualification_name text not null,
+  institution text,
+  year_obtained int,
+  certificate_url text,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table teacher_qualifications enable row level security;
+drop policy if exists "Anyone can read teacher_qualifications" on teacher_qualifications;
+create policy "Anyone can read teacher_qualifications" on teacher_qualifications for select using (true);
+drop policy if exists "Authenticated can manage teacher_qualifications" on teacher_qualifications;
+create policy "Authenticated can manage teacher_qualifications" on teacher_qualifications for all using (true);
+
+create table if not exists teacher_documents (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null,
+  teacher_id uuid not null references teachers(id) on delete cascade,
+  doc_type text,
+  title text not null,
+  file_url text not null,
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table teacher_documents enable row level security;
+drop policy if exists "Anyone can read teacher_documents" on teacher_documents;
+create policy "Anyone can read teacher_documents" on teacher_documents for select using (true);
+drop policy if exists "Authenticated can manage teacher_documents" on teacher_documents;
+create policy "Authenticated can manage teacher_documents" on teacher_documents for all using (true);
+
+-- NOTE: RLS above intentionally mirrors every other table in this app
+-- ("using (true)") since there is no Supabase Auth session for a policy to
+-- check against here (see sb()/verify_login()) -- these policies do not
+-- actually restrict who can read/write on their own. Worth tightening before
+-- storing sensitive documents (contracts, IDs, disciplinary letters) here.
+-- teacher_documents.file_url stores a base64 data: URL, same pattern as
+-- photo_url elsewhere in this app -- fine for small PDFs/images; a real
+-- Supabase Storage bucket would scale better for larger files.
+`;
+
+async function renderTeacherProfile(container, teacher) {
+  container.innerHTML = `
+    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Staff</button>
+    <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+      ${avatarHtml(teacher.full_name, teacher.photo_url, 56)}
+      <div>
+        <div style="font-weight:800;font-size:16px;color:var(--navy-2);">${teacher.full_name}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);">${teacher.specialty||'General'} ${teacher.staff_no?('· '+teacher.staff_no):''}</div>
+      </div>
+      <span class="badge ${teacher.status==='active'?'badge-green':'badge-grey'}" style="margin-left:auto;">${teacher.status}</span>
+    </div>
+    <div class="pill-row" id="tpPills"></div>
+    <div id="tpBody"><div class="center-loading">Loading…</div></div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderTeachers(container).catch(errShow(container));
+  const sub = "overview";
+  wireTeacherProfilePills(container, teacher, sub);
+}
+function wireTeacherProfilePills(container, teacher, sub) {
+  const pills = document.getElementById("tpPills");
+  pills.innerHTML = "";
+  [["overview","Overview"],["qualifications","Qualifications"],["documents","Documents"]].forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderTeacherProfileTab(container, teacher, id);
+    pills.appendChild(p);
+  });
+  renderTeacherProfileTab(container, teacher, sub, /*skipPills*/true);
+}
+function renderTeacherProfileTab(container, teacher, sub, skipPills) {
+  if (!skipPills) wireTeacherProfilePills(container, teacher, sub);
+  const body = document.getElementById("tpBody");
+  if (!body) return;
+  body.innerHTML = `<div class="center-loading">Loading…</div>`;
+  if (sub === "qualifications") return renderTeacherQualifications(body, container, teacher).catch(errShow(body));
+  if (sub === "documents") return renderTeacherDocuments(body, container, teacher).catch(errShow(body));
+  return renderTeacherProfileOverview(body, container, teacher).catch(errShow(body));
+}
+
+/* ---- Overview: career/professional detail (1:1 with the teacher record) ---- */
+async function renderTeacherProfileOverview(body, container, teacher) {
+  const rows = await dbSelect("teacher_profiles", { teacher_id:`eq.${teacher.id}` }).catch(()=>[]);
+  const p = rows[0] || null;
+  body.innerHTML = `<div class="card" id="tpOverviewCard"></div>`;
+  const card = document.getElementById("tpOverviewCard");
+  const viewRows = [
+    ["Date of birth", p?.date_of_birth], ["Date joined", p?.date_joined],
+    ["Employment type", p?.employment_type], ["Professional reg. no.", p?.professional_reg_no],
+    ["Years of experience", p?.years_experience], ["Subject specialization", p?.subjects_specialization],
+    ["Bio", p?.bio],
+  ].filter(([,v]) => v !== undefined && v !== null && v !== "");
+  card.innerHTML = viewRows.length
+    ? viewRows.map(([label,value])=>`<div class="view-row"><div class="vlabel">${label}</div><div class="vvalue">${value}</div></div>`).join("")
+    : emptyState("No professional details added yet.");
+  const editBtn = el(`<button class="btn btn-primary btn-sm" style="margin-top:12px;">${ic.edit} ${p?'Edit':'Add'} details</button>`);
+  editBtn.onclick = () => openTeacherProfileModal(body, container, teacher, p);
+  card.appendChild(editBtn);
+}
+function openTeacherProfileModal(body, container, teacher, p) {
+  openModal(p ? "Edit professional details" : "Add professional details", `
+    <div class="grid2">
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="date" value="${p?.date_of_birth||''}"/></div>
+      <div class="field"><label>Date joined</label><input id="f_joined" type="date" value="${p?.date_joined||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Employment type</label><select id="f_emptype">
+        <option value="">— Select —</option>
+        ${["Full-time","Part-time","Contract","Volunteer"].map(v=>`<option value="${v}" ${p?.employment_type===v?'selected':''}>${v}</option>`).join("")}
+      </select></div>
+      <div class="field"><label>Professional reg. no.</label><input id="f_regno" value="${p?.professional_reg_no||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Years of experience</label><input id="f_years" type="number" min="0" value="${p?.years_experience??''}"/></div>
+      <div class="field"><label>Subject specialization</label><input id="f_subj" value="${p?.subjects_specialization||''}"/></div>
+    </div>
+    <div class="field"><label>Bio</label><textarea id="f_bio" rows="3">${p?.bio||''}</textarea></div>
+  `, async (ov) => {
+    const payload = {
+      teacher_id: teacher.id,
+      date_of_birth: val(ov,"f_dob") || null, date_joined: val(ov,"f_joined") || null,
+      employment_type: val(ov,"f_emptype") || null, professional_reg_no: val(ov,"f_regno") || null,
+      years_experience: val(ov,"f_years") ? Number(val(ov,"f_years")) : null,
+      subjects_specialization: val(ov,"f_subj") || null, bio: val(ov,"f_bio") || null,
+      updated_at: new Date().toISOString(),
+    };
+    await dbUpsert("teacher_profiles", payload, "teacher_id");
+    renderTeacherProfileOverview(body, container, teacher);
+  }, { saveLabel: "Save" });
+}
+
+/* ---- Qualifications: certificates/degrees, one teacher has many ---- */
+async function renderTeacherQualifications(body, container, teacher) {
+  const items = await dbSelectActive("teacher_qualifications", { teacher_id:`eq.${teacher.id}`, order:"year_obtained.desc" });
+  body.innerHTML = `<div class="card" id="qList"></div>`;
+  const list = document.getElementById("qList");
+  list.innerHTML = items.length ? "" : emptyState("No qualifications added yet.");
+  items.forEach(q => {
+    const row = el(`<div class="list-row">
+      <div class="avatar">${initials(q.qualification_name)}</div>
+      <div class="list-main"><div class="list-title">${q.qualification_name}</div>
+      <div class="list-sub">${q.institution||''} ${q.year_obtained?('· '+q.year_obtained):''}</div></div>
+    </div>`);
+    const edit = () => openQualificationModal(body, container, teacher, q);
+    const del = async () => { if (await customConfirm(`Move "${q.qualification_name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teacher_qualifications", q.id); renderTeacherQualifications(body, container, teacher); })(); };
+    bindRowGestures(row, { onView:edit, onEdit:edit, onDelete:del });
+    list.appendChild(row);
+  });
+  addFab(body, () => openQualificationModal(body, container, teacher, null));
+}
+function openQualificationModal(body, container, teacher, q) {
+  const isEdit = !!q;
+  openModal(isEdit ? "Edit qualification" : "Add qualification", `
+    <div class="field"><label>Qualification</label><input id="f_qname" required value="${q?.qualification_name||''}"/></div>
+    <div class="grid2">
+      <div class="field"><label>Institution</label><input id="f_inst" value="${q?.institution||''}"/></div>
+      <div class="field"><label>Year obtained</label><input id="f_year" type="number" min="1950" max="2100" value="${q?.year_obtained||''}"/></div>
+    </div>
+    <div class="field" style="text-align:center;">
+      <label>Certificate (optional)</label>
+      <input id="f_cert" type="file" accept="image/*,.pdf"/>
+    </div>
+  `, async (ov) => {
+    requireFields(ov, [["f_qname","Qualification"]]);
+    const certFile = ov.querySelector("#f_cert").files[0];
+    const certificate_url = certFile ? await fileToDataURL(certFile) : (q?.certificate_url || null);
+    const payload = {
+      teacher_id: teacher.id, qualification_name: val(ov,"f_qname"),
+      institution: val(ov,"f_inst") || null, year_obtained: val(ov,"f_year") ? Number(val(ov,"f_year")) : null,
+      certificate_url,
+    };
+    if (isEdit) await dbUpdate("teacher_qualifications", q.id, payload); else await dbInsert("teacher_qualifications", payload);
+    renderTeacherQualifications(body, container, teacher);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
+}
+
+/* ---- Documents: contracts, IDs, letters etc. Stored as base64 data URLs,
+   same pattern the rest of this app uses for images -- see TEACHER_PROFILE_SQL
+   note above re: Supabase Storage for larger files. ---- */
+async function renderTeacherDocuments(body, container, teacher) {
+  const items = await dbSelectActive("teacher_documents", { teacher_id:`eq.${teacher.id}`, order:"created_at.desc" });
+  body.innerHTML = `<div class="card" id="docList"></div>`;
+  const list = document.getElementById("docList");
+  list.innerHTML = items.length ? "" : emptyState("No documents uploaded yet.");
+  items.forEach(d => {
+    const row = el(`<div class="list-row">
+      <div class="avatar">${initials(d.title)}</div>
+      <div class="list-main"><div class="list-title">${d.title}</div>
+      <div class="list-sub">${d.doc_type||'Document'} ${d.created_at?('· '+formatDate(d.created_at)):''}</div></div>
+    </div>`);
+    const view = () => openViewModal(d.title, [
+      ["Type", d.doc_type], ["Notes", d.notes],
+      ["File", d.file_url ? `<a href="${d.file_url}" download="${d.title}" target="_blank" rel="noopener">Open / download</a>` : ""],
+    ], () => openDocumentModal(body, container, teacher, d));
+    const del = async () => { if (await customConfirm(`Move "${d.title}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teacher_documents", d.id); renderTeacherDocuments(body, container, teacher); })(); };
+    bindRowGestures(row, { onView:view, onEdit:()=>openDocumentModal(body, container, teacher, d), onDelete:del });
+    list.appendChild(row);
+  });
+  addFab(body, () => openDocumentModal(body, container, teacher, null));
+}
+function openDocumentModal(body, container, teacher, d) {
+  const isEdit = !!d;
+  openModal(isEdit ? "Edit document" : "Add document", `
+    <div class="field"><label>Title</label><input id="f_title" required value="${d?.title||''}"/></div>
+    <div class="field"><label>Type</label><select id="f_dtype">
+      <option value="">— Select —</option>
+      ${["Contract","National ID","Certificate","CV / Resume","Letter","Other"].map(v=>`<option value="${v}" ${d?.doc_type===v?'selected':''}>${v}</option>`).join("")}
+    </select></div>
+    <div class="field" style="text-align:center;">
+      <label>File</label>
+      <input id="f_file" type="file" accept="image/*,.pdf" ${isEdit?'':'required'}/>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" rows="2">${d?.notes||''}</textarea></div>
+  `, async (ov) => {
+    requireFields(ov, [["f_title","Title"]]);
+    const file = ov.querySelector("#f_file").files[0];
+    if (!isEdit && !file) throw new Error("A file is required.");
+    const file_url = file ? await fileToDataURL(file) : (d?.file_url || null);
+    const payload = { teacher_id: teacher.id, title: val(ov,"f_title"), doc_type: val(ov,"f_dtype") || null, notes: val(ov,"f_notes") || null, file_url };
+    if (isEdit) await dbUpdate("teacher_documents", d.id, payload); else await dbInsert("teacher_documents", payload);
+    renderTeacherDocuments(body, container, teacher);
+  }, { saveLabel: isEdit ? "Save changes" : "Add" });
 }
 
 /* ---------------- ATTENDANCE ---------------- */
