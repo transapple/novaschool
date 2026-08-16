@@ -584,7 +584,7 @@ let cache = {};        // simple in-memory cache per tab
 // needed elsewhere in the app. "schools" itself is never scoped (there's only
 // ever one row per school, looked up by id, not filtered by school_id).
 let CURRENT_SCHOOL_ID = null;
-const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff", "school_support_messages"]);
+const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff", "school_support_messages", "teacher_identities"]);
 let tab = "dashboard";
 let pendingSubTab = null; // set just before render() to land a tab straight on a specific sub-page (see goToChatHistory)
 let loading = false;
@@ -6122,12 +6122,13 @@ async function renderTeachers(container, opts={}) {
     const row = el(`<div class="list-row">
       ${avatarHtml(t.full_name, t.photo_url)}
       <div class="list-main"><div class="list-title">${t.full_name}</div>
-      <div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· '+t.staff_no):''}</div></div>
+      <div class="list-sub">${t.specialty||'General'} ${t.staff_no?('· '+t.staff_no):''} ${t.nova_teacher_id?('· '+t.nova_teacher_id):''}</div></div>
       <span class="badge ${t.status==='active'?'badge-green':'badge-grey'}">${t.status}</span>
     </div>`);
     const view = () => openViewModal(t.full_name, [
       ["Photo", t.photo_url ? `<img src="${t.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["Staff no.", t.staff_no], ["Phone", t.phone], ["Gender", t.gender], ["Grade", t.grade],
+      ["Nova Teacher ID", t.nova_teacher_id],
+      ["Staff no.", t.staff_no], ["Phone", t.phone], ["Email", t.email], ["Gender", t.gender], ["Grade", t.grade],
       ["Specialty", t.specialty], ["Qualification", t.qualification],
       ["Village", t.village], ["Subcounty", t.subcounty], ["District", t.district],
       ["Emergency contact", t.emergency_name], ["Emergency relationship", t.emergency_relationship], ["Emergency phone", t.emergency_phone],
@@ -6146,6 +6147,9 @@ async function renderTeachers(container, opts={}) {
 function openTeacherModal(container, t) {
   const isEdit = !!t;
   const initialGender = t?.gender || "Male";
+  // Only set when the admin explicitly picks a match from the duplicate-check
+  // below — when set, save reuses that person's Nova ID instead of creating one.
+  let linkedIdentity = null;
   openModal(isEdit ? "Edit staff" : "Add staff", `
     <div class="field" style="text-align:center;">
       <label>Photo</label>
@@ -6156,15 +6160,25 @@ function openTeacherModal(container, t) {
       <div class="field"><label>Staff no.</label><input id="f_staffno" readonly value="${t?.staff_no || (isEdit ? '' : nextIdFor('teacher', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" required value="${t?.full_name||''}"/></div>
     </div>
+    ${isEdit ? `<div class="field"><label>Nova Teacher ID</label><input readonly value="${t?.nova_teacher_id||'—'}" style="opacity:.75;"/></div>` : `
+    <div class="grid2">
+      <div class="field"><label>National ID No. (NIN)</label><input id="f_nin" placeholder="Optional — helps avoid duplicate records"/></div>
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="date"/></div>
+    </div>
+    <div id="novaMatchBox"></div>
+    `}
     <div class="grid2">
       <div class="field"><label>Phone</label><input id="f_phone" required value="${t?.phone||''}"/></div>
+      <div class="field"><label>Email</label><input id="f_email" type="email" value="${t?.email||''}"/></div>
+    </div>
+    <div class="grid2">
       <div class="field"><label>Gender</label><select id="f_gender" required><option ${t?.gender==='Male'?'selected':''}>Male</option><option ${t?.gender==='Female'?'selected':''}>Female</option></select></div>
+      <div class="field"><label>Grade</label><input id="f_grade" required placeholder="" value="${t?.grade||''}"/></div>
     </div>
     <div class="grid2">
       <div class="field"><label>Specialty / subject</label><input id="f_spec" required value="${t?.specialty||''}"/></div>
       <div class="field"><label>Qualification</label><input id="f_qual" required value="${t?.qualification||''}"/></div>
     </div>
-    <div class="field"><label>Grade</label><input id="f_grade" required placeholder="" value="${t?.grade||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
     <div class="grid2">
@@ -6191,13 +6205,26 @@ function openTeacherModal(container, t) {
     if (!isEdit && !photoFile) throw new Error("A photo is required.");
     const photo_url = photoFile ? await fileToDataURL(photoFile) : (t?.photo_url || null);
     const payload = {
-      staff_no: val(ov,"f_staffno"), full_name: val(ov,"f_name"), phone: val(ov,"f_phone"),
+      staff_no: val(ov,"f_staffno"), full_name: val(ov,"f_name"), phone: val(ov,"f_phone"), email: val(ov,"f_email") || null,
       gender: val(ov,"f_gender"), specialty: val(ov,"f_spec"), qualification: val(ov,"f_qual"), grade: val(ov,"f_grade"),
       village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
       emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
     };
-    if (isEdit) await dbUpdate("teachers", t.id, payload); else { await dbInsert("teachers", payload); await advanceIdSeq("teacher"); }
+    if (isEdit) {
+      await dbUpdate("teachers", t.id, payload);
+    } else {
+      // Reuse a matching person's Nova ID if one exists, otherwise create one.
+      // find_or_create_teacher_identity does its own server-side dedup even if
+      // the admin never used the match box below, so a duplicate is never made.
+      const identity = linkedIdentity || await findOrCreateTeacherIdentity(
+        val(ov,"f_name"), val(ov,"f_nin"), val(ov,"f_dob") || null, val(ov,"f_gender"), photo_url
+      );
+      payload.teacher_identity_id = identity.id;
+      payload.nova_teacher_id = identity.nova_id;
+      await dbInsert("teachers", payload);
+      await advanceIdSeq("teacher");
+    }
     renderTeachers(container);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
   const photoInput = document.getElementById("f_photo");
@@ -6210,10 +6237,170 @@ function openTeacherModal(container, t) {
     const staffInput = document.getElementById("f_staffno");
     const genderSelect = document.getElementById("f_gender");
     genderSelect.onchange = () => { staffInput.value = nextIdFor("teacher", genderSelect.value); };
+    // Duplicate-check: as the admin types a name or National ID, look for an
+    // existing Nova Teacher ID that might be the same person at another school.
+    const nameInput = document.getElementById("f_name");
+    const ninInput = document.getElementById("f_nin");
+    const matchBox = document.getElementById("novaMatchBox");
+    const runMatch = debounce(async () => {
+      linkedIdentity = null;
+      const query = ninInput.value.trim() || nameInput.value.trim();
+      const matches = await searchTeacherIdentities(query);
+      if (!matches.length) { matchBox.innerHTML = ""; return; }
+      matchBox.innerHTML = `<div class="field" style="background:var(--amber-tint);border-radius:10px;padding:8px 10px;">
+        <div style="font-size:12px;font-weight:700;color:var(--amber-dark);margin-bottom:4px;">Possible existing Nova ID — is this the same teacher?</div>
+        ${matches.map(m=>`<div class="list-row" data-nova="${m.nova_id}" style="padding:6px 0;">
+          <div class="list-main"><div class="list-title" style="font-size:13px;">${m.full_name} · ${m.nova_id}</div>
+          <div class="list-sub">${m.schools || 'No other school on file'}</div></div>
+        </div>`).join("")}
+      </div>`;
+      matchBox.querySelectorAll("[data-nova]").forEach((row,i) => {
+        row.onclick = () => {
+          linkedIdentity = matches[i];
+          nameInput.value = matches[i].full_name;
+          matchBox.innerHTML = `<div class="field" style="background:var(--teal-tint);border-radius:10px;padding:8px 10px;font-size:12.5px;color:var(--teal-dark);font-weight:700;">
+            Linked to existing Nova ID ${matches[i].nova_id} — no duplicate will be created.
+          </div>`;
+        };
+      });
+    }, 400);
+    nameInput.oninput = runMatch;
+    ninInput.oninput = runMatch;
   }
 }
 
-/* ---------------- TEACHER PROFESSIONAL PROFILE ----------------
+/* ---------------- NOVA TEACHER IDENTITY (PHASE 2) ----------------
+   Gives every teacher a permanent, platform-wide "Nova Teacher ID" (e.g.
+   NOVA-TCH-000124) that survives them moving between participating schools.
+   This is deliberately a NEW, global table — NOT scoped to school_id like
+   everything else in this app (see SCHOOL_SCOPE_EXEMPT) — because the whole
+   point is that one person's identity is shared across schools.
+
+   Three layers now exist for a teacher:
+   1. profiles        -> login/authentication ("User Account"), unrelated to this.
+   2. teacher_identities -> the permanent person, one row per human being.
+   3. teachers         -> the per-school Staff/employment record (unchanged
+                          table, just gets two new columns below) — a person
+                          can have several of these (one per school) all
+                          pointing at the same teacher_identities row.
+
+   Run NOVA_TEACHER_IDENTITY_SQL once in Supabase → SQL Editor, BEFORE
+   TEACHER_PROFILE_SQL below. */
+const NOVA_TEACHER_IDENTITY_SQL = `-- Nova Teacher Identity: run once in Supabase -> SQL Editor, before TEACHER_PROFILE_SQL.
+
+create table if not exists teacher_identities (
+  id uuid primary key default gen_random_uuid(),
+  nova_id text not null unique,
+  full_name text not null,
+  national_id_no text,
+  date_of_birth date,
+  gender text,
+  photo_url text,
+  created_at timestamptz not null default now()
+);
+-- Two different national ID numbers can never share an identity; blanks are fine.
+create unique index if not exists teacher_identities_national_id_uq
+  on teacher_identities (national_id_no) where national_id_no is not null and national_id_no <> '';
+alter table teacher_identities enable row level security;
+drop policy if exists "Anyone can read teacher_identities" on teacher_identities;
+create policy "Anyone can read teacher_identities" on teacher_identities for select using (true);
+drop policy if exists "Authenticated can manage teacher_identities" on teacher_identities;
+create policy "Authenticated can manage teacher_identities" on teacher_identities for all using (true);
+
+create sequence if not exists nova_teacher_id_seq start 1;
+
+-- Link each per-school Staff record to a global identity. nova_teacher_id is
+-- a denormalized copy of teacher_identities.nova_id so lists/search never
+-- need a join. email is new too, alongside the phone this table already had.
+alter table teachers add column if not exists teacher_identity_id uuid references teacher_identities(id);
+alter table teachers add column if not exists nova_teacher_id text;
+alter table teachers add column if not exists email text;
+create index if not exists teachers_identity_idx on teachers (teacher_identity_id);
+
+-- The ONLY place a Nova ID is ever generated. Matches an existing person by
+-- National ID first (most reliable), then by exact name + date of birth, and
+-- reuses their Nova ID instead of creating a new one — this is what stops a
+-- teacher getting a duplicate identity just for joining another school.
+drop function if exists find_or_create_teacher_identity(text, text, date, text, text);
+create function find_or_create_teacher_identity(
+  p_full_name text, p_national_id_no text default null, p_date_of_birth date default null,
+  p_gender text default null, p_photo_url text default null
+) returns teacher_identities
+language plpgsql security definer as $find_or_create_teacher_identity$
+declare found teacher_identities; new_nova_id text;
+begin
+  if p_national_id_no is not null and trim(p_national_id_no) <> '' then
+    select * into found from teacher_identities where national_id_no = trim(p_national_id_no) limit 1;
+  end if;
+  if found.id is null and p_date_of_birth is not null then
+    select * into found from teacher_identities
+      where trim(lower(full_name)) = trim(lower(p_full_name)) and date_of_birth = p_date_of_birth
+      limit 1;
+  end if;
+  if found.id is not null then
+    -- Keep the identity's record current, but never blank out what's already on file.
+    update teacher_identities set
+      full_name = coalesce(nullif(trim(p_full_name), ''), full_name),
+      national_id_no = coalesce(nullif(trim(p_national_id_no), ''), national_id_no),
+      date_of_birth = coalesce(p_date_of_birth, date_of_birth),
+      gender = coalesce(nullif(p_gender, ''), gender),
+      photo_url = coalesce(nullif(p_photo_url, ''), photo_url)
+      where id = found.id returning * into found;
+    return found;
+  end if;
+  new_nova_id := 'NOVA-TCH-' || lpad(nextval('nova_teacher_id_seq')::text, 6, '0');
+  insert into teacher_identities (nova_id, full_name, national_id_no, date_of_birth, gender, photo_url)
+  values (new_nova_id, p_full_name, nullif(trim(p_national_id_no),''), p_date_of_birth, p_gender, p_photo_url)
+  returning * into found;
+  return found;
+end;
+$find_or_create_teacher_identity$;
+grant execute on function find_or_create_teacher_identity(text,text,date,text,text) to anon, authenticated;
+
+-- Powers the "check for an existing Nova ID" search in the Add Staff form —
+-- matches by name, National ID, or phone across ALL schools, so an admin can
+-- catch a likely duplicate (e.g. a typo'd National ID) before saving.
+drop function if exists search_teacher_identities(text);
+create function search_teacher_identities(p_query text)
+returns table(id uuid, nova_id text, full_name text, national_id_no text, date_of_birth date, schools text)
+language sql stable as $search_teacher_identities$
+  select ti.id, ti.nova_id, ti.full_name, ti.national_id_no, ti.date_of_birth,
+    coalesce(string_agg(distinct s.name, ', '), '') as schools
+  from teacher_identities ti
+  left join teachers t on t.teacher_identity_id = ti.id and t.deleted_at is null
+  left join schools s on s.id = t.school_id
+  where p_query is not null and trim(p_query) <> '' and (
+    ti.full_name ilike '%' || p_query || '%'
+    or ti.national_id_no ilike '%' || p_query || '%'
+    or exists (select 1 from teachers t2 where t2.teacher_identity_id = ti.id and t2.phone ilike '%' || p_query || '%')
+  )
+  group by ti.id
+  order by ti.full_name
+  limit 8;
+$search_teacher_identities$;
+grant execute on function search_teacher_identities(text) to anon, authenticated;
+
+-- One-time migration: every existing Staff row predates Nova IDs, so give
+-- each one its own identity. Each becomes its own person for now — there's
+-- no reliable field on file yet (no National ID captured historically) to
+-- safely tell whether two existing rows across schools are the same human,
+-- so the safe default is "don't guess and merge strangers together". From
+-- this point on, every NEW teacher goes through find_or_create_teacher_identity()
+-- above, so real duplicates are prevented going forward.
+do $$
+declare r record; new_nova_id text; new_identity_id uuid;
+begin
+  for r in select * from teachers where teacher_identity_id is null loop
+    new_nova_id := 'NOVA-TCH-' || lpad(nextval('nova_teacher_id_seq')::text, 6, '0');
+    insert into teacher_identities (nova_id, full_name, gender, photo_url)
+    values (new_nova_id, r.full_name, r.gender, r.photo_url)
+    returning id into new_identity_id;
+    update teachers set teacher_identity_id = new_identity_id, nova_teacher_id = new_nova_id where id = r.id;
+  end loop;
+end $$;
+`;
+
+/* ---------------- TEACHER PROFESSIONAL PROFILE (PHASE 3) ----------------
    Extends a "teachers" (Staff) record with career detail, qualifications and
    documents, WITHOUT adding any columns to the existing `teachers` table and
    WITHOUT a new nav id — it's reached via "Full profile" inside the existing
@@ -6221,7 +6408,8 @@ function openTeacherModal(container, t) {
    were needed. Reuses the same dbSelect/dbInsert/dbUpdate/softDelete helpers,
    modal/list-row/pill patterns, and school_id auto-scoping as every other
    module in this app.
-   Run TEACHER_PROFILE_SQL once in Supabase → SQL Editor before using this. */
+   Run TEACHER_PROFILE_SQL once in Supabase → SQL Editor, AFTER
+   NOVA_TEACHER_IDENTITY_SQL above, before using this. */
 const TEACHER_PROFILE_SQL = `-- Teacher Professional Profile: run once in Supabase -> SQL Editor.
 -- Adds new tables only; does not alter the existing teachers table.
 
@@ -6232,6 +6420,7 @@ create table if not exists teacher_profiles (
   date_of_birth date,
   date_joined date,
   employment_type text,
+  current_position text,
   professional_reg_no text,
   years_experience int,
   subjects_specialization text,
@@ -6240,6 +6429,7 @@ create table if not exists teacher_profiles (
   updated_at timestamptz not null default now(),
   unique (teacher_id)
 );
+alter table teacher_profiles add column if not exists current_position text;
 alter table teacher_profiles enable row level security;
 drop policy if exists "Anyone can read teacher_profiles" on teacher_profiles;
 create policy "Anyone can read teacher_profiles" on teacher_profiles for select using (true);
@@ -6254,9 +6444,11 @@ create table if not exists teacher_qualifications (
   institution text,
   year_obtained int,
   certificate_url text,
+  status text not null default 'Pending', -- 'Verified' | 'Pending' | 'Not submitted'
   deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table teacher_qualifications add column if not exists status text not null default 'Pending';
 alter table teacher_qualifications enable row level security;
 drop policy if exists "Anyone can read teacher_qualifications" on teacher_qualifications;
 create policy "Anyone can read teacher_qualifications" on teacher_qualifications for select using (true);
@@ -6290,6 +6482,232 @@ create policy "Authenticated can manage teacher_documents" on teacher_documents 
 -- Supabase Storage bucket would scale better for larger files.
 `;
 
+/* ---------------- TEACHER PERFORMANCE & EVALUATIONS (PHASE 5 & 6) ----------------
+   Structured, score-based evaluations (not just free-text) that an
+   administrator records against a teacher's per-school Staff record, plus an
+   audit trail and a school-configurable visibility policy for teachers
+   viewing their own evaluations.
+
+   Same caveat as teacher_documents above: every RLS policy below is
+   "using (true)" because this app has no real Supabase Auth session — access
+   control here is enforced in the client (see canManageEvaluations() and
+   the evaluation-visibility checks in renderTeacherPerformance()), the same
+   way hasFullAccess()/deptAccess() already gate every other module. Worth
+   tightening at the database layer before this holds sensitive HR content.
+
+   Run TEACHER_EVALUATIONS_SQL once in Supabase → SQL Editor, AFTER
+   TEACHER_PROFILE_SQL above. */
+const TEACHER_EVALUATIONS_SQL = `-- Teacher Performance & Evaluations: run once in Supabase -> SQL Editor.
+
+-- Bridges a teacher's login account (profiles) to their per-school
+-- professional record (teachers), so a logged-in teacher can be shown only
+-- their OWN evaluations. Nullable and admin-set — see openAccountControls().
+alter table profiles add column if not exists linked_teacher_id uuid references teachers(id);
+
+-- Per-school policy for how much of an evaluation a teacher is allowed to see
+-- of their own record: 'hidden' (nothing), 'scores_only' (categories + overall
+-- score, no comments), 'full' (everything). Never lets a teacher edit either way.
+alter table school_settings add column if not exists teacher_eval_visibility text not null default 'scores_only';
+
+create table if not exists teacher_evaluations (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null,
+  teacher_id uuid not null references teachers(id) on delete cascade,
+  evaluator_profile_id uuid references profiles(id),
+  evaluator_name text, -- denormalized so history reads correctly even if the account is later removed
+  evaluation_date date not null default current_date,
+  evaluation_period text, -- e.g. "Term 1, 2026"
+  scores jsonb not null default '{}'::jsonb, -- {"Teaching effectiveness": 4, "Punctuality": 5, ...}
+  overall_score numeric(4,2), -- average of the scores actually entered, computed at save time
+  strengths text,
+  areas_for_improvement text,
+  recommendation text,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table teacher_evaluations enable row level security;
+drop policy if exists "Anyone can read teacher_evaluations" on teacher_evaluations;
+create policy "Anyone can read teacher_evaluations" on teacher_evaluations for select using (true);
+drop policy if exists "Authenticated can manage teacher_evaluations" on teacher_evaluations;
+create policy "Authenticated can manage teacher_evaluations" on teacher_evaluations for all using (true);
+
+-- Every create/update/delete of an evaluation writes one row here — a
+-- permanent, un-editable log of who did what and when. Never updated or
+-- deleted itself (no edit UI is ever built for this table).
+create table if not exists teacher_evaluation_audit (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null,
+  evaluation_id uuid not null references teacher_evaluations(id) on delete cascade,
+  action text not null, -- 'created' | 'updated' | 'deleted'
+  actor_profile_id uuid references profiles(id),
+  actor_name text,
+  snapshot jsonb, -- full evaluation content at the moment of this action
+  created_at timestamptz not null default now()
+);
+alter table teacher_evaluation_audit enable row level security;
+drop policy if exists "Anyone can read teacher_evaluation_audit" on teacher_evaluation_audit;
+create policy "Anyone can read teacher_evaluation_audit" on teacher_evaluation_audit for select using (true);
+drop policy if exists "Authenticated can manage teacher_evaluation_audit" on teacher_evaluation_audit;
+create policy "Authenticated can manage teacher_evaluation_audit" on teacher_evaluation_audit for all using (true);
+`;
+
+// The standard evaluation categories (Phase 5). Scored 1-5 each; a category
+// left unscored is simply excluded from the overall average below rather
+// than counted as a 0, so a partially-filled evaluation isn't unfairly low.
+const EVAL_CATEGORIES = [
+  "Teaching effectiveness", "Attendance", "Punctuality", "Professionalism",
+  "Lesson preparation", "Student engagement", "Assessment quality", "Responsibility", "Teamwork",
+];
+// Careful, deliberate overall-score calculation: average only the categories
+// that were actually scored, never divide by zero, and round to 2dp so the
+// number is stable to compare/sort across evaluations.
+function calcOverallScore(scores) {
+  const vals = EVAL_CATEGORIES
+    .map(c => scores ? scores[c] : undefined)
+    .filter(v => v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v)))
+    .map(Number);
+  if (!vals.length) return null;
+  return Math.round((vals.reduce((a,b)=>a+b, 0) / vals.length) * 100) / 100;
+}
+// Only an authorized administrator can create/edit/delete evaluations —
+// teachers (including the teacher being evaluated) only ever get a view.
+function canManageEvaluations(p) { return hasFullAccess(p); }
+function evalVisibilityPolicy() { return (schoolSettings && schoolSettings.teacher_eval_visibility) || "scores_only"; }
+// Writes one immutable audit row per create/update/delete — see TEACHER_EVALUATIONS_SQL.
+async function logEvalAudit(evaluationId, action, snapshot) {
+  try {
+    await dbInsert("teacher_evaluation_audit", {
+      evaluation_id: evaluationId, action, actor_profile_id: profile?.id || null,
+      actor_name: profile?.full_name || null, snapshot,
+    });
+  } catch (e) { /* non-fatal — the evaluation itself is already saved */ }
+}
+
+/* ---- Performance tab: list of evaluations for this teacher, gated by role ---- */
+async function renderTeacherPerformance(body, container, teacher) {
+  const isAdmin = canManageEvaluations(profile);
+  const isSelf = !!(profile && profile.linked_teacher_id && profile.linked_teacher_id === teacher.id);
+  const policy = evalVisibilityPolicy();
+  if (!isAdmin && !isSelf) { body.innerHTML = emptyState("You don't have access to this teacher's performance record."); return; }
+  if (!isAdmin && isSelf && policy === "hidden") { body.innerHTML = emptyState("Performance evaluations aren't visible to teachers at this school. Ask an administrator."); return; }
+  const evals = await dbSelectActive("teacher_evaluations", { teacher_id:`eq.${teacher.id}`, order:"evaluation_date.desc" });
+  body.innerHTML = `<div class="card" id="evalList"></div>`;
+  const list = document.getElementById("evalList");
+  list.innerHTML = evals.length ? "" : emptyState(isAdmin ? "No performance evaluations yet." : "No performance evaluations recorded yet.");
+  evals.forEach(ev => {
+    const row = el(`<div class="list-row">
+      <div class="avatar">${ev.overall_score != null ? ev.overall_score : '—'}</div>
+      <div class="list-main"><div class="list-title">${ev.evaluation_period || formatDate(ev.evaluation_date)}</div>
+      <div class="list-sub">${formatDate(ev.evaluation_date)}${ev.evaluator_name ? (' · Evaluator: '+ev.evaluator_name) : ''}</div></div>
+      <span class="badge badge-amber">${ev.overall_score != null ? ev.overall_score+'/5' : 'Unscored'}</span>
+    </div>`);
+    const view = () => openEvaluationViewModal(ev, isAdmin, body, container, teacher, policy);
+    if (isAdmin) {
+      const edit = () => openEvaluationModal(body, container, teacher, ev);
+      const del = async () => { if (await customConfirm(`Delete this evaluation? This cannot be undone.`, { danger:true, okLabel:"Delete" })) safe(async()=>{
+        await softDelete("teacher_evaluations", ev.id);
+        await logEvalAudit(ev.id, "deleted", ev);
+        renderTeacherPerformance(body, container, teacher);
+      })(); };
+      bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
+    } else {
+      // Teachers (including viewing their own record) can open an evaluation
+      // to read it, but never edit or delete it — no gesture handlers wired.
+      row.style.cursor = "pointer";
+      row.onclick = view;
+    }
+    list.appendChild(row);
+  });
+  if (isAdmin) addFab(body, () => openEvaluationModal(body, container, teacher, null));
+}
+// What a teacher is shown for their own evaluation depends on the school's
+// configured policy (see Settings → Preferences); an administrator always
+// sees everything. Passing onEdit as null (non-admin) hides the Edit button.
+function openEvaluationViewModal(ev, isAdmin, body, container, teacher, policy) {
+  const showFull = isAdmin || policy === "full";
+  const rows = [
+    ["Evaluation date", formatDate(ev.evaluation_date)],
+    ["Evaluation period", ev.evaluation_period],
+    ["Evaluator", ev.evaluator_name],
+    ...EVAL_CATEGORIES.map(c => [c, (ev.scores && ev.scores[c] != null) ? `${ev.scores[c]}/5` : null]),
+    ["Overall score", ev.overall_score != null ? `${ev.overall_score}/5` : "Not yet calculated"],
+  ];
+  if (showFull) {
+    rows.push(["Strengths", ev.strengths], ["Areas for improvement", ev.areas_for_improvement], ["Professional recommendation", ev.recommendation]);
+  } else if (!isAdmin) {
+    rows.push(["Comments", "Not shared by your school's evaluation policy."]);
+  }
+  openViewModal(ev.evaluation_period || "Performance evaluation", rows, isAdmin ? () => openEvaluationModal(body, container, teacher, ev) : null);
+}
+function openEvaluationModal(body, container, teacher, ev) {
+  const isEdit = !!ev;
+  const scores = ev?.scores || {};
+  openModal(isEdit ? "Edit evaluation" : "New performance evaluation", `
+    <div class="grid2">
+      <div class="field"><label>Evaluation date</label><input id="f_edate" type="date" value="${ev?.evaluation_date || new Date().toISOString().slice(0,10)}"/></div>
+      <div class="field"><label>Evaluation period</label><input id="f_period" placeholder="e.g. Term 1, 2026" value="${ev?.evaluation_period||''}"/></div>
+    </div>
+    <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Categories (score out of 5)</div>
+    ${EVAL_CATEGORIES.map((c,i)=>`
+      <div class="field"><label>${c}</label>
+        <select id="f_cat${i}">
+          <option value="">— Not scored —</option>
+          ${[1,2,3,4,5].map(n=>`<option value="${n}" ${Number(scores[c])===n?'selected':''}>${n}/5</option>`).join("")}
+        </select>
+      </div>`).join("")}
+    <div class="field" id="overallPreview" style="font-weight:700;color:var(--navy-2);"></div>
+    <div class="field"><label>Strengths</label><textarea id="f_strengths" rows="2">${ev?.strengths||''}</textarea></div>
+    <div class="field"><label>Areas for improvement</label><textarea id="f_areas" rows="2">${ev?.areas_for_improvement||''}</textarea></div>
+    <div class="field"><label>Professional recommendation</label><textarea id="f_reco" rows="2">${ev?.recommendation||''}</textarea></div>
+  `, async (ov) => {
+    const newScores = {};
+    EVAL_CATEGORIES.forEach((c,i) => { const v = val(ov,`f_cat${i}`); if (v !== "") newScores[c] = Number(v); });
+    const overall_score = calcOverallScore(newScores);
+    const payload = {
+      teacher_id: teacher.id,
+      evaluator_profile_id: profile?.id || null, evaluator_name: profile?.full_name || null,
+      evaluation_date: val(ov,"f_edate") || new Date().toISOString().slice(0,10),
+      evaluation_period: val(ov,"f_period") || null,
+      scores: newScores, overall_score,
+      strengths: val(ov,"f_strengths") || null, areas_for_improvement: val(ov,"f_areas") || null,
+      recommendation: val(ov,"f_reco") || null,
+      updated_at: new Date().toISOString(),
+    };
+    let saved;
+    if (isEdit) { const rows = await dbUpdate("teacher_evaluations", ev.id, payload); saved = (rows && rows[0]) || Object.assign({}, ev, payload); }
+    else { const rows = await dbInsert("teacher_evaluations", payload); saved = rows[0]; }
+    await logEvalAudit(saved.id, isEdit ? "updated" : "created", saved);
+    renderTeacherPerformance(body, container, teacher);
+  }, { saveLabel: isEdit ? "Save changes" : "Save evaluation" });
+  // Live overall-score preview as the admin picks scores, before saving.
+  const updatePreview = () => {
+    const s = {};
+    EVAL_CATEGORIES.forEach((c,i) => { const sel = document.getElementById(`f_cat${i}`); if (sel && sel.value !== "") s[c] = Number(sel.value); });
+    const overall = calcOverallScore(s);
+    const previewEl = document.getElementById("overallPreview");
+    if (previewEl) previewEl.textContent = overall != null ? `Overall score: ${overall}/5` : "Overall score: — (no categories scored yet)";
+  };
+  EVAL_CATEGORIES.forEach((c,i) => { const sel = document.getElementById(`f_cat${i}`); if (sel) sel.onchange = updatePreview; });
+  updatePreview();
+}
+
+// Gets (or creates) a teacher's permanent Nova Teacher ID. Called once, when
+// a brand new Staff record is saved — see openTeacherModal below.
+async function findOrCreateTeacherIdentity(fullName, nationalId, dob, gender, photoUrl) {
+  const rows = await sb(`/rest/v1/rpc/find_or_create_teacher_identity`, { method:"POST", body: JSON.stringify({
+    p_full_name: fullName, p_national_id_no: nationalId || null, p_date_of_birth: dob || null,
+    p_gender: gender || null, p_photo_url: photoUrl || null,
+  })});
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+// Soft-match search (name/National ID/phone, across every school) so the Add
+// Staff form can warn "this person may already have a Nova ID" before saving.
+async function searchTeacherIdentities(query) {
+  if (!query || query.trim().length < 2) return [];
+  return sb(`/rest/v1/rpc/search_teacher_identities`, { method:"POST", body: JSON.stringify({ p_query: query.trim() }) }).catch(()=>[]);
+}
+
 async function renderTeacherProfile(container, teacher) {
   container.innerHTML = `
     <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Staff</button>
@@ -6298,6 +6716,7 @@ async function renderTeacherProfile(container, teacher) {
       <div>
         <div style="font-weight:800;font-size:16px;color:var(--navy-2);">${teacher.full_name}</div>
         <div style="font-size:12.5px;color:var(--ink-soft);">${teacher.specialty||'General'} ${teacher.staff_no?('· '+teacher.staff_no):''}</div>
+        ${teacher.nova_teacher_id ? `<div style="font-size:11.5px;color:var(--purple);font-weight:700;margin-top:2px;">${teacher.nova_teacher_id}</div>` : ""}
       </div>
       <span class="badge ${teacher.status==='active'?'badge-green':'badge-grey'}" style="margin-left:auto;">${teacher.status}</span>
     </div>
@@ -6311,7 +6730,13 @@ async function renderTeacherProfile(container, teacher) {
 function wireTeacherProfilePills(container, teacher, sub) {
   const pills = document.getElementById("tpPills");
   pills.innerHTML = "";
-  [["overview","Overview"],["qualifications","Qualifications"],["documents","Documents"]].forEach(([id,label])=>{
+  // Performance is only ever shown to an administrator, or to the teacher
+  // viewing their own linked record — never to a colleague browsing Staff.
+  const canSeePerformance = canManageEvaluations(profile) || (profile && profile.linked_teacher_id === teacher.id);
+  const tabs = [["overview","Overview"],["qualifications","Qualifications"],["documents","Documents"]];
+  if (canSeePerformance) tabs.push(["performance","Performance"]);
+  if (sub === "performance" && !canSeePerformance) sub = "overview";
+  tabs.forEach(([id,label])=>{
     const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
     p.onclick = () => renderTeacherProfileTab(container, teacher, id);
     pills.appendChild(p);
@@ -6325,53 +6750,111 @@ function renderTeacherProfileTab(container, teacher, sub, skipPills) {
   body.innerHTML = `<div class="center-loading">Loading…</div>`;
   if (sub === "qualifications") return renderTeacherQualifications(body, container, teacher).catch(errShow(body));
   if (sub === "documents") return renderTeacherDocuments(body, container, teacher).catch(errShow(body));
+  if (sub === "performance") return renderTeacherPerformance(body, container, teacher).catch(errShow(body));
   return renderTeacherProfileOverview(body, container, teacher).catch(errShow(body));
 }
 
-/* ---- Overview: career/professional detail (1:1 with the teacher record) ---- */
+/* ---- Overview: Personal (identity) + Professional (per-school) detail ----
+   Personal pulls from the global teacher_identities row (Nova ID, National
+   ID, date of birth) plus the per-school phone/email on `teachers`.
+   Professional stays 1:1 with the per-school teacher_profiles record. */
 async function renderTeacherProfileOverview(body, container, teacher) {
-  const rows = await dbSelect("teacher_profiles", { teacher_id:`eq.${teacher.id}` }).catch(()=>[]);
+  const [rows, identityRows, allClasses] = await Promise.all([
+    dbSelect("teacher_profiles", { teacher_id:`eq.${teacher.id}` }).catch(()=>[]),
+    teacher.teacher_identity_id ? dbSelect("teacher_identities", { id:`eq.${teacher.teacher_identity_id}` }).catch(()=>[]) : Promise.resolve([]),
+    dbSelectActive("classes", { order:"name.asc" }).catch(()=>[]),
+  ]);
   const p = rows[0] || null;
-  body.innerHTML = `<div class="card" id="tpOverviewCard"></div>`;
-  const card = document.getElementById("tpOverviewCard");
-  const viewRows = [
-    ["Date of birth", p?.date_of_birth], ["Date joined", p?.date_joined],
-    ["Employment type", p?.employment_type], ["Professional reg. no.", p?.professional_reg_no],
-    ["Years of experience", p?.years_experience], ["Subject specialization", p?.subjects_specialization],
+  const identity = identityRows[0] || null;
+  const classesTaught = allClasses.filter(c=>c.class_teacher_id===teacher.id);
+  const classNames = classesTaught.map(c=>c.name+(c.section?(' '+c.section):'')).join(", ") || "Not assigned to a class";
+
+  body.innerHTML = `
+    <div class="field" style="font-weight:800;color:var(--navy-2);margin:2px 0 8px;">Personal</div>
+    <div class="card" id="tpPersonalCard" style="margin-bottom:16px;"></div>
+    <div class="field" style="font-weight:800;color:var(--navy-2);margin:2px 0 8px;">Professional</div>
+    <div class="card" id="tpProfessionalCard"></div>
+  `;
+  const personalCard = document.getElementById("tpPersonalCard");
+  const personalRows = [
+    ["Nova Teacher ID", teacher.nova_teacher_id],
+    ["Phone", teacher.phone], ["Email", teacher.email],
+    ["National ID No.", identity?.national_id_no], ["Date of birth", identity?.date_of_birth],
+  ].filter(([,v]) => v !== undefined && v !== null && v !== "");
+  personalCard.innerHTML = personalRows.length
+    ? personalRows.map(([label,value])=>`<div class="view-row"><div class="vlabel">${label}</div><div class="vvalue">${value}</div></div>`).join("")
+    : emptyState("No personal details on file.");
+  const personalEditBtn = el(`<button class="btn btn-ghost btn-sm" style="margin-top:12px;">${ic.edit} Edit personal info</button>`);
+  personalEditBtn.onclick = () => openPersonalDetailsModal(body, container, teacher, identity);
+  personalCard.appendChild(personalEditBtn);
+
+  const professionalCard = document.getElementById("tpProfessionalCard");
+  const professionalRows = [
+    ["Current position", p?.current_position], ["Subjects", p?.subjects_specialization],
+    ["Classes", classNames], ["Employment status", p?.employment_type],
+    ["Date joined current school", p?.date_joined],
+    ["Years of experience", p?.years_experience], ["Professional reg. no.", p?.professional_reg_no],
     ["Bio", p?.bio],
   ].filter(([,v]) => v !== undefined && v !== null && v !== "");
-  card.innerHTML = viewRows.length
-    ? viewRows.map(([label,value])=>`<div class="view-row"><div class="vlabel">${label}</div><div class="vvalue">${value}</div></div>`).join("")
+  professionalCard.innerHTML = professionalRows.length
+    ? professionalRows.map(([label,value])=>`<div class="view-row"><div class="vlabel">${label}</div><div class="vvalue">${value}</div></div>`).join("")
     : emptyState("No professional details added yet.");
-  const editBtn = el(`<button class="btn btn-primary btn-sm" style="margin-top:12px;">${ic.edit} ${p?'Edit':'Add'} details</button>`);
-  editBtn.onclick = () => openTeacherProfileModal(body, container, teacher, p);
-  card.appendChild(editBtn);
+  const proEditBtn = el(`<button class="btn btn-primary btn-sm" style="margin-top:12px;">${ic.edit} ${p?'Edit':'Add'} details</button>`);
+  proEditBtn.onclick = () => openTeacherProfileModal(body, container, teacher, p);
+  professionalCard.appendChild(proEditBtn);
+}
+// Personal info lives partly on the global identity (National ID, date of
+// birth — shared across every school this person works at) and partly on
+// the per-school Staff record (phone, email). The Nova ID itself is never
+// editable here — it's permanent by design.
+function openPersonalDetailsModal(body, container, teacher, identity) {
+  openModal("Edit personal info", `
+    <div class="view-row" style="margin-bottom:6px;"><div class="vlabel">Nova Teacher ID</div><div class="vvalue">${teacher.nova_teacher_id||'—'}</div></div>
+    <div class="grid2">
+      <div class="field"><label>Phone</label><input id="f_phone" value="${teacher.phone||''}"/></div>
+      <div class="field"><label>Email</label><input id="f_email" type="email" value="${teacher.email||''}"/></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>National ID No. (NIN)</label><input id="f_nin" value="${identity?.national_id_no||''}"/></div>
+      <div class="field"><label>Date of birth</label><input id="f_dob" type="date" value="${identity?.date_of_birth||''}"/></div>
+    </div>
+  `, async (ov) => {
+    const phone = val(ov,"f_phone") || null, email = val(ov,"f_email") || null;
+    await dbUpdate("teachers", teacher.id, { phone, email });
+    teacher.phone = phone; teacher.email = email;
+    if (teacher.teacher_identity_id) {
+      const national_id_no = val(ov,"f_nin") || null, date_of_birth = val(ov,"f_dob") || null;
+      await dbUpdate("teacher_identities", teacher.teacher_identity_id, { national_id_no, date_of_birth });
+    }
+    renderTeacherProfileOverview(body, container, teacher);
+  }, { saveLabel: "Save" });
 }
 function openTeacherProfileModal(body, container, teacher, p) {
   openModal(p ? "Edit professional details" : "Add professional details", `
     <div class="grid2">
-      <div class="field"><label>Date of birth</label><input id="f_dob" type="date" value="${p?.date_of_birth||''}"/></div>
-      <div class="field"><label>Date joined</label><input id="f_joined" type="date" value="${p?.date_joined||''}"/></div>
+      <div class="field"><label>Current position</label><input id="f_position" placeholder="e.g. Class Teacher, Head of Department" value="${p?.current_position||''}"/></div>
+      <div class="field"><label>Subjects</label><input id="f_subj" value="${p?.subjects_specialization||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Employment type</label><select id="f_emptype">
+      <div class="field"><label>Employment status</label><select id="f_emptype">
         <option value="">— Select —</option>
-        ${["Full-time","Part-time","Contract","Volunteer"].map(v=>`<option value="${v}" ${p?.employment_type===v?'selected':''}>${v}</option>`).join("")}
+        ${["Permanent","Probation","Full-time","Part-time","Contract","Volunteer"].map(v=>`<option value="${v}" ${p?.employment_type===v?'selected':''}>${v}</option>`).join("")}
       </select></div>
-      <div class="field"><label>Professional reg. no.</label><input id="f_regno" value="${p?.professional_reg_no||''}"/></div>
+      <div class="field"><label>Date joined current school</label><input id="f_joined" type="date" value="${p?.date_joined||''}"/></div>
     </div>
     <div class="grid2">
+      <div class="field"><label>Professional reg. no.</label><input id="f_regno" value="${p?.professional_reg_no||''}"/></div>
       <div class="field"><label>Years of experience</label><input id="f_years" type="number" min="0" value="${p?.years_experience??''}"/></div>
-      <div class="field"><label>Subject specialization</label><input id="f_subj" value="${p?.subjects_specialization||''}"/></div>
     </div>
     <div class="field"><label>Bio</label><textarea id="f_bio" rows="3">${p?.bio||''}</textarea></div>
   `, async (ov) => {
     const payload = {
       teacher_id: teacher.id,
-      date_of_birth: val(ov,"f_dob") || null, date_joined: val(ov,"f_joined") || null,
-      employment_type: val(ov,"f_emptype") || null, professional_reg_no: val(ov,"f_regno") || null,
+      current_position: val(ov,"f_position") || null, subjects_specialization: val(ov,"f_subj") || null,
+      employment_type: val(ov,"f_emptype") || null, date_joined: val(ov,"f_joined") || null,
+      professional_reg_no: val(ov,"f_regno") || null,
       years_experience: val(ov,"f_years") ? Number(val(ov,"f_years")) : null,
-      subjects_specialization: val(ov,"f_subj") || null, bio: val(ov,"f_bio") || null,
+      bio: val(ov,"f_bio") || null,
       updated_at: new Date().toISOString(),
     };
     await dbUpsert("teacher_profiles", payload, "teacher_id");
@@ -6385,11 +6868,13 @@ async function renderTeacherQualifications(body, container, teacher) {
   body.innerHTML = `<div class="card" id="qList"></div>`;
   const list = document.getElementById("qList");
   list.innerHTML = items.length ? "" : emptyState("No qualifications added yet.");
+  const statusCls = s => s==='Verified' ? 'badge-green' : s==='Not submitted' ? 'badge-grey' : 'badge-amber';
   items.forEach(q => {
     const row = el(`<div class="list-row">
       <div class="avatar">${initials(q.qualification_name)}</div>
       <div class="list-main"><div class="list-title">${q.qualification_name}</div>
       <div class="list-sub">${q.institution||''} ${q.year_obtained?('· '+q.year_obtained):''}</div></div>
+      <span class="badge ${statusCls(q.status||'Pending')}">${q.status||'Pending'}</span>
     </div>`);
     const edit = () => openQualificationModal(body, container, teacher, q);
     const del = async () => { if (await customConfirm(`Move "${q.qualification_name}" to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teacher_qualifications", q.id); renderTeacherQualifications(body, container, teacher); })(); };
@@ -6406,6 +6891,9 @@ function openQualificationModal(body, container, teacher, q) {
       <div class="field"><label>Institution</label><input id="f_inst" value="${q?.institution||''}"/></div>
       <div class="field"><label>Year obtained</label><input id="f_year" type="number" min="1950" max="2100" value="${q?.year_obtained||''}"/></div>
     </div>
+    <div class="field"><label>Certificate/document status</label><select id="f_qstatus">
+      ${["Pending","Verified","Not submitted"].map(v=>`<option value="${v}" ${(q?.status||'Pending')===v?'selected':''}>${v}</option>`).join("")}
+    </select></div>
     <div class="field" style="text-align:center;">
       <label>Certificate (optional)</label>
       <input id="f_cert" type="file" accept="image/*,.pdf"/>
@@ -6417,6 +6905,7 @@ function openQualificationModal(body, container, teacher, q) {
     const payload = {
       teacher_id: teacher.id, qualification_name: val(ov,"f_qname"),
       institution: val(ov,"f_inst") || null, year_obtained: val(ov,"f_year") ? Number(val(ov,"f_year")) : null,
+      status: val(ov,"f_qstatus") || "Pending",
       certificate_url,
     };
     if (isEdit) await dbUpdate("teacher_qualifications", q.id, payload); else await dbInsert("teacher_qualifications", payload);
@@ -8315,6 +8804,9 @@ function openAccountControls(p, container, deptOptions, posOptions) {
       <div class="field"><label title="">Legacy role</label>
         <select id="ctrlRole">${["admin","teacher","accountant","staff"].map(r=>`<option value="${r}" ${p.role===r?'selected':''}>${r}</option>`).join("")}</select>
       </div>
+      ${p.role === "teacher" ? `<div class="field"><label>Linked Staff record</label><select id="ctrlLinkedTeacher"><option value="">Loading…</option></select>
+        <div class="tiny-note" style="margin-top:4px;">Connects this login to their professional record, so they can see their own Performance evaluations.</div>
+      </div>` : ""}
     `}
     <div class="form-actions" style="flex-wrap:wrap;">
       <button class="btn btn-ghost" id="modalCancel">Close</button>
@@ -8348,6 +8840,17 @@ function openAccountControls(p, container, deptOptions, posOptions) {
       await dbUpdate("profiles", p.id, { role: e.target.value });
       toast(`${p.full_name}'s role updated.`, false);
     });
+    const linkedSel = overlay.querySelector("#ctrlLinkedTeacher");
+    if (linkedSel) {
+      dbSelectActive("teachers", { order:"full_name.asc" }).then(teacherList => {
+        linkedSel.innerHTML = `<option value="">— Not linked —</option>` +
+          teacherList.map(t=>`<option value="${t.id}" ${p.linked_teacher_id===t.id?'selected':''}>${t.full_name}${t.nova_teacher_id?(' · '+t.nova_teacher_id):''}</option>`).join("");
+      }).catch(()=>{ linkedSel.innerHTML = `<option value="">Couldn't load Staff list</option>`; });
+      linkedSel.onchange = safe(async (e) => {
+        await dbUpdate("profiles", p.id, { linked_teacher_id: e.target.value || null });
+        toast(`${p.full_name}'s linked Staff record updated.`, false);
+      });
+    }
     overlay.querySelector("#suspendBtn").onclick = safe(async () => {
       if (isSuspended) {
         await dbUpdate("profiles", p.id, { suspended_at: null });
@@ -8717,6 +9220,16 @@ async function renderSettings(container) {
             <select id="f_currency">${CURRENCY_OPTIONS.map(c=>`<option value="${c}" ${((s.currency_symbol||'₦')===c)?'selected':''}>${c}</option>`).join("")}</select>
           </div>
         </div>
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Performance evaluations</h3><p>Controls how much of their own evaluation a teacher can see. Administrators always see everything; teachers can never edit an evaluation regardless of this setting.</p></div></div>
+          <div class="field" style="margin-bottom:0;"><label>What teachers can see of their own evaluations</label>
+            <select id="f_evalvis">
+              <option value="hidden" ${(s.teacher_eval_visibility||'scores_only')==='hidden'?'selected':''}>Hidden — teachers can't see evaluations</option>
+              <option value="scores_only" ${(s.teacher_eval_visibility||'scores_only')==='scores_only'?'selected':''}>Scores only — categories and overall score, no comments</option>
+              <option value="full" ${(s.teacher_eval_visibility||'scores_only')==='full'?'selected':''}>Full — including strengths, areas for improvement, and recommendation</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="settings-panel" data-panel="notifs">
@@ -8852,6 +9365,7 @@ async function renderSettings(container) {
         address: val(container,"f_address") || null,
         brand_color: selectedColor,
         currency_symbol: val(container,"f_currency") || "₦",
+        teacher_eval_visibility: val(container,"f_evalvis") || "scores_only",
         receipt_prefix: (val(container,"f_rprefix") || "RCT").trim(),
         receipt_digits: Math.max(1, parseInt(val(container,"f_rdigits"), 10) || 6),
         receipt_next_number: Math.max(1, parseInt(val(container,"f_rnext"), 10) || 1),
