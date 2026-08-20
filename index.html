@@ -2240,6 +2240,12 @@ $create_parent_account$;
 grant execute on function create_parent_account(text,text,text,text,text,text,text,text,uuid) to anon, authenticated;`;
 
 /* ---------------- SUPABASE HELPERS ---------------- */
+// Thrown only for a network-level failure (offline, DNS, stalled connection,
+// CORS, etc) — never for a server-returned error. Callers that want to fall
+// back to offline-cached data (see OFFLINE DATA CACHE below) can check
+// `e instanceof OfflineError` to tell "we have no connection" apart from
+// "the server rejected this request", which should never be masked by stale data.
+class OfflineError extends Error {}
 async function sb(path, opts = {}) {
   // Accounts no longer go through Supabase Auth at all (see AUTH section below), so
   // every request — logged in or not — just uses the project's anon key.
@@ -2260,7 +2266,7 @@ async function sb(path, opts = {}) {
     // The browser throws a bare "Failed to fetch" for any network-level failure
     // (offline, blocked request, DNS issue, server unreachable, CORS, etc), and an
     // AbortError once our own timeout above fires on a stalled request.
-    throw new Error("Check your internet connection and try again. If this keeps happening, please contact the developer.");
+    throw new OfflineError("Check your internet connection and try again. If this keeps happening, please contact the developer.");
   } finally {
     clearTimeout(timeoutId);
   }
@@ -2271,6 +2277,54 @@ async function sb(path, opts = {}) {
     throw new Error(msg);
   }
   return data;
+}
+
+/* ---------------- OFFLINE DATA CACHE ----------------
+   Every successful dbSelect()/dbSelectActive() read is mirrored into
+   IndexedDB, keyed by the exact table+query it came from. If a later read
+   with that same table+query fails purely because there's no connection
+   (OfflineError — see sb() above), the last saved copy is served instead
+   instead of showing an error, so any module the user already opened while
+   online (Home, Students, Attendance, Fees, Exams, Staff, and others) keeps
+   working read-only while offline. A query that was never run while online
+   has nothing to fall back to, and still surfaces the normal error. Writes
+   (dbInsert/dbUpdate/dbUpsert/dbDelete) are NOT cached or queued — they
+   still require a live connection, same as before. */
+const OFFLINE_DB_NAME = "novaOfflineCache";
+const OFFLINE_STORE = "reads";
+let offlineDBPromise = null;
+function openOfflineDB() {
+  if (offlineDBPromise) return offlineDBPromise;
+  offlineDBPromise = new Promise((resolve) => {
+    if (!("indexedDB" in window)) { resolve(null); return; }
+    let req;
+    try { req = indexedDB.open(OFFLINE_DB_NAME, 1); } catch (e) { resolve(null); return; }
+    req.onupgradeneeded = () => { try { req.result.createObjectStore(OFFLINE_STORE); } catch (e) {} };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+  return offlineDBPromise;
+}
+async function offlineCachePut(key, value) {
+  try {
+    const db = await openOfflineDB(); if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(OFFLINE_STORE, "readwrite");
+      tx.objectStore(OFFLINE_STORE).put({ value, savedAt: Date.now() }, key);
+      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+    });
+  } catch (e) {}
+}
+async function offlineCacheGet(key) {
+  try {
+    const db = await openOfflineDB(); if (!db) return undefined;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(OFFLINE_STORE, "readonly");
+      const req = tx.objectStore(OFFLINE_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.value : undefined);
+      req.onerror = () => resolve(undefined);
+    });
+  } catch (e) { return undefined; }
 }
 const qs = (obj) => Object.entries(obj).filter(([,v])=>v!==undefined && v!==null && v!=="").map(([k,v])=>`${k}=${v}`).join("&");
 
@@ -2288,7 +2342,19 @@ function scopedBody(table, body) {
   return Object.assign({ school_id: CURRENT_SCHOOL_ID }, body);
 }
 async function dbSelect(table, params={}) {
-  return sb(`/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`);
+  const path = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
+  const offlineKey = table + "::" + path;
+  try {
+    const data = await sb(path);
+    offlineCachePut(offlineKey, data); // fire-and-forget; never blocks the read
+    return data;
+  } catch (e) {
+    if (e instanceof OfflineError) {
+      const cached = await offlineCacheGet(offlineKey);
+      if (cached !== undefined) { noteOfflineDataServed(); return cached; }
+    }
+    throw e;
+  }
 }
 async function dbInsert(table, body) {
   return sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scopedBody(table, body)), headers:{ "Prefer":"return=representation" } });
@@ -9626,7 +9692,40 @@ function playSplashScreen() {
   });
 }
 
+/* ---------------- OFFLINE BANNER ----------------
+   A small fixed strip, independent of the SPA container so it survives
+   render()'s innerHTML swaps. Shown whenever the browser reports it's
+   offline, or the moment any read actually gets served from the offline
+   cache (see noteOfflineDataServed() / dbSelect() above) — the second case
+   also covers flaky connections that still report navigator.onLine=true. */
+function ensureOfflineBanner() {
+  let el = document.getElementById("offlineBanner");
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "offlineBanner";
+  el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--amber);color:#fff;font-size:12.5px;font-weight:700;text-align:center;padding:8px 10px;transform:translateY(-100%);transition:transform .25s ease;box-shadow:0 2px 8px rgba(0,0,0,.12);";
+  el.textContent = "You're offline — showing last saved data";
+  document.body.appendChild(el);
+  return el;
+}
+function showOfflineBanner() {
+  const el = ensureOfflineBanner();
+  requestAnimationFrame(() => { el.style.transform = "translateY(0)"; });
+}
+function hideOfflineBanner() {
+  const el = document.getElementById("offlineBanner");
+  if (el) el.style.transform = "translateY(-100%)";
+}
+let offlineBannerStickyUntilOnline = false;
+function noteOfflineDataServed() {
+  offlineBannerStickyUntilOnline = true;
+  showOfflineBanner();
+}
+window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; showOfflineBanner(); });
+window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; hideOfflineBanner(); });
+
 (async function boot() {
+  if (!navigator.onLine) { offlineBannerStickyUntilOnline = true; showOfflineBanner(); }
   const splashDone = playSplashScreen();
   // A device with no remembered school can't possibly be pending/suspended/
   // deleted, so it's always safe to paint the login/registration screen
@@ -9666,12 +9765,38 @@ function playSplashScreen() {
    Function documented in Settings → Push notifications). */
 if ("serviceWorker" in navigator) {
   const swSource = `
-    const CACHE = "nova-school-cache-v2";
+    // v2 -> v3: v2's fetch handler only ever READ from "caches", nothing ever
+    // WROTE to it, so the offline fallback below could never actually find
+    // anything and every offline open just failed. v3 fixes that: every
+    // successful same-origin GET (the app shell — this page, manifest.json,
+    // icon) is written into the cache as it's fetched, so once someone has
+    // opened the app online at least once, reopening it with no connection
+    // serves the last-cached copy instead of a blank/broken page. Supabase
+    // API calls are left alone here — those are cached separately, at the
+    // data layer (see OFFLINE DATA CACHE in the main script), which can
+    // fall back per-table/per-query instead of per-request.
+    const CACHE = "nova-school-cache-v3";
     self.addEventListener("install", (e) => { self.skipWaiting(); });
-    self.addEventListener("activate", (e) => { self.clients.claim(); });
+    self.addEventListener("activate", (e) => {
+      e.waitUntil(
+        caches.keys().then((names) => Promise.all(
+          names.filter((n) => n !== CACHE).map((n) => caches.delete(n))
+        ))
+      );
+      self.clients.claim();
+    });
     self.addEventListener("fetch", (e) => {
+      if (e.request.method !== "GET") return; // never cache/replay writes
+      const url = new URL(e.request.url);
+      if (url.hostname.indexOf("supabase.co") !== -1) return; // handled by the app's own offline data cache
       e.respondWith(
-        fetch(e.request).catch(() => caches.match(e.request))
+        fetch(e.request).then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+          }
+          return res;
+        }).catch(() => caches.match(e.request).then((cached) => cached || Promise.reject(new Error("offline, nothing cached for this request"))))
       );
     });
     self.addEventListener("push", (e) => {
