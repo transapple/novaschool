@@ -271,10 +271,18 @@
   .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
   .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
   .section-head h2{font-size:18px;color:var(--navy);}
-  .pill-row{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;}
+  /* Native-style vertical panel list — used for every module's sub-navigation
+     (Inventory's Property/Classroom/Lab/etc, Fees' Payments/Structures/etc,
+     Library, Exams...). Each section is its own full-width tappable card,
+     stacked top-to-bottom with a trailing chevron, like a native app's
+     drill-down menu — instead of a horizontal row of chips. */
+  .pill-row{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;background:transparent;border:none;padding:0;overflow:visible;}
   .pill-row::-webkit-scrollbar{display:none;}
-  .pill{padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--card);border:1.5px solid var(--line);color:var(--ink-soft);flex-shrink:0;white-space:nowrap;}
-  .pill.active{background:var(--teal);color:#fff;border-color:var(--teal);box-shadow:0 3px 10px rgba(46,158,124,.3);}
+  .pill{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;border-radius:14px;font-size:14px;font-weight:700;background:var(--card);border:1px solid var(--line);color:var(--ink);box-shadow:0 1px 2px rgba(22,39,74,.04);text-align:left;flex-shrink:0;white-space:normal;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pill::after{content:"\203A";font-size:19px;line-height:1;font-weight:400;color:var(--slate);margin-left:10px;flex-shrink:0;}
+  .pill:active{transform:scale(.985);}
+  .pill.active{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);box-shadow:0 2px 10px rgba(46,158,124,.15);}
+  .pill.active::after{color:var(--teal-dark);}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px;}
   .stat{background:var(--card);border-radius:var(--radius);border:1px solid var(--line);padding:16px;border-left:4px solid var(--teal);box-shadow:0 1px 3px rgba(22,39,74,.05);}
   .stat:nth-child(4n+2){border-left-color:var(--sky);}
@@ -282,12 +290,21 @@
   .stat:nth-child(4n+4){border-left-color:var(--purple);}
   .stat .num{font-size:24px;font-weight:800;color:var(--navy);}
   .stat .lbl{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
-  .list-row{display:flex;align-items:center;gap:12px;padding:12px 6px;border-bottom:1px solid var(--line);}
-  .list-row:last-child{border-bottom:none;}
-  .avatar{width:40px;height:40px;border-radius:10px;background:var(--sky-tint);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);font-size:14px;flex-shrink:0;}
+  /* Every list item (inventory item, fee record, library book, exam, student
+     row, etc.) is now its own tappable native-style card — rounded, its own
+     shadow, a bit of breathing room between items — instead of a flat list
+     divided by thin border lines. */
+  .list-row{display:flex;align-items:center;gap:12px;padding:13px 12px;margin-bottom:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(22,39,74,.04);transition:box-shadow .15s ease,transform .1s ease;}
+  .list-row:active{transform:scale(.985);box-shadow:0 1px 1px rgba(22,39,74,.03);}
+  .list-row:last-child{margin-bottom:0;}
+  .avatar{width:40px;height:40px;border-radius:11px;background:var(--sky-tint);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);font-size:14px;flex-shrink:0;}
   .list-main{flex:1;min-width:0;}
   .list-title{font-weight:700;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .list-sub{font-size:12.5px;color:var(--ink-soft);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* Every module wraps its item list in <div class="card" id="list">. Now that
+     each .list-row is its own native card, that wrapper just needs to be a
+     plain spacing container — not a second nested card around every row. */
+  .card#list{background:transparent;border:none;box-shadow:none;padding:0;margin-bottom:14px;}
   .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
   .badge-green{background:#e5f6ee;color:var(--teal-dark);}
   .badge-amber{background:#fdf1de;color:#a06a13;}
@@ -300,7 +317,7 @@
   .fab{position:fixed;right:18px;bottom:96px;width:46px;height:46px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(46,158,124,.45);border:none;z-index:25;touch-action:none;user-select:none;-webkit-user-select:none;}
   .fab svg{width:20px;height:20px;}
   @media(min-width:860px){.fab{bottom:28px;}}
-  .empty{text-align:center;padding:40px 16px;color:var(--ink-soft);}
+  .empty{text-align:center;padding:40px 16px;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 3px rgba(22,39,74,.05);}
   .empty svg{margin-bottom:10px;opacity:.5;}
 
   /* modal */
@@ -1105,6 +1122,12 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
+    // Server-side gate: if this school's subscription_expires_at has passed
+    // while it was still "active", flip it to "suspended" before we read it.
+    // This is intentionally NOT a client-side check — an expired paid plan
+    // must lock the school out exactly like a manual suspension, and that
+    // has to happen in the database, not in code the browser could skip.
+    try { await sb(`/rest/v1/rpc/enforce_subscription_expiry`, { method:"POST", body: JSON.stringify({ p_school_id: CURRENT_SCHOOL_ID }) }); } catch (e) { /* offline or not yet migrated — fall through and read whatever status is stored */ }
     const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,sub_county,district,size_range,approved_at,created_at,deleted_at,upgrade_requested_at,upgrade_completed_at" });
     CURRENT_SCHOOL = rows[0] || null;
   } catch (e) { CURRENT_SCHOOL = null; }
@@ -1127,7 +1150,7 @@ function schoolBlockedMessage() {
   }
   const s = CURRENT_SCHOOL?.status;
   if (s === "pending") return "Your school's registration is still awaiting approval from TransApple. Please check back shortly.";
-  if (s === "suspended") return "Access to this school has been suspended by TransApple. Please contact your administrator or TransApple support.";
+  if (s === "suspended") return "Access to this school has been suspended — often because a subscription payment is overdue. Please contact your administrator or TransApple support to renew.";
   if (s === "deactivated") return "This school's account has been deactivated by TransApple. Please contact TransApple support if you believe this is a mistake.";
   return "This school's account is not currently active. Please contact TransApple support.";
 }
@@ -1168,7 +1191,7 @@ function schoolStatusInfo(status) {
   switch (status) {
     case "active": return { label: "Active", cls: "badge-green", note: "Your school is approved and fully active with TransApple." };
     case "pending": return { label: "Pending approval", cls: "badge-amber", note: "Awaiting approval from TransApple. Some features may be limited until then." };
-    case "suspended": return { label: "Suspended", cls: "badge-red", note: "Access has been suspended by TransApple. Contact TransApple support to resolve this." };
+    case "suspended": return { label: "Suspended", cls: "badge-red", note: "Access has been suspended — often because a subscription lapsed. Contact TransApple support to resolve this." };
     case "rejected": return { label: "Rejected", cls: "badge-red", note: "This registration was not approved. Contact TransApple for more information." };
     case "deactivated": return { label: "Deactivated", cls: "badge-grey", note: "This school's account has been deactivated by TransApple." };
     default: return { label: "Unknown", cls: "badge-grey", note: "Registration status hasn't synced from TransApple yet." };
