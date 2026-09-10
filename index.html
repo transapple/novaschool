@@ -560,6 +560,7 @@ let DEV_MODE = true;
 if (!IS_LOCAL_HOST) DEV_MODE = false;
 let auth = null;       
 let profile = null;    
+let SESSION_TOKEN = null;
 let cache = {};        
 
 
@@ -2148,7 +2149,7 @@ async function sb(path, opts = {}) {
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + SUPABASE_KEY,
     "Content-Type": "application/json",
-  }, opts.headers || {});
+  }, SESSION_TOKEN ? { "x-session-token": SESSION_TOKEN } : {}, opts.headers || {});
   let res;
   
   
@@ -2286,6 +2287,14 @@ async function sendSupportMessage(requestId, message) {
 
 const REMEMBER_KEY = "novaRememberedUsername";
 const REMEMBER_SCHOOL_KEY = "novaRememberedSchoolId";
+const SESSION_TOKEN_KEY = "novaSessionToken";
+function persistSessionToken(token) {
+  SESSION_TOKEN = token || null;
+  try { if (token) localStorage.setItem(SESSION_TOKEN_KEY, token); else localStorage.removeItem(SESSION_TOKEN_KEY); } catch (e) {}
+}
+function getPersistedSessionToken() {
+  try { return localStorage.getItem(SESSION_TOKEN_KEY) || null; } catch (e) { return null; }
+}
 
 
 
@@ -2314,13 +2323,14 @@ function getRememberedSchool() {
 }
 function scrubProfile(row) {
   if (!row) return row;
-  const { password_hash, ...rest } = row;
+  const { password_hash, session_token, ...rest } = row;
   return rest;
 }
 async function login(username, password, remember) {
   const rows = await sb(`/rest/v1/rpc/verify_login`, { method:"POST", body: JSON.stringify({ p_username: username, p_password: password }) });
   const row = Array.isArray(rows) ? rows[0] : rows;
   if (!row || !row.id) throw new Error("Incorrect username or password.");
+  persistSessionToken(row.session_token);
   profile = scrubProfile(row);
   setCurrentSchool(profile.school_id);
   await loadCurrentSchool();
@@ -2338,13 +2348,12 @@ async function login(username, password, remember) {
 
 async function tryRestoreRememberedSession() {
   const username = getRememberedSession();
-  if (!username) return false;
+  const token = getPersistedSessionToken();
+  if (!username || !token) { clearRememberedSession(); persistSessionToken(null); return false; }
   try {
-    const rows = await dbSelect("profiles", { username:`eq.${username}`, select:"id,full_name,phone,department,position,role,username,pin,photo_url,suspended_at,deleted_at,school_id,approval_status,is_owner" });
-    const row = rows[0];
-    if (!row) { clearRememberedSession(); return false; }
-    if (row.deleted_at || row.suspended_at) { clearRememberedSession(); return false; }
-    if (row.approval_status && row.approval_status !== "approved") { clearRememberedSession(); return false; }
+    SESSION_TOKEN = token;
+    const row = await sb(`/rest/v1/rpc/restore_session`, { method:"POST", body: JSON.stringify({ p_token: token }) });
+    if (!row || !row.id) { clearRememberedSession(); persistSessionToken(null); return false; }
     profile = scrubProfile(row);
     setCurrentSchool(profile.school_id);
     await loadCurrentSchool();
@@ -2354,6 +2363,8 @@ async function tryRestoreRememberedSession() {
     startSchoolSync();
     return true;
   } catch (e) {
+    clearRememberedSession();
+    persistSessionToken(null);
     return false;
   }
 }
@@ -2477,7 +2488,12 @@ function promptAdminPassword(title) {
     }, { saveLabel: "Confirm" });
   });
 }
-function logout() { stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null; clearRememberedSession(); pinLocked = false; showSupportPortal = false; render(); }
+function logout() {
+  const token = SESSION_TOKEN;
+  stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null;
+  clearRememberedSession(); persistSessionToken(null); pinLocked = false; showSupportPortal = false; render();
+  if (token) sb(`/rest/v1/rpc/revoke_session`, { method:"POST", body: JSON.stringify({ p_token: token }) }).catch(()=>{});
+}
 
 
 async function resetPassword({ username, pin, new_password }) {
@@ -3004,6 +3020,7 @@ function renderSchoolRegistration() {
         schoolName, schoolMotto, schoolVillage, schoolSubcounty, schoolDistrict, schoolSizeRange,
         adminFullName, adminUsername, adminPhone, adminWhatsapp, adminEmail, adminPassword, adminPin, adminPhotoUrl: regPhotoDataUrl,
       });
+      persistSessionToken(newAdmin.session_token);
       profile = scrubProfile(newAdmin);
       setCurrentSchool(profile.school_id);
       await loadCurrentSchool();
@@ -3466,7 +3483,7 @@ function renderPinUnlock() {
   };
   document.getElementById("unlockBtn").onclick = tryUnlock;
   document.getElementById("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock(); });
-  document.getElementById("useLoginInstead").onclick = () => { auth = null; profile = null; pinLocked = false; clearRememberedSession(); render(); };
+  document.getElementById("useLoginInstead").onclick = () => { auth = null; profile = null; pinLocked = false; clearRememberedSession(); persistSessionToken(null); render(); };
   enableAuthKeyboardHandling();
 }
 
