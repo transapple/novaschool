@@ -511,6 +511,113 @@
      too. ---- */
   html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
   input,textarea,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;-webkit-touch-callout:default;}
+
+  /* ================= AiO ai — Chat ================= */
+  /* Re-themed to the app's real palette (--card/--card-alt/--line/--teal/--ink)
+     instead of the standalone prototype's dark --panel/--accent variables. */
+  .nav-item-ai{background:linear-gradient(135deg,var(--teal-tint),rgba(46,158,124,.14));border:1px solid rgba(46,158,124,.22);}
+  .nav-item-ai:not(.active):hover{background:linear-gradient(135deg,var(--teal-tint),rgba(46,158,124,.20));}
+  .nav-item-ai.active{background:var(--teal);}
+  .nav-item-ai .nav-ai-badge{margin-left:auto;font-size:9.5px;font-weight:700;letter-spacing:.04em;color:var(--teal-dark);background:#fff;border-radius:5px;padding:2px 5px;}
+  .nav-item-ai.active .nav-ai-badge{color:var(--teal-dark);}
+
+  .aio-shell{display:grid;grid-template-columns:250px 1fr;gap:16px;height:100%;min-height:480px;}
+  .aio-history{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+  .aio-history-head{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 10px 14px;font-size:12px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .aio-new-chat-btn{display:flex;align-items:center;gap:5px;background:var(--teal-tint);color:var(--teal-dark);border:1px solid transparent;border-radius:7px;padding:5px 9px;font-size:11.5px;font-weight:600;}
+  .aio-new-chat-btn:hover{filter:brightness(1.05);}
+  .aio-new-chat-btn svg{width:12px;height:12px;}
+  .aio-history-list{flex:1;overflow-y:auto;padding:0 8px 10px 8px;display:flex;flex-direction:column;gap:3px;}
+  .aio-history-item{display:flex;flex-direction:column;gap:2px;text-align:left;background:none;border:1px solid transparent;border-radius:8px;padding:9px 10px;width:100%;color:var(--ink);}
+  .aio-history-item:hover{background:var(--card-alt);}
+  .aio-history-item.active{background:var(--teal-tint);border-color:rgba(46,158,124,.25);}
+  .aio-history-item .t{font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .aio-history-item.active .t{color:var(--teal-dark);}
+  .aio-history-item .s{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .aio-history-empty{padding:16px 12px;font-size:12px;color:var(--ink-soft);text-align:center;}
+  .aio-history-backdrop{display:none;}
+
+  .aio-chat{display:flex;flex-direction:column;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  .aio-chat-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-shrink:0;}
+  .aio-chat-head-spacer{flex:1;}
+  .aio-history-toggle{display:none;background:none;border:1px solid var(--line);border-radius:8px;width:32px;height:32px;align-items:center;justify-content:center;color:var(--ink-soft);}
+  .aio-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--teal),var(--sky));display:flex;align-items:center;justify-content:center;color:#fff;}
+  .aio-avatar svg{width:16px;height:16px;}
+
+  .aio-messages{flex:1;min-height:0;overflow-y:auto;padding:18px 18px 6px 18px;display:flex;flex-direction:column;gap:14px;}
+  .aio-messages.is-empty{overflow:hidden;justify-content:flex-start;flex:1;padding-bottom:6px;}
+
+  .aio-empty{margin:0 auto 30px auto;width:100%;box-sizing:border-box;text-align:center;max-width:480px;padding:32px 20px 0 20px;}
+  .aio-empty .aio-avatar{width:44px;height:44px;border-radius:50%;margin:0 auto 14px auto;}
+  .aio-empty .aio-avatar svg{width:22px;height:22px;}
+  .aio-empty h3{margin:0 0 6px 0;font-size:16.5px;font-weight:700;color:var(--navy);}
+  .aio-empty p{margin:0 0 34px 0;color:var(--ink-soft);font-size:13px;}
+  .aio-suggestions{display:flex;gap:6px;text-align:left;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;margin-bottom:30px;}
+  .aio-suggestions::-webkit-scrollbar{display:none;}
+  .aio-suggest-chip{flex:0 0 auto;width:200px;background:var(--card-alt);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:12.5px;color:var(--ink);display:flex;align-items:center;gap:6px;white-space:normal;text-align:left;transition:border-color .15s ease;}
+  .aio-suggest-chip:hover{border-color:var(--teal);color:var(--teal-dark);}
+  .aio-suggest-chip svg{width:13px;height:13px;flex-shrink:0;color:var(--teal);}
+
+  .aio-msg{display:flex;gap:10px;max-width:82%;}
+  .aio-msg.user{align-self:flex-end;flex-direction:row-reverse;max-width:78%;}
+  .aio-msg .aio-msg-mark{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--card-alt);border:1px solid var(--line);color:var(--ink-soft);font-size:10.5px;font-weight:600;}
+  .aio-msg.assistant .aio-msg-mark{background:linear-gradient(135deg,var(--teal),var(--sky));border:none;color:#fff;}
+  .aio-msg.assistant .aio-msg-mark svg{width:13px;height:13px;}
+  .aio-msg-bubble{border-radius:14px;padding:11px 14px;font-size:13.5px;line-height:1.55;}
+  .aio-msg.user .aio-msg-bubble{background:var(--teal);color:#fff;border-radius:14px 14px 3px 14px;font-weight:500;}
+  .aio-msg.assistant .aio-msg-bubble{background:var(--card-alt);border:1px solid var(--line);border-radius:14px 14px 14px 3px;color:var(--ink);}
+  .aio-msg-bubble p{margin:0 0 8px 0;}
+  .aio-msg-bubble p:last-child{margin-bottom:0;}
+  .aio-msg-time{font-size:10px;color:var(--ink-soft);margin-top:5px;}
+  .aio-msg.user .aio-msg-time{text-align:right;}
+
+  .aio-thinking .aio-msg-bubble{display:flex;align-items:center;gap:5px;padding:13px 16px;}
+  .aio-thinking .aio-msg-mark{animation:aio-logo-spin 1.4s linear infinite;}
+  @keyframes aio-logo-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .aio-think-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);animation:aio-bounce 1.1s infinite ease-in-out;}
+  .aio-think-dot:nth-child(2){animation-delay:.15s;}
+  .aio-think-dot:nth-child(3){animation-delay:.3s;}
+  @keyframes aio-bounce{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
+
+  .aio-error .aio-msg-bubble{background:var(--red-tint);border:1px solid rgba(214,86,79,.3);color:var(--ink);display:flex;flex-direction:column;gap:8px;}
+  .aio-error-head{display:flex;align-items:center;gap:7px;color:var(--red);font-weight:600;font-size:13px;}
+  .aio-error-head svg{width:14px;height:14px;}
+  .aio-retry-btn{align-self:flex-start;display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--red);color:var(--red);border-radius:7px;padding:6px 11px;font-size:12px;font-weight:600;}
+  .aio-retry-btn:hover{background:var(--red-tint);}
+  .aio-retry-btn svg{width:12px;height:12px;}
+
+  .aio-composer{border-top:1px solid var(--line);padding:12px 16px 14px 16px;flex-shrink:0;}
+  .aio-quick-prompts{display:flex;gap:6px;overflow-x:auto;padding-bottom:9px;scrollbar-width:none;}
+  .aio-quick-prompts::-webkit-scrollbar{display:none;}
+  .aio-quick-prompts.hide{display:none;}
+  .aio-qp-chip{flex-shrink:0;background:var(--card-alt);border:1px solid var(--line);color:var(--ink-soft);border-radius:999px;padding:6px 12px;font-size:11.5px;white-space:nowrap;}
+  .aio-qp-chip:hover{color:var(--teal-dark);border-color:var(--teal);}
+  .aio-input-row{display:flex;align-items:flex-end;gap:8px;background:var(--card-alt);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;}
+  .aio-input-row:focus-within{border-color:var(--teal);}
+  .aio-input-row textarea{flex:1;background:none;border:none;outline:none;resize:none;color:var(--ink);font-family:inherit;font-size:13.5px;line-height:1.4;max-height:120px;padding:6px 0;}
+  .aio-input-row textarea::placeholder{color:var(--ink-soft);}
+  .aio-send-btn{width:34px;height:34px;border-radius:9px;flex-shrink:0;border:none;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .15s ease;}
+  .aio-send-btn:hover{filter:brightness(1.06);}
+  .aio-send-btn:disabled{opacity:.4;cursor:default;}
+  .aio-send-btn svg{width:15px;height:15px;}
+  .aio-disclaimer{margin-top:9px;font-size:10.5px;color:var(--ink-soft);text-align:center;}
+
+  @media (max-width:900px){
+    .aio-shell{grid-template-columns:1fr;height:100%;}
+    .aio-history{position:fixed;top:0;left:-280px;bottom:0;width:260px;z-index:250;border-radius:0;transition:left .2s ease;box-shadow:0 0 40px rgba(0,0,0,.4);}
+    body.aio-history-open .aio-history{left:0;}
+    .aio-history-backdrop{display:none;position:fixed;inset:0;background:rgba(15,22,40,.55);z-index:240;}
+    body.aio-history-open .aio-history-backdrop{display:block;}
+    .aio-history-toggle{display:flex;}
+    .aio-msg{max-width:92%;}
+    .aio-msg.user{max-width:88%;}
+    .aio-suggest-chip{width:70vw;max-width:260px;}
+    .aio-empty{padding:20px 12px 12px 12px;}
+    .aio-empty .aio-avatar{width:36px;height:36px;margin:0 auto 10px auto;}
+    .aio-empty .aio-avatar svg{width:18px;height:18px;}
+    .aio-empty h3{font-size:15px;}
+    .aio-empty p{margin:0 0 30px 0;font-size:12.5px;}
+  }
 </style>
 </head>
 <body>
@@ -632,7 +739,8 @@ const ic = {
   download:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`,
   box:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>`,
   book:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
-  chat:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>`
+  chat:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>`,
+  sparkle:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="2.5"/></svg>`
 };
 
 
@@ -884,7 +992,7 @@ function applyBrandColor(key) {
 }
 async function loadSchoolSettings() {
   try {
-    const rows = await dbSelect("school_settings", { id:"eq.1" });
+    const rows = await dbSelect("school_settings", {});
     schoolSettings = rows[0] || null;
   } catch (e) { schoolSettings = null; }
   applyBrandColor(schoolSettings?.brand_color);
@@ -909,10 +1017,10 @@ function nextIdFor(kind, gender) {
 async function advanceIdSeq(kind) {
   const s = schoolSettings || {};
   if (!s[`${kind}_id_prefix`]) return;
-  const payload = { id: 1 };
+  const payload = {};
   payload[`${kind}_id_seq`] = Number(s[`${kind}_id_seq`] ?? 0) + 1;
   try {
-    await dbUpsert("school_settings", payload, "id");
+    await dbUpsert("school_settings", payload, "school_id");
     schoolSettings = Object.assign({}, schoolSettings, payload);
   } catch (e) {  }
 }
@@ -945,6 +1053,7 @@ function sidebarBrandHtml() {
 
 const NAV = [
   {id:"dashboard", label:"Home", icon:ic.home},
+  {id:"aio-ai", label:"AiO ai", icon:ic.sparkle},
   {id:"students", label:"Students", icon:ic.student},
   {id:"attendance", label:"Attendance", icon:ic.attendance},
   {id:"fees", label:"Fees", icon:ic.fees},
@@ -978,7 +1087,7 @@ const NAV_MOVED_TO_SETTINGS = new Set(["academic","users","trash"]);
 
 
 const NAV_ICON_COLOR = {
-  dashboard:"var(--teal)", health:"#e11d48", students:"var(--sky)", teachers:"var(--purple)",
+  dashboard:"var(--teal)", "aio-ai":"var(--teal-dark)", health:"#e11d48", students:"var(--sky)", teachers:"var(--purple)",
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
   academic:"#0e9488", inventory:"#8a5a2b", library:"#166534", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
 };
@@ -986,7 +1095,7 @@ const NAV_ICON_COLOR = {
 
 
 const CORE_NAV_IDS = new Set(["dashboard","users","contact","settings","trash"]);
-const GATABLE_NAV_IDS = ["health","students","teachers","attendance","fees","exams","academic","comms","inventory","library"];
+const GATABLE_NAV_IDS = ["aio-ai","health","students","teachers","attendance","fees","exams","academic","comms","inventory","library"];
 const PARENT_PORTAL_FEATURE_ID = "parent_portal";
 
 
@@ -1139,7 +1248,7 @@ const DEPARTMENTS = {
     
     
     
-    access: ["dashboard","students","teachers","attendance","exams","academic","users","contact"],
+    access: ["dashboard","aio-ai","students","teachers","attendance","exams","academic","users","contact"],
   },
   finance: {
     label: "Finance",
@@ -1148,7 +1257,7 @@ const DEPARTMENTS = {
     
     
     
-    access: ["dashboard","students","fees","users","contact"],
+    access: ["dashboard","aio-ai","students","fees","users","contact"],
   },
   parents: {
     label: "Parents & Community",
@@ -1156,7 +1265,7 @@ const DEPARTMENTS = {
     
     
     
-    access: ["dashboard","students","comms","users","contact"],
+    access: ["dashboard","aio-ai","students","comms","users","contact"],
   },
 };
 
@@ -1167,9 +1276,9 @@ function deptAccess(p) {
   if (p?.role === "admin") return "all";
   const d = DEPARTMENTS[p?.department];
   if (d) return d.access;
-  if (p?.role === "accountant") return ["dashboard","students","fees","contact"];
-  if (p?.role === "teacher") return ["dashboard","students","teachers","attendance","exams","academic","contact"];
-  return ["dashboard","contact"];
+  if (p?.role === "accountant") return ["dashboard","aio-ai","students","fees","contact"];
+  if (p?.role === "teacher") return ["dashboard","aio-ai","students","teachers","attendance","exams","academic","contact"];
+  return ["dashboard","aio-ai","contact"];
 }
 function hasFullAccess(p) { return deptAccess(p) === "all"; }
 
@@ -2907,7 +3016,8 @@ function render() {
   const visibleNav = NAV.filter(n => hasNavAccess(profile, n.id) && !(NAV_MOVED_TO_SETTINGS.has(n.id) && hasNavAccess(profile, "settings")));
   if (!hasNavAccess(profile, tab)) tab = (visibleNav[0] || NAV[0]).id;
   visibleNav.forEach(n => {
-    const sItem = el(`<div class="nav-item ${tab===n.id?'active':''}" data-nav-id="${n.id}" style="cursor:pointer">${n.icon}<span>${n.label}</span></div>`);
+    const isAio = n.id === "aio-ai";
+    const sItem = el(`<div class="nav-item ${tab===n.id?'active':''} ${isAio?'nav-item-ai':''}" data-nav-id="${n.id}" style="cursor:pointer">${n.icon}<span>${n.label}</span>${isAio?'<span class="nav-ai-badge">NEW</span>':''}</div>`);
     sItem.onclick = () => { tab = n.id; render(); };
     sidenav.appendChild(sItem);
   });
@@ -2957,7 +3067,7 @@ function renderTabContent() {
   pageTitle.style.animation = `${TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
-  const renderers = { dashboard: renderDashboard, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, inventory: renderInventory, library: renderLibrary, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
+  const renderers = { dashboard: renderDashboard, "aio-ai": renderAioAi, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, inventory: renderInventory, library: renderLibrary, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
   const initialSub = pendingSubTab; pendingSubTab = null;
   (renderers[tab] || renderDashboard)(content, initialSub || undefined).catch(errShow(content));
   flashOfflineBannerForNav();
@@ -4613,7 +4723,7 @@ async function getOrAssignReceiptNo(payment) {
     const next = s.receipt_next_number || 1;
     const receiptNo = `${prefix}-${String(next).padStart(digits, "0")}`;
     await dbUpdate("fee_payments", payment.id, { receipt_no: receiptNo });
-    await dbUpsert("school_settings", { id:1, receipt_next_number: next + 1 }, "id");
+    await dbUpsert("school_settings", { receipt_next_number: next + 1 }, "school_id");
     await loadSchoolSettings();
     payment.receipt_no = receiptNo;
     return receiptNo;
@@ -4891,7 +5001,7 @@ function openEditParentAccountModal(container) {
 
 
 const TAB_COLOR = { dashboard:"var(--teal)", students:"var(--sky)", teachers:"var(--purple)", attendance:"var(--amber)", fees:"var(--red)", exams:"var(--indigo)", academic:"var(--teal-dark)", comms:"#c2410c", users:"var(--navy-2)", settings:"var(--indigo)", trash:"var(--slate)" };
-const TAB_ANIM = { dashboard:"riseIn", health:"popScale", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", inventory:"riseIn", library:"popScale", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
+const TAB_ANIM = { dashboard:"riseIn", "aio-ai":"popScale", health:"popScale", students:"slideInLeft", teachers:"popScale", attendance:"fadeSlideDown", fees:"wiggleIn", exams:"popScale", academic:"slideInLeft", inventory:"riseIn", library:"popScale", comms:"wiggleIn", users:"fadeSlideDown", settings:"popScale", trash:"riseIn" };
 
 
 async function renderDashboard(container) {
@@ -5194,7 +5304,6 @@ async function renderIdFormat(body) {
     e.target.textContent = "Saving…"; e.target.disabled = true;
     try {
       const payload = {
-        id: 1,
         student_id_prefix: val(body,"f_s_prefix") || null,
         student_id_digits: Number(val(body,"f_s_digits")) || 3,
         student_id_seq: Number(val(body,"f_s_seq")) || 0,
@@ -5202,7 +5311,7 @@ async function renderIdFormat(body) {
         teacher_id_digits: Number(val(body,"f_t_digits")) || 3,
         teacher_id_seq: Number(val(body,"f_t_seq")) || 0,
       };
-      await dbUpsert("school_settings", payload, "id");
+      await dbUpsert("school_settings", payload, "school_id");
       await loadSchoolSettings();
       msg.innerHTML = `<div class="msg-ok">Saved — new registrations will use this format.</div>`;
     } catch (err) {
@@ -8390,6 +8499,420 @@ async function renderReportCard(body) {
 }
 
 
+// ============================================================
+// AiO ai — Chat tab. Rendered fresh into #content every time the user
+// switches to the "aio-ai" tab (this app rebuilds tab content on every
+// switch rather than keeping views alive in the DOM — see renderTabContent).
+// Conversation state (aioConversations/aioActiveId) lives at module scope
+// so it survives switching away and back to the tab in the same session.
+//
+// Backend: sends to the `aio-ai-chat` Edge Function (live), which resolves
+// school_id server-side from SESSION_TOKEN, pulls a live snapshot of ONLY
+// that school's data (students, attendance, fees, exams, etc.), calls the
+// AI provider, and persists ai_conversations/ai_messages rows itself — this
+// file never writes those tables directly.
+// ============================================================
+const AIO_WARN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg>`;
+const AIO_RETRY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>`;
+const AIO_SEND_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>`;
+const AIO_MENU_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>`;
+const AIO_SUGGESTIONS = [
+  "How is the school performing?",
+  "How many students are absent today?",
+  "Which students need attention?",
+  "Which accounts need follow-up?",
+  "How much fees are outstanding?",
+  "What happened at school today?"
+];
+
+let aioConversations = [];
+let aioActiveId = null; // null = fresh, unsaved chat (empty state)
+let aioBusy = false;
+let aioMessagesEl, aioHistoryListEl, aioQuickPromptsEl, aioInputForm, aioInput, aioSendBtn;
+
+function aioEscapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function aioNowTime() {
+  return new Date().toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
+}
+function aioGetActiveConv() {
+  return aioConversations.find(c => c.id === aioActiveId) || null;
+}
+function aioStripHtml(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  return (tmp.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+function aioRenderQuickPrompts() {
+  aioQuickPromptsEl.innerHTML = AIO_SUGGESTIONS.map(q =>
+    `<button type="button" class="aio-qp-chip" data-aio-prompt="${aioEscapeHtml(q)}">${aioEscapeHtml(q)}</button>`
+  ).join("");
+}
+
+function aioRenderHistory() {
+  if (!aioConversations.length) {
+    aioHistoryListEl.innerHTML = `<div class="aio-history-empty">No conversations yet. Start by asking AiO ai a question.</div>`;
+    return;
+  }
+  aioHistoryListEl.innerHTML = aioConversations.map(c => {
+    const lastMsg = c.messages && c.messages.length ? c.messages[c.messages.length - 1] : null;
+    const preview = lastMsg ? aioStripHtml(lastMsg.html) : (c.messages === null ? "Tap to view this conversation" : "");
+    return `
+      <button type="button" class="aio-history-item ${c.id === aioActiveId ? 'active' : ''}" data-aio-conv="${c.id}">
+        <div class="t">${aioEscapeHtml(c.title)}</div>
+        <div class="s">${aioEscapeHtml(preview)}</div>
+      </button>`;
+  }).join("");
+}
+
+function aioRenderEmptyState() {
+  aioMessagesEl.classList.add("is-empty");
+  const schoolName = (CURRENT_SCHOOL && CURRENT_SCHOOL.name) || "your school";
+  aioMessagesEl.innerHTML = `
+    <div class="aio-empty">
+      <div class="aio-avatar">${ic.sparkle}</div>
+      <h3>Ask AiO ai anything</h3>
+      <p>Hello, ${aioEscapeHtml(schoolName)}!</p>
+      <div class="aio-suggestions">
+        ${AIO_SUGGESTIONS.map(q => `
+          <button type="button" class="aio-suggest-chip" data-aio-prompt="${aioEscapeHtml(q)}">
+            ${ic.sparkle}<span>${aioEscapeHtml(q)}</span>
+          </button>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function aioMessageHtml(m) {
+  if (m.role === "user") {
+    return `
+      <div class="aio-msg user">
+        <div class="aio-msg-mark">You</div>
+        <div>
+          <div class="aio-msg-bubble">${aioEscapeHtml(m.html)}</div>
+          <div class="aio-msg-time">${m.time}</div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="aio-msg assistant">
+      <div class="aio-msg-mark">${ic.sparkle}</div>
+      <div>
+        <div class="aio-msg-bubble">${m.html}</div>
+        <div class="aio-msg-time">${m.time}</div>
+      </div>
+    </div>`;
+}
+
+function aioRenderMessages() {
+  const conv = aioGetActiveConv();
+  if (!conv || !conv.messages || !conv.messages.length) {
+    aioRenderEmptyState();
+    aioQuickPromptsEl.classList.add("hide");
+    return;
+  }
+  aioQuickPromptsEl.classList.remove("hide");
+  aioMessagesEl.classList.remove("is-empty");
+  aioMessagesEl.innerHTML = conv.messages.map(m => aioMessageHtml(m)).join("");
+  aioScrollToBottom();
+}
+
+function aioScrollToBottom() {
+  aioMessagesEl.scrollTop = aioMessagesEl.scrollHeight;
+}
+
+function aioShowThinking() {
+  const elx = document.createElement("div");
+  elx.className = "aio-msg assistant aio-thinking";
+  elx.id = "aioThinkingBubble";
+  elx.innerHTML = `
+    <div class="aio-msg-mark">${ic.sparkle}</div>
+    <div class="aio-msg-bubble">
+      <span class="aio-think-dot"></span><span class="aio-think-dot"></span><span class="aio-think-dot"></span>
+    </div>`;
+  aioMessagesEl.appendChild(elx);
+  aioScrollToBottom();
+}
+function aioHideThinking() {
+  const elx = document.getElementById("aioThinkingBubble");
+  if (elx) elx.remove();
+}
+
+function aioShowErrorBubble(forQuery, errorMessage) {
+  const elx = document.createElement("div");
+  elx.className = "aio-msg assistant aio-error";
+  elx.innerHTML = `
+    <div class="aio-msg-mark">${ic.sparkle}</div>
+    <div class="aio-msg-bubble">
+      <div class="aio-error-head">${AIO_WARN_ICON}Couldn't get a response</div>
+      <div>${aioEscapeHtml(errorMessage || "AiO ai had trouble answering just now. Give it another try.")}</div>
+      <button type="button" class="aio-retry-btn">${AIO_RETRY_ICON}Retry</button>
+    </div>`;
+  elx.querySelector(".aio-retry-btn").addEventListener("click", () => {
+    elx.remove();
+    const conv = aioGetActiveConv();
+    if (conv) aioAnswerQuery(conv, forQuery);
+  });
+  aioMessagesEl.appendChild(elx);
+  aioScrollToBottom();
+}
+
+// ---- Reads: conversation list / a conversation's messages. Safe as direct
+// reads — scoped by both school_id (auto, via dbSelect) and this user's own
+// profile.id. Writes all go through the Edge Function instead (see
+// aioAnswerQuery). ----
+async function aioLoadConversationList() {
+  try {
+    const rows = await dbSelect("ai_conversations", {
+      user_id: `eq.${profile.id}`,
+      select: "id,title,created_at",
+      order: "created_at.desc",
+      limit: "30"
+    });
+    aioConversations = (rows || []).map(c => ({
+      id: c.id, dbId: c.id,
+      title: c.title || "Untitled conversation",
+      time: new Date(c.created_at).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }),
+      messages: null
+    }));
+  } catch (e) {
+    console.warn("Could not load AiO ai conversation history:", e && e.message ? e.message : e);
+    aioConversations = [];
+  }
+  aioRenderHistory();
+}
+
+async function aioLoadConversationMessages(conv) {
+  if (conv.messages) return conv.messages;
+  try {
+    const rows = await dbSelect("ai_messages", {
+      conversation_id: `eq.${conv.dbId}`,
+      select: "role,content,created_at",
+      order: "created_at.asc"
+    });
+    conv.messages = (rows || []).map(m => ({ role: m.role, html: m.content, time: new Date(m.created_at).toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" }) }));
+  } catch (e) {
+    console.warn("Could not load conversation messages:", e && e.message ? e.message : e);
+    conv.messages = [];
+  }
+  return conv.messages;
+}
+
+function aioEnsureActiveConv(firstMessageText) {
+  const existing = aioGetActiveConv();
+  if (existing) return existing;
+  const title = firstMessageText.length > 42 ? firstMessageText.slice(0, 42) + "…" : firstMessageText;
+  const localId = "c-" + Date.now();
+  const conv = { id: localId, dbId: null, title, time: "Just now", messages: [] };
+  aioConversations.unshift(conv);
+  aioActiveId = localId;
+  return conv;
+  // Note: no DB row is created here — the Edge Function creates
+  // ai_conversations on the first real message and returns its id,
+  // which aioAnswerQuery() below stores onto conv.dbId.
+}
+
+// ---- The real call: everything about answering lives server-side in the
+// aio-ai-chat Edge Function (identity + school_id resolution, live
+// school-scoped data snapshot, AI call, persistence). This just sends the
+// message and renders whatever comes back. ----
+async function aioAskBackend(message, conversationId) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/aio-ai-chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY
+    },
+    body: JSON.stringify({
+      token: SESSION_TOKEN,
+      message: message,
+      conversation_id: conversationId || undefined
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data && data.message ? data.message : "AiO ai is temporarily unavailable.");
+  }
+  return data; // { conversation_id, reply }
+}
+
+async function aioAnswerQuery(conv, text) {
+  aioBusy = true;
+  aioSendBtn.disabled = true;
+  aioShowThinking();
+  try {
+    const { conversation_id, reply } = await aioAskBackend(text, conv.dbId);
+    if (!conv.dbId) conv.dbId = conversation_id;
+    aioHideThinking();
+    const msg = { role:"assistant", html: aioEscapeHtml(reply).replace(/\n/g, "<br>"), time: aioNowTime() };
+    conv.messages.push(msg);
+    aioMessagesEl.insertAdjacentHTML("beforeend", aioMessageHtml(msg));
+    aioScrollToBottom();
+    aioRenderHistory();
+  } catch (err) {
+    aioHideThinking();
+    console.warn("AiO ai answer failed:", err && err.message ? err.message : err);
+    aioShowErrorBubble(text, err && err.message);
+  } finally {
+    aioBusy = false;
+    aioSendBtn.disabled = false;
+  }
+}
+
+function aioSendMessage(text) {
+  text = (text || "").trim();
+  if (!text || aioBusy) return;
+  const conv = aioEnsureActiveConv(text);
+  const userMsg = { role:"user", html: text, time: aioNowTime() };
+  conv.messages.push(userMsg);
+  if (conv.messages.length === 1) {
+    aioRenderMessages();
+  } else {
+    aioQuickPromptsEl.classList.add("hide");
+    aioMessagesEl.insertAdjacentHTML("beforeend", aioMessageHtml(userMsg));
+    aioScrollToBottom();
+  }
+  aioRenderHistory();
+  aioInput.value = "";
+  aioInput.style.height = "auto";
+  aioAnswerQuery(conv, text);
+}
+
+function aioStartNewChat() {
+  aioActiveId = null;
+  aioRenderMessages();
+  aioRenderHistory();
+  aioCloseHistoryDrawer();
+}
+function aioOpenHistoryDrawer() { document.body.classList.add("aio-history-open"); }
+function aioCloseHistoryDrawer() { document.body.classList.remove("aio-history-open"); }
+
+function aioWireEvents() {
+  aioInputForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    aioSendMessage(aioInput.value);
+  });
+  aioInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      aioSendMessage(aioInput.value);
+    }
+  });
+  aioInput.addEventListener("input", () => {
+    aioInput.style.height = "auto";
+    aioInput.style.height = Math.min(aioInput.scrollHeight, 120) + "px";
+  });
+  aioMessagesEl.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-aio-prompt]");
+    if (chip) aioSendMessage(chip.dataset.aioPrompt);
+  });
+  aioQuickPromptsEl.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-aio-prompt]");
+    if (chip) aioSendMessage(chip.dataset.aioPrompt);
+  });
+  document.getElementById("aioNewChatBtn").addEventListener("click", aioStartNewChat);
+  const aioNewChatHeadBtnEl = document.getElementById("aioNewChatHeadBtn");
+  if (aioNewChatHeadBtnEl) aioNewChatHeadBtnEl.addEventListener("click", aioStartNewChat);
+  const aioClearChatBtnEl = document.getElementById("aioClearChatBtn");
+  if (aioClearChatBtnEl) {
+    aioClearChatBtnEl.addEventListener("click", async () => {
+      const conv = aioGetActiveConv();
+      if (conv) {
+        aioConversations = aioConversations.filter(c => c.id !== conv.id);
+        aioActiveId = null;
+        aioRenderMessages();
+        aioRenderHistory();
+        if (conv.dbId) {
+          try { await dbDelete("ai_conversations", conv.dbId); }
+          catch (e) { console.warn("Could not delete conversation:", e && e.message ? e.message : e); }
+        }
+      }
+    });
+  }
+  aioHistoryListEl.addEventListener("click", async (e) => {
+    const item = e.target.closest("[data-aio-conv]");
+    if (!item) return;
+    const conv = aioConversations.find(c => c.id === item.dataset.aioConv);
+    if (!conv) return;
+    aioActiveId = conv.id;
+    if (conv.messages === null) {
+      aioRenderMessages();
+      await aioLoadConversationMessages(conv);
+    }
+    aioRenderMessages();
+    aioRenderHistory();
+    aioCloseHistoryDrawer();
+  });
+  const aioHistoryToggleBtnEl = document.getElementById("aioHistoryToggleBtn");
+  if (aioHistoryToggleBtnEl) {
+    aioHistoryToggleBtnEl.addEventListener("click", () => {
+      document.body.classList.toggle("aio-history-open");
+    });
+  }
+  const backdrop = document.getElementById("aioHistoryBackdrop");
+  if (backdrop) backdrop.addEventListener("click", aioCloseHistoryDrawer);
+}
+
+// ---- Tab renderer: called fresh every time the user switches to "aio-ai"
+// (see renderTabContent's `renderers` map). ----
+async function renderAioAi(container) {
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;">
+      <p style="margin:0 0 14px 0;color:var(--ink-soft);font-size:13px;flex-shrink:0;">Ask about attendance, fees, performance, or anything else happening at your school.</p>
+      <div class="aio-shell" id="aioShell" style="flex:1;min-height:0;">
+        <aside class="aio-history" id="aioHistoryPanel">
+          <div class="aio-history-head">
+            <span>Conversations</span>
+            <button class="aio-new-chat-btn" id="aioNewChatBtn" type="button">${ic.plus}New</button>
+          </div>
+          <div class="aio-history-list" id="aioHistoryList"></div>
+        </aside>
+        <div class="aio-history-backdrop" id="aioHistoryBackdrop"></div>
+
+        <div class="aio-chat panel">
+          <div class="aio-chat-head">
+            <button class="aio-history-toggle" id="aioHistoryToggleBtn" type="button" aria-label="Conversation history" title="Conversation history">${AIO_MENU_ICON}</button>
+            <div class="aio-chat-head-spacer"></div>
+            <button class="icon-btn" id="aioNewChatHeadBtn" type="button" aria-label="Start new chat" title="Start new chat">${ic.plus}</button>
+            <button class="icon-btn" id="aioClearChatBtn" type="button" aria-label="Clear conversation" title="Clear conversation">${ic.trash}</button>
+          </div>
+          <div class="aio-messages" id="aioMessages"></div>
+          <div class="aio-composer">
+            <div class="aio-quick-prompts" id="aioQuickPrompts"></div>
+            <form class="aio-input-row" id="aioInputForm">
+              <textarea id="aioInput" placeholder="Ask AiO ai anything about your school…" rows="1"></textarea>
+              <button type="submit" class="aio-send-btn" id="aioSendBtn" aria-label="Send message">${AIO_SEND_ICON}</button>
+            </form>
+            <div class="aio-disclaimer">AiO ai can make mistakes. Please verify important information.</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  aioMessagesEl = document.getElementById("aioMessages");
+  aioHistoryListEl = document.getElementById("aioHistoryList");
+  aioQuickPromptsEl = document.getElementById("aioQuickPrompts");
+  aioInputForm = document.getElementById("aioInputForm");
+  aioInput = document.getElementById("aioInput");
+  aioSendBtn = document.getElementById("aioSendBtn");
+
+  aioWireEvents();
+  aioRenderQuickPrompts();
+  aioRenderMessages();
+  aioRenderHistory();
+  await aioLoadConversationList();
+}
+
+// Bridge for "ask AiO ai about this" actions fired from elsewhere in the app.
+function aioAskAbout(question) {
+  tab = "aio-ai";
+  render();
+  aioSendMessage(question);
+}
+
 async function renderContactTransApple(container) {
   container.innerHTML = `
     <div class="section-head"><h3 style="color:var(--navy-2);">Contact TransApple</h3></div>
@@ -8479,7 +9002,7 @@ async function renderRegToggleCard() {
   let open = true;
   let missingCol = false;
   try {
-    const rows = await dbSelect("school_settings", { id:"eq.1", select:"registration_open" });
+    const rows = await dbSelect("school_settings", { select:"registration_open" });
     open = rows[0]?.registration_open !== false;
   } catch (e) { missingCol = true; }
   if (missingCol) {
@@ -8507,7 +9030,7 @@ async function renderRegToggleCard() {
       const msg = document.getElementById("regToggleMsg");
       e.target.disabled = true;
       try {
-        await dbUpsert("school_settings", { id: 1, registration_open: nowOpen }, "id");
+        await dbUpsert("school_settings", { registration_open: nowOpen }, "school_id");
         await loadSchoolSettings();
         card.innerHTML = renderState(nowOpen);
         document.getElementById("regToggleMsg").innerHTML = `<div class="msg-ok">Saved.</div>`;
@@ -8532,7 +9055,7 @@ async function renderDeptLockCard() {
   let locked = {};
   let missingCol = false;
   try {
-    const rows = await dbSelect("school_settings", { id:"eq.1", select:"locked_departments" });
+    const rows = await dbSelect("school_settings", { select:"locked_departments" });
     locked = (rows[0] && rows[0].locked_departments) || {};
   } catch (e) { missingCol = true; }
   if (missingCol) {
@@ -8568,7 +9091,7 @@ async function renderDeptLockCard() {
     const newLocked = {};
     card.querySelectorAll("[data-dept-lock]").forEach(cb => { newLocked[cb.dataset.deptLock] = cb.checked; });
     try {
-      await dbUpsert("school_settings", { id: 1, locked_departments: newLocked }, "id");
+      await dbUpsert("school_settings", { locked_departments: newLocked }, "school_id");
       await loadSchoolSettings();
       msg.innerHTML = `<div class="msg-ok">Saved — the self-signup screen picks this up automatically.</div>`;
       toast("Registration controls saved.", false);
@@ -9087,7 +9610,7 @@ async function renderSchoolSettingsPanel(container) {
   const isAdmin = hasFullAccess(profile);
   let row = null, missingTable = false;
   try {
-    const rows = await dbSelect("school_settings", { id:"eq.1" });
+    const rows = await dbSelect("school_settings", {});
     row = rows[0] || null;
   } catch (e) { missingTable = true; }
 
@@ -9151,7 +9674,7 @@ async function renderSchoolSettingsPanel(container) {
     const msg = document.getElementById("settingsMsg");
     btn.textContent = "Saving…"; btn.disabled = true;
     try {
-      await dbUpsert("school_settings", Object.assign({ id:1 }, fields), "id");
+      await dbUpsert("school_settings", fields, "school_id");
       await loadSchoolSettings();
       msg.innerHTML = `<div class="msg-ok">${successMsg}</div>`;
       toast(successMsg, false);
