@@ -561,6 +561,21 @@ if (!IS_LOCAL_HOST) DEV_MODE = false;
 let auth = null;       
 let profile = null;    
 let SESSION_TOKEN = null;
+// Drill-down screens (teacher profile, fee structure per class, settings
+// sub-pages, etc.) push a handler here instead of showing an in-page "Back
+// to X" button — the device/browser back button (or swipe-back gesture)
+// pops it. resetNavStack() is called on every top-level tab switch so a
+// stale handler from an abandoned drill-down can't fire later.
+let navStack = [];
+function pushNavState(onBack) {
+  navStack.push(onBack);
+  try { history.pushState({ __navDepth: navStack.length }, ""); } catch (e) {}
+}
+function resetNavStack() { navStack = []; }
+window.addEventListener("popstate", () => {
+  const onBack = navStack.pop();
+  if (onBack) { try { onBack(); } catch (e) {} }
+});
 let cache = {};        
 
 
@@ -735,49 +750,38 @@ create policy "Authenticated can manage asset_maintenance" on asset_maintenance 
 
 
 
-const LIBRARY_SQL = `create table if not exists library_books (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid references schools(id) on delete cascade,
-  title text not null,
-  author text,
-  isbn text,
-  category text,
-  publisher text,
-  copies_total numeric not null default 1,
-  copies_available numeric not null default 1,
-  shelf_location text,
-  condition text default 'Good' check (condition in ('New','Good','Fair','Poor','Damaged')),
-  notes text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table library_books enable row level security;
-drop policy if exists "Anyone can read library_books" on library_books;
-create policy "Anyone can read library_books" on library_books for select using (true);
-drop policy if exists "Authenticated can manage library_books" on library_books;
-create policy "Authenticated can manage library_books" on library_books for all using (true);
+const LIBRARY_SQL = `-- These tables already exist on the mother system with this shape;
+-- this block documents the live schema (and adds the extra columns this
+-- app needs) rather than re-creating them from scratch.
+alter table library_books add column if not exists isbn text;
+alter table library_books add column if not exists publisher text;
+alter table library_books add column if not exists shelf_location text;
+alter table library_books add column if not exists condition text default 'Good';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'library_books_condition_check') then
+    alter table library_books add constraint library_books_condition_check check (condition in ('New','Good','Fair','Poor','Damaged'));
+  end if;
+end $$;
+alter table library_books add column if not exists notes text;
+alter table library_books add column if not exists deleted_at timestamptz;
+-- Live columns already present: id, school_id, title, author, category,
+-- total_copies, available_copies, created_at, updated_at.
 
-create table if not exists library_loans (
-  id uuid primary key default gen_random_uuid(),
-  school_id uuid references schools(id) on delete cascade,
-  book_id uuid references library_books(id) on delete set null,
-  book_title text not null,
-  borrower_name text not null,
-  borrower_type text default 'Student' check (borrower_type in ('Student','Staff')),
-  borrowed_date date not null default current_date,
-  due_date date not null,
-  returned_date date,
-  fine_amount numeric default 0,
-  fine_paid boolean default false,
-  notes text,
-  deleted_at timestamptz,
-  created_at timestamptz default now()
-);
-alter table library_loans enable row level security;
-drop policy if exists "Anyone can read library_loans" on library_loans;
-create policy "Anyone can read library_loans" on library_loans for select using (true);
-drop policy if exists "Authenticated can manage library_loans" on library_loans;
-create policy "Authenticated can manage library_loans" on library_loans for all using (true);`;
+alter table library_loans add column if not exists book_title text;
+alter table library_loans add column if not exists borrower_name text;
+alter table library_loans add column if not exists borrower_type text default 'Student';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'library_loans_borrower_type_check') then
+    alter table library_loans add constraint library_loans_borrower_type_check check (borrower_type in ('Student','Staff'));
+  end if;
+end $$;
+alter table library_loans add column if not exists fine_amount numeric default 0;
+alter table library_loans add column if not exists fine_paid boolean default false;
+alter table library_loans add column if not exists notes text;
+alter table library_loans add column if not exists deleted_at timestamptz;
+-- Live columns already present: id, school_id, book_id, student_id,
+-- borrowed_at (timestamptz), due_date (date), returned_at (timestamptz),
+-- created_at, updated_at.`;
 const ID_FORMAT_SQL = `alter table school_settings add column if not exists student_id_prefix text;
 alter table school_settings add column if not exists student_id_seq int default 0;
 alter table school_settings add column if not exists student_id_digits int default 3;
@@ -992,7 +996,7 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
-    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,subcounty,district,size_range,approved_at,created_at,upgrade_requested_at,upgrade_completed_at,deleted_at" });
+    const rows = await dbSelect("schools", { id:`eq.${CURRENT_SCHOOL_ID}`, select:"id,name,motto,status,plan,billing_cycle,subscription_expires_at,features,school_code,village,sub_county,district,size_range,approved_at,created_at,deleted_at,upgrade_requested_at,upgrade_completed_at" });
     CURRENT_SCHOOL = rows[0] || null;
   } catch (e) { CURRENT_SCHOOL = null; }
 }
@@ -1062,7 +1066,7 @@ function schoolStatusInfo(status) {
   }
 }
 function schoolLocationLine(s) {
-  return [s?.village, s?.subcounty, s?.district].filter(Boolean).join(", ");
+  return [s?.village, s?.sub_county, s?.district].filter(Boolean).join(", ");
 }
 
 
@@ -1714,7 +1718,7 @@ const SCHOOL_SELF_REGISTRATION_SQL = `-- Extra fields the registration screen co
 -- these live on the mother system's own \`schools\` table, not in this app's data.
 alter table schools add column if not exists motto text;
 alter table schools add column if not exists village text;
-alter table schools add column if not exists subcounty text;
+alter table schools add column if not exists sub_county text;
 alter table schools add column if not exists district text;
 alter table schools add column if not exists size_range text;
 
@@ -1733,6 +1737,80 @@ do $$ begin
     alter table schools add constraint schools_school_code_format check (school_code ~ '^[A-Za-z0-9_]+$');
   end if;
 end $$;
+
+-- Soft-delete and upgrade-tracking fields that schoolIsActive(), schoolBlockedMessage()
+-- and the upgrade banner already read from CURRENT_SCHOOL, but which were never
+-- actually created on the schools table until now.
+alter table schools add column if not exists deleted_at timestamptz;
+alter table schools add column if not exists upgrade_requested_at timestamptz;
+alter table schools add column if not exists upgrade_completed_at timestamptz;
+
+-- Lets an Administrator finish an upgrade that TransApple flagged (by setting
+-- upgrade_requested_at externally) by confirming their password and filling
+-- in any location/size fields that are still missing. Mirrors register_school's
+-- school_code generation and verify_login's password check.
+drop function if exists complete_school_upgrade(uuid, text, text, text, text, text, text, text);
+create function complete_school_upgrade(
+  p_school_id uuid, p_actor_username text, p_actor_password text,
+  p_motto text default null, p_village text default null, p_subcounty text default null,
+  p_district text default null, p_size_range text default null
+) returns schools
+language plpgsql security definer as $complete_school_upgrade$
+declare actor profiles; target schools; candidate_code text; updated_row schools;
+begin
+  if p_school_id is null then
+    raise exception 'No school selected.';
+  end if;
+  if p_actor_username is null or trim(p_actor_username) = '' then
+    raise exception 'Not signed in.';
+  end if;
+  if p_actor_password is null or p_actor_password = '' then
+    raise exception 'Enter your password to confirm.';
+  end if;
+
+  select * into actor from profiles where lower(username) = lower(p_actor_username);
+  if actor.id is null or actor.password_hash is null
+     or crypt(p_actor_password, actor.password_hash) <> actor.password_hash then
+    raise exception 'Incorrect username or password.';
+  end if;
+  if actor.deleted_at is not null then
+    raise exception 'This account has been deleted. Contact Administration.';
+  end if;
+  if actor.suspended_at is not null then
+    raise exception 'This account is suspended. Contact Administration.';
+  end if;
+  if actor.school_id is distinct from p_school_id or actor.department <> 'administration' then
+    raise exception 'You do not have permission to upgrade this school.';
+  end if;
+
+  select * into target from schools where id = p_school_id;
+  if target.id is null then
+    raise exception 'School not found.';
+  end if;
+  if target.school_code is not null or target.upgrade_requested_at is null or target.upgrade_completed_at is not null then
+    raise exception 'This school is not pending an upgrade.';
+  end if;
+
+  loop
+    candidate_code := 'TATNOVA' || lpad(floor(random() * 10000000)::text, 7, '0');
+    exit when not exists (select 1 from schools where school_code = candidate_code);
+  end loop;
+
+  update schools set
+    motto = coalesce(target.motto, nullif(trim(p_motto),'')),
+    village = coalesce(target.village, nullif(trim(p_village),'')),
+    sub_county = coalesce(target.sub_county, nullif(trim(p_subcounty),'')),
+    district = coalesce(target.district, nullif(trim(p_district),'')),
+    size_range = coalesce(target.size_range, nullif(p_size_range,'')),
+    school_code = candidate_code,
+    upgrade_completed_at = now()
+  where id = p_school_id
+  returning * into updated_row;
+
+  return updated_row;
+end;
+$complete_school_upgrade$;
+grant execute on function complete_school_upgrade(uuid,text,text,text,text,text,text,text) to anon, authenticated;
 
 -- Extra contact fields for the first Administrator account. photo_url already
 -- exists from the base PROFILES_MIGRATION_SQL.
@@ -1789,7 +1867,7 @@ begin
   end loop;
 
   -- School record: owned by the mother system, not this app's own tables.
-  insert into schools (name, motto, village, subcounty, district, size_range, status, school_code)
+  insert into schools (name, motto, village, sub_county, district, size_range, status, school_code)
   values (
     trim(p_school_name), nullif(trim(p_school_motto),''),
     nullif(trim(p_school_village),''), nullif(trim(p_school_subcounty),''), nullif(trim(p_school_district),''),
@@ -2427,7 +2505,7 @@ function openSchoolUpgradeModal() {
     <p class="tiny-note" style="margin-bottom:10px;"></p>
     <div class="field"><label>Motto</label><input id="upgMotto" value="${s.motto||""}" placeholder="" ${s.motto?"disabled":""} /></div>
     <div class="field"><label>Village</label><input id="upgVillage" value="${s.village||""}" ${s.village?"disabled":""} /></div>
-    <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.subcounty||""}" ${s.subcounty?"disabled":""} /></div>
+    <div class="field"><label>Subcounty</label><input id="upgSubcounty" value="${s.sub_county||""}" ${s.sub_county?"disabled":""} /></div>
     <div class="field"><label>District</label><input id="upgDistrict" value="${s.district||""}" ${s.district?"disabled":""} /></div>
     <div class="field"><label>School size</label><select id="upgSizeRange" ${s.size_range?"disabled":""}><option value="">Select…</option>${sizeOptions}</select></div>
     <div class="field"><label>Your password (to confirm)</label><input id="upgConfirmPw" type="password" /></div>
@@ -2871,6 +2949,7 @@ function updateActiveNavHighlight() {
 
 // Renders just the title + content area for the current tab, without touching the sidebar/topbar/bottomnav shell.
 function renderTabContent() {
+  resetNavStack();
   const pageTitle = document.getElementById("pageTitle");
   pageTitle.textContent = NAV.find(n=>n.id===tab)?.label || "";
   pageTitle.style.animation = "none";
@@ -3751,7 +3830,7 @@ async function resolveParentForStudent(student, onResolved) {
     openInfoModal("No parent account linked", `
       <div class="tiny-note" style="text-align:left;margin:0 0 12px;">${student.full_name} isn't linked to a parent app account yet, so there's no in-app chat to open.</div>
       ${student.guardian_name ? `<div class="view-row"><div class="vlabel">Parent/guardian</div><div class="vvalue">${student.guardian_name}</div></div>` : ""}
-      ${student.guardian_phone ? `<div class="view-row"><div class="vlabel">Phone</div><div class="vvalue">${student.guardian_phone}</div></div>` : ""}
+      ${student.guardian_contact ? `<div class="view-row"><div class="vlabel">Phone</div><div class="vvalue">${student.guardian_contact}</div></div>` : ""}
     `);
     return;
   }
@@ -4276,6 +4355,7 @@ function renderParentApp() {
   });
   restoreBottomNavScroll(bottomnav, prevBottomNavScroll);
   refreshParentBadges();
+  resetNavStack();
   const pageTitle = document.getElementById("pageTitle");
   pageTitle.textContent = NAV_PARENT.find(n=>n.id===tab)?.label || "";
   pageTitle.style.animation = "none";
@@ -4359,7 +4439,7 @@ async function renderParentChildren(container) {
     const className = c.classes ? (c.classes.name + (c.classes.section ? (' '+c.classes.section) : '')) : "Unassigned";
     const row = el(`<div class="list-row">${avatarHtml(c.full_name, c.photo_url, 40)}
       <div class="list-main"><div class="list-title">${c.full_name}</div><div class="list-sub">${c.admission_no} · ${className}</div></div>${ic.chevronRight}</div>`);
-    row.onclick = () => renderParentChildDetail(container, c);
+    row.onclick = () => { pushNavState(() => renderParentChildren(container)); renderParentChildDetail(container, c); };
     list.appendChild(row);
   });
   document.getElementById("addChildBtn").onclick = () => openAddChildModal(container);
@@ -4381,7 +4461,6 @@ function openAddChildModal(container) {
 async function renderParentChildDetail(container, child) {
   const className = child.classes ? (child.classes.name + (child.classes.section ? (' '+child.classes.section) : '')) : "Unassigned";
   container.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to My Children</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
       <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
@@ -4389,7 +4468,6 @@ async function renderParentChildDetail(container, child) {
     <div class="card"><h3 style="color:var(--amber-dark);margin-bottom:10px;">Attendance</h3><div id="attArea"><div class="center-loading">Loading…</div></div></div>
     <div class="card"><h3 style="color:var(--indigo);margin-bottom:10px;">Report card &amp; academics</h3><div id="acadArea"><div class="center-loading">Loading…</div></div></div>
   `;
-  document.getElementById("backBtn").onclick = () => renderParentChildren(container);
   renderChildAttendance(document.getElementById("attArea"), child);
   renderChildAcademics(document.getElementById("acadArea"), child);
 }
@@ -4475,7 +4553,7 @@ async function renderParentFees(container) {
     const row = el(`<div class="list-row">${avatarHtml(c.full_name, c.photo_url, 40)}
       <div class="list-main"><div class="list-title">${c.full_name}</div><div class="list-sub">${className} · Paid ${currency()}${s.totalPaid.toLocaleString()}</div></div>
       <div style="text-align:right;"><div style="font-weight:800;color:${s.totalDue>0?'var(--red)':'var(--teal-dark)'};">${currency()}${s.totalDue.toLocaleString()}</div><div class="tiny-note" style="margin:0;">due</div></div>${ic.chevronRight}</div>`);
-    row.onclick = () => renderParentChildFeeDetail(container, c);
+    row.onclick = () => { pushNavState(() => renderParentFees(container)); renderParentChildFeeDetail(container, c); };
     list.appendChild(row);
   });
 }
@@ -4501,7 +4579,6 @@ async function renderParentChildFeeDetail(container, child) {
     return `<div class="view-row"><div class="vlabel">${termName}</div><div class="vvalue">${currency()}${paidForTerm.toLocaleString()} / ${currency()}${due.toLocaleString()} <span style="color:${bal>0?'var(--red)':'var(--teal-dark)'};">(${currency()}${bal.toLocaleString()} due)</span></div></div>`;
   }).join("");
   container.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(child.full_name, child.photo_url, 52)}
       <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${child.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${child.admission_no} · ${className}</div></div>
@@ -4513,7 +4590,6 @@ async function renderParentChildFeeDetail(container, child) {
     <div class="card"><h3 style="color:var(--red);margin-bottom:10px;">Fee balance by term</h3>${termRowsHtml || emptyState("No fee structure set up yet for this class.")}</div>
     <div class="card"><h3 style="color:var(--teal-dark);margin-bottom:10px;">Payment history &amp; receipts</h3><div id="payList"></div></div>
   `;
-  document.getElementById("backBtn").onclick = () => renderParentFees(container);
   const payList = document.getElementById("payList");
   payList.innerHTML = payments.length ? "" : emptyState("No payments recorded yet.");
   payments.forEach(p => {
@@ -4536,7 +4612,7 @@ async function getOrAssignReceiptNo(payment) {
     const digits = s.receipt_digits || 6;
     const next = s.receipt_next_number || 1;
     const receiptNo = `${prefix}-${String(next).padStart(digits, "0")}`;
-    await dbUpdate("payments", payment.id, { receipt_no: receiptNo });
+    await dbUpdate("fee_payments", payment.id, { receipt_no: receiptNo });
     await dbUpsert("school_settings", { id:1, receipt_next_number: next + 1 }, "id");
     await loadSchoolSettings();
     payment.receipt_no = receiptNo;
@@ -4970,13 +5046,12 @@ async function renderAcademic(container, sub=null) {
         <div class="avatar" style="background:var(--teal-tint);color:var(--teal-dark);">${it.icon}</div>
         <div class="list-main"><div class="list-title">${it.label}</div></div>
         ${ic.chevronRight}</div>`);
-      row.onclick = () => renderAcademic(container, it.id);
+      row.onclick = () => { pushNavState(() => renderAcademic(container)); renderAcademic(container, it.id); };
       list.appendChild(row);
     });
     return;
   }
-  container.innerHTML = `<button class="btn btn-ghost btn-sm" id="academicBackBtn" style="margin-bottom:12px;">${ic.back} Back to Academic Settings</button><div id="academicBody"><div class="center-loading">Loading…</div></div>`;
-  document.getElementById("academicBackBtn").onclick = () => renderAcademic(container);
+  container.innerHTML = `<div id="academicBody"><div class="center-loading">Loading…</div></div>`;
   const body = document.getElementById("academicBody");
   if (sub==="terms") return renderTerms(body);
   if (sub==="classes") return renderClasses(body);
@@ -5593,13 +5668,13 @@ async function renderBookCatalog(body, opts={}) {
   list.innerHTML = books.length ? "" : emptyState("No books yet. Add your first title to start the catalog.");
   const condCls = c => (c==="New"||c==="Good") ? "badge-green" : c==="Fair" ? "badge-amber" : "badge-red";
   books.forEach(b => {
-    const outOfStock = Number(b.copies_available) <= 0;
+    const outOfStock = Number(b.available_copies) <= 0;
     const row = el(`<div class="list-row"><div class="avatar">${initials(b.title)}</div>
       <div class="list-main"><div class="list-title">${b.title} ${outOfStock?'<span class="badge badge-red">All borrowed</span>':''}</div>
-      <div class="list-sub">${b.author ? b.author+" · " : ""}${b.category ? b.category+" · " : ""}Available: ${b.copies_available}/${b.copies_total} <span class="badge ${condCls(b.condition)}">${b.condition||"—"}</span></div></div></div>`);
+      <div class="list-sub">${b.author ? b.author+" · " : ""}${b.category ? b.category+" · " : ""}Available: ${b.available_copies}/${b.total_copies} <span class="badge ${condCls(b.condition)}">${b.condition||"—"}</span></div></div></div>`);
     const view = () => openViewModal(b.title, [
       ["Author", b.author], ["ISBN", b.isbn], ["Category", b.category], ["Publisher", b.publisher],
-      ["Copies", `${b.copies_available} available of ${b.copies_total}`], ["Shelf location", b.shelf_location],
+      ["Copies", `${b.available_copies} available of ${b.total_copies}`], ["Shelf location", b.shelf_location],
       ["Condition", b.condition], ["Notes", b.notes],
     ], () => openBookModal(body, b, {search,sortBy}));
     const edit = () => openBookModal(body, b, {search,sortBy});
@@ -5622,7 +5697,7 @@ function openBookModal(body, b, opts) {
       <div class="field"><label>Publisher</label><input id="f_publisher" placeholder="" value="${b?.publisher||''}"/></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Total copies</label><input id="f_copies" type="number" min="1" step="1" value="${b?.copies_total??1}"/></div>
+      <div class="field"><label>Total copies</label><input id="f_copies" type="number" min="1" step="1" value="${b?.total_copies??1}"/></div>
       <div class="field"><label>Shelf location</label><input id="f_shelf" placeholder="" value="${b?.shelf_location||''}"/></div>
     </div>
     <div class="field"><label>Condition</label><select id="f_condition">${["New","Good","Fair","Poor","Damaged"].map(c=>`<option value="${c}" ${b?.condition===c?'selected':''}>${c}</option>`).join("")}</select></div>
@@ -5630,19 +5705,19 @@ function openBookModal(body, b, opts) {
   `, async (ov) => {
     const title = val(ov,"f_title").trim();
     if (!title) throw new Error("Enter a title.");
-    const copies_total = Number(val(ov,"f_copies"));
-    if (val(ov,"f_copies")==="" || Number.isNaN(copies_total) || copies_total < 1) throw new Error("Enter a valid number of copies.");
-    let copies_available = copies_total;
+    const total_copies = Number(val(ov,"f_copies"));
+    if (val(ov,"f_copies")==="" || Number.isNaN(total_copies) || total_copies < 1) throw new Error("Enter a valid number of copies.");
+    let available_copies = total_copies;
     if (isEdit) {
       
       
-      const delta = copies_total - Number(b.copies_total);
-      copies_available = Math.max(0, Math.min(copies_total, Number(b.copies_available) + delta));
+      const delta = total_copies - Number(b.total_copies);
+      available_copies = Math.max(0, Math.min(total_copies, Number(b.available_copies) + delta));
     }
     const payload = {
       title, author: val(ov,"f_author").trim() || null, isbn: val(ov,"f_isbn").trim() || null,
       category: val(ov,"f_category").trim() || null, publisher: val(ov,"f_publisher").trim() || null,
-      copies_total, copies_available,
+      total_copies, available_copies,
       shelf_location: val(ov,"f_shelf").trim() || null, condition: val(ov,"f_condition"),
       notes: val(ov,"f_notes").trim() || null,
     };
@@ -5657,7 +5732,7 @@ async function renderLibraryBorrowing(body, opts={}) {
   let loans = [], books = [];
   let missingTable = false;
   try {
-    const params = { order:"borrowed_date.desc" };
+    const params = { order:"borrowed_at.desc" };
     if (search) params.or = `(borrower_name.ilike.*${encodeURIComponent(search)}*,book_title.ilike.*${encodeURIComponent(search)}*)`;
     loans = await dbSelectActive("library_loans", params);
     books = await dbSelectActive("library_books", { order:"title.asc" });
@@ -5678,12 +5753,12 @@ async function renderLibraryBorrowing(body, opts={}) {
   const list = document.getElementById("list");
   list.innerHTML = loans.length ? "" : emptyState("No loans yet. Borrow a book to start tracking it.");
   loans.forEach(l => {
-    const isOut = !l.returned_date;
+    const isOut = !l.returned_at;
     const overdue = isOut && daysOverdue(l.due_date) > 0;
     const statusBadge = !isOut ? '<span class="badge badge-green">Returned</span>' : overdue ? `<span class="badge badge-red">Overdue ${daysOverdue(l.due_date)}d</span>` : '<span class="badge badge-amber">Borrowed</span>';
     const row = el(`<div class="list-row" style="flex-wrap:wrap;align-items:flex-start;"><div class="avatar">${initials(l.book_title)}</div>
       <div class="list-main"><div class="list-title">${l.book_title} ${statusBadge}</div>
-      <div class="list-sub">${l.borrower_name} (${l.borrower_type}) · Due ${l.due_date}${l.returned_date ? " · Returned "+l.returned_date : ""}</div></div>
+      <div class="list-sub">${l.borrower_name} (${l.borrower_type}) · Due ${l.due_date}${l.returned_at ? " · Returned "+l.returned_at.slice(0,10) : ""}</div></div>
       ${isOut ? `<button class="btn btn-primary btn-sm returnBtn" data-id="${l.id}">${ic.check} Return</button>` : ""}
       </div>`);
     
@@ -5692,8 +5767,8 @@ async function renderLibraryBorrowing(body, opts={}) {
     
     bindTapHold(row, {
       onTap: () => openViewModal(l.book_title, [
-        ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_date], ["Due", l.due_date],
-        ["Returned", l.returned_date || "Not yet returned"], ["Fine", l.fine_amount ? `${currency()}${l.fine_amount} (${l.fine_paid?"paid":"unpaid"})` : "None"],
+        ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_at ? l.borrowed_at.slice(0,10) : "—"], ["Due", l.due_date],
+        ["Returned", l.returned_at ? l.returned_at.slice(0,10) : "Not yet returned"], ["Fine", l.fine_amount ? `${currency()}${l.fine_amount} (${l.fine_paid?"paid":"unpaid"})` : "None"],
         ["Notes", l.notes],
       ], () => openLoanEditModal(body, l, opts)),
       onHold: () => openActionSheet([
@@ -5718,17 +5793,17 @@ async function renderLibraryBorrowing(body, opts={}) {
   document.getElementById("addBtn").onclick = () => openLoanModal(body, books, opts);
 }
 async function returnLoan(loan) {
-  await dbUpdate("library_loans", loan.id, { returned_date: new Date().toISOString().slice(0,10) });
+  await dbUpdate("library_loans", loan.id, { returned_at: new Date().toISOString() });
   if (loan.book_id) {
     try {
-      const rows = await dbSelect("library_books", { id:`eq.${loan.book_id}`, select:"id,copies_total,copies_available" });
+      const rows = await dbSelect("library_books", { id:`eq.${loan.book_id}`, select:"id,total_copies,available_copies" });
       const b = rows[0];
-      if (b) await dbUpdate("library_books", b.id, { copies_available: Math.min(Number(b.copies_total), Number(b.copies_available) + 1) });
+      if (b) await dbUpdate("library_books", b.id, { available_copies: Math.min(Number(b.total_copies), Number(b.available_copies) + 1) });
     } catch (e) {  }
   }
 }
 function openLoanModal(body, books, opts) {
-  const available = books.filter(b => Number(b.copies_available) > 0);
+  const available = books.filter(b => Number(b.available_copies) > 0);
   openModal("New loan", `
     <div class="field"><label>Book</label><input id="f_book" list="f_book_list" placeholder="Pick an available book" />
       <datalist id="f_book_list">${available.map(b=>`<option value="${b.title}"></option>`).join("")}</datalist></div>
@@ -5752,11 +5827,11 @@ function openLoanModal(body, books, opts) {
     if (!book) throw new Error("That book isn't in the catalog, or has no copies available right now.");
     const payload = {
       book_id: book.id, book_title: book.title, borrower_name, borrower_type: val(ov,"f_type"),
-      borrowed_date: val(ov,"f_borrowed") || new Date().toISOString().slice(0,10),
+      borrowed_at: new Date().toISOString(),
       due_date, notes: val(ov,"f_notes").trim() || null,
     };
     await dbInsert("library_loans", payload);
-    await dbUpdate("library_books", book.id, { copies_available: Number(book.copies_available) - 1 });
+    await dbUpdate("library_books", book.id, { available_copies: Number(book.available_copies) - 1 });
     renderLibraryBorrowing(body, opts);
   }, { saveLabel: "Borrow" });
 }
@@ -5789,7 +5864,7 @@ function openLoanEditModal(body, l, opts) {
 async function renderLibraryOverdue(body) {
   let loans = [];
   let missingTable = false;
-  try { loans = await dbSelectActive("library_loans", { returned_date:"is.null", order:"due_date.asc" }); }
+  try { loans = await dbSelectActive("library_loans", { returned_at:"is.null", order:"due_date.asc" }); }
   catch (e) { missingTable = true; }
 
   if (missingTable) {
@@ -5817,7 +5892,7 @@ async function renderLibraryOverdue(body) {
       renderLibraryOverdue(body);
     });
     row.onclick = (e) => { if (e.target.closest(".returnBtn")) return; openViewModal(l.book_title, [
-      ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_date], ["Due", l.due_date], ["Days overdue", daysOverdue(l.due_date)], ["Notes", l.notes],
+      ["Borrower", `${l.borrower_name} (${l.borrower_type})`], ["Borrowed", l.borrowed_at ? l.borrowed_at.slice(0,10) : "—"], ["Due", l.due_date], ["Days overdue", daysOverdue(l.due_date)], ["Notes", l.notes],
     ]); };
     list.appendChild(row);
   });
@@ -5839,7 +5914,7 @@ async function renderLibraryFines(body) {
   const withFines = loans.filter(l => Number(l.fine_amount) > 0);
   const outstanding = withFines.filter(l => !l.fine_paid);
   const totalOutstanding = outstanding.reduce((a,l) => a + Number(l.fine_amount||0), 0);
-  const unfined = loans.filter(l => !l.returned_date && daysOverdue(l.due_date) > 0 && !Number(l.fine_amount));
+  const unfined = loans.filter(l => !l.returned_at && daysOverdue(l.due_date) > 0 && !Number(l.fine_amount));
 
   body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Library Fines</h3></div>
     <div class="card" style="padding:14px;margin-bottom:14px;">
@@ -5917,11 +5992,11 @@ async function renderStudents(container, opts={}) {
       const overlay = openViewModal(s.full_name, [
         ["Photo", s.photo_url ? `<img src="${s.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
         ["Admission no.", s.admission_no], ["Class", s.classes ? (s.classes.name+(s.classes.section?(' '+s.classes.section):'')) : 'Unassigned'],
-        ["Gender", s.gender], ["Date of birth", s.dob],
-        ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relationship], ["Guardian phone", s.guardian_phone],
+        ["Gender", s.gender], ["Date of birth", s.date_of_birth],
+        ["Parent/guardian", s.guardian_name], ["Relationship", s.guardian_relation], ["Guardian phone", s.guardian_contact],
         ["Medical information", s.medical_info],
-        ["Village", s.village], ["Subcounty", s.subcounty], ["District", s.district],
-        ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relationship], ["Emergency phone", s.emergency_phone],
+        ["Village", s.village], ["Subcounty", s.sub_county], ["District", s.district],
+        ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relation], ["Emergency phone", s.emergency_contact],
         ["Status", s.status],
       ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null);
       
@@ -5961,7 +6036,7 @@ function openStudentModal(container, classes, s) {
       <div class="field"><label>Admission no.</label><input id="f_adm" readonly value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
-    ${dobFieldHtml("f_dob", s?.dob)}
+    ${dobFieldHtml("f_dob", s?.date_of_birth)}
     <div class="field"><label>Gender</label><select id="f_gender" required>
         <option ${s?.gender==='Male'?'selected':''}>Male</option><option ${s?.gender==='Female'?'selected':''}>Female</option></select></div>
     <div class="field"><label>Class</label><select id="f_class" required><option value="">— Select class —</option>${classes.map(c=>`<option value="${c.id}" ${s?.class_id===c.id?'selected':''}>${c.name}${c.section?(' '+c.section):''}</option>`).join("")}</select></div>
@@ -5969,9 +6044,9 @@ function openStudentModal(container, classes, s) {
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Parent / guardian</div>
     <div class="grid2">
       <div class="field"><label>Name</label><input id="f_gname" required value="${s?.guardian_name||''}"/></div>
-      <div class="field"><label>Relationship</label><input id="f_grel" required placeholder="" value="${s?.guardian_relationship||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_grel" required placeholder="" value="${s?.guardian_relation||''}"/></div>
     </div>
-    <div class="field"><label>Phone number</label><input id="f_gphone" required value="${s?.guardian_phone||''}"/></div>
+    <div class="field"><label>Phone number</label><input id="f_gphone" required value="${s?.guardian_contact||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Medical information</div>
     <div class="field"><label>Allergies, conditions, medication, etc.</label><textarea id="f_medical" rows="2" required>${s?.medical_info||''}</textarea></div>
@@ -5979,16 +6054,16 @@ function openStudentModal(container, classes, s) {
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Location</div>
     <div class="grid2">
       <div class="field"><label>Village</label><input id="f_village" required value="${s?.village||''}"/></div>
-      <div class="field"><label>Subcounty</label><input id="f_subcounty" required value="${s?.subcounty||''}"/></div>
+      <div class="field"><label>Subcounty</label><input id="f_subcounty" required value="${s?.sub_county||''}"/></div>
     </div>
     <div class="field"><label>District</label><input id="f_district" required value="${s?.district||''}"/></div>
 
     <div class="field" style="font-weight:700;color:var(--navy-2);margin-top:6px;">Emergency contact</div>
     <div class="grid2">
       <div class="field"><label>Name</label><input id="f_ename" value="${s?.emergency_name||''}"/></div>
-      <div class="field"><label>Relationship</label><input id="f_erel" value="${s?.emergency_relationship||''}"/></div>
+      <div class="field"><label>Relationship</label><input id="f_erel" value="${s?.emergency_relation||''}"/></div>
     </div>
-    <div class="field"><label>Phone number</label><input id="f_ephone" value="${s?.emergency_phone||''}"/></div>
+    <div class="field"><label>Phone number</label><input id="f_ephone" value="${s?.emergency_contact||''}"/></div>
 
     <div class="field"><label>Status</label><select id="f_status" required>
       ${["active","inactive","graduated","transferred"].map(v=>`<option value="${v}" ${s?.status===v?'selected':''}>${v}</option>`).join("")}</select></div>
@@ -6002,12 +6077,12 @@ function openStudentModal(container, classes, s) {
     if (!isEdit && !capturedPhotoDataUrl && !chosenFile) throw new Error("A registration photo is required — use Live or Pick.");
     const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (s?.photo_url || null));
     const payload = {
-      admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), dob: val(ov,"f_dob")||null,
+      admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), date_of_birth: val(ov,"f_dob")||null,
       gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
-      guardian_name: val(ov,"f_gname"), guardian_relationship: val(ov,"f_grel"), guardian_phone: val(ov,"f_gphone"),
+      guardian_name: val(ov,"f_gname"), guardian_relation: val(ov,"f_grel"), guardian_contact: val(ov,"f_gphone"),
       medical_info: val(ov,"f_medical"),
-      village: val(ov,"f_village"), subcounty: val(ov,"f_subcounty"), district: val(ov,"f_district"),
-      emergency_name: val(ov,"f_ename"), emergency_relationship: val(ov,"f_erel"), emergency_phone: val(ov,"f_ephone"),
+      village: val(ov,"f_village"), sub_county: val(ov,"f_subcounty"), district: val(ov,"f_district"),
+      emergency_name: val(ov,"f_ename"), emergency_relation: val(ov,"f_erel"), emergency_contact: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
     };
     if (isEdit) await dbUpdate("students", s.id, payload); else { await dbInsert("students", payload); await advanceIdSeq("student"); }
@@ -6090,7 +6165,7 @@ async function renderTeachers(container, opts={}) {
       ["Class teacher of", classNames || "Not assigned to a class"],
       ["Status", t.status],
     ], () => openTeacherModal(container, t), [
-      { label:"Full profile", icon:ic.teacher, onClick: () => renderTeacherProfile(container, t).catch(errShow(container)) },
+      { label:"Full profile", icon:ic.teacher, onClick: () => { pushNavState(() => renderTeachers(container).catch(errShow(container))); renderTeacherProfile(container, t).catch(errShow(container)); } },
     ]);
     const edit = () => openTeacherModal(container, t);
     const del = async () => { if (await customConfirm(`Move ${t.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("teachers", t.id); renderTeachers(container,{search,sortBy}); })(); };
@@ -6627,7 +6702,6 @@ async function searchTeacherIdentities(query) {
 
 async function renderTeacherProfile(container, teacher) {
   container.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Staff</button>
     <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
       ${avatarHtml(teacher.full_name, teacher.photo_url, 56)}
       <div>
@@ -6640,7 +6714,6 @@ async function renderTeacherProfile(container, teacher) {
     <div class="pill-row" id="tpPills"></div>
     <div id="tpBody"><div class="center-loading">Loading…</div></div>
   `;
-  document.getElementById("backBtn").onclick = () => renderTeachers(container).catch(errShow(container));
   const sub = "overview";
   wireTeacherProfilePills(container, teacher, sub);
 }
@@ -7178,7 +7251,7 @@ async function renderSchoolHealth(container) {
     </div>
     <div class="card" id="teacherPerfPanel"><div class="center-loading">Loading…</div></div>
   `;
-  document.getElementById("lowAttStat").onclick = () => renderLowAttendanceList(container, lowAttendanceStudents, students, windowStart);
+  document.getElementById("lowAttStat").onclick = () => { pushNavState(() => renderSchoolHealth(container).catch(errShow(container))); renderLowAttendanceList(container, lowAttendanceStudents, students, windowStart); };
   renderTeacherAttendancePerformance(document.getElementById("teacherPerfPanel"), teachers, teacherAttAgg, overallTeacherRate);
 }
 
@@ -7218,12 +7291,10 @@ function renderLowAttendanceList(container, lowList, students, windowStart) {
     .filter(l => l.student)
     .sort((a,b) => a.rate - b.rate);
   container.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to School Health</button>
     <div class="section-head"><h3 style="color:var(--red);">Students with low attendance</h3></div>
     <p style="font-size:12.5px;color:var(--ink-soft);margin:-6px 0 14px;">Attendance below ${LOW_ATTENDANCE_THRESHOLD}% over the last ${ATT_WINDOW_DAYS} days (since ${formatDate(windowStart)}).</p>
     <div class="card" id="lowAttList"></div>
   `;
-  document.getElementById("backBtn").onclick = () => renderSchoolHealth(container).catch(errShow(container));
   const list = document.getElementById("lowAttList");
   list.innerHTML = rows.length ? "" : emptyState("No students currently below the attendance threshold.");
   rows.forEach(r => {
@@ -7312,7 +7383,7 @@ async function renderFeesHealth(body) {
   const bind = (key, title, termList, stats) => {
     if (!termList.length) return;
     const el2 = document.getElementById(`fh_total_${key}`);
-    if (el2) el2.onclick = () => renderPaidStudentsList(body, title, stats.rows);
+    if (el2) el2.onclick = () => { pushNavState(() => renderFeesHealth(body)); renderPaidStudentsList(body, title, stats.rows); };
   };
   bind("current", "Current Term — Students who have paid", [currentTerm], curStats);
   bind("last", "Last Term — Students who have paid", lastTerm ? [lastTerm] : [], lastStats);
@@ -7329,11 +7400,9 @@ function renderPaidStudentsList(body, title, rows) {
   });
   const list = [...byStudent.values()].filter(e => e.student).sort((a,b) => b.total - a.total);
   body.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to Fees Health</button>
     <div class="section-head"><h3 style="color:var(--red);">${title}</h3></div>
     <div class="card" id="paidList"></div>
   `;
-  document.getElementById("backBtn").onclick = () => renderFeesHealth(body);
   const paidList = document.getElementById("paidList");
   paidList.innerHTML = list.length ? "" : emptyState("No payments recorded for this period yet.");
   list.forEach(({ student:s, total }) => {
@@ -7401,7 +7470,7 @@ async function renderFeeStatus(body, bracketKey="") {
       <div class="list-main"><div class="list-title">${s.full_name}</div><div class="list-sub">${s.admission_no||''} · ${className} · ${currency()}${paid.toLocaleString()} / ${currency()}${assigned.toLocaleString()}</div></div>
       <div style="text-align:right;font-weight:800;color:${color};">${pct.toFixed(0)}%</div>${ic.chevronRight}
     </div>`);
-    row.onclick = () => renderStaffStudentFeeDetail(body, s, () => renderFeeStatus(body, bracketKey));
+    row.onclick = () => { const onBack = () => renderFeeStatus(body, bracketKey); pushNavState(onBack); renderStaffStudentFeeDetail(body, s, onBack); };
     list.appendChild(row);
   });
 }
@@ -7426,7 +7495,6 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
     return `<div class="view-row"><div class="vlabel">${termName}</div><div class="vvalue">${currency()}${paidForTerm.toLocaleString()} / ${currency()}${due.toLocaleString()} <span style="color:${bal>0?'var(--red)':'var(--teal-dark)'};">(${currency()}${bal.toLocaleString()} due)</span></div></div>`;
   }).join("");
   body.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back</button>
     <div class="card row" style="align-items:center;gap:12px;">
       ${avatarHtml(student.full_name, student.photo_url, 52)}
       <div><div style="font-weight:800;font-size:16px;color:var(--navy);">${student.full_name}</div><div class="tiny-note" style="margin:0;text-align:left;">${student.admission_no||''} · ${className}</div></div>
@@ -7442,7 +7510,6 @@ async function renderStaffStudentFeeDetail(body, student, onBack) {
       <div id="payList"></div>
     </div>
   `;
-  document.getElementById("backBtn").onclick = onBack;
   const payList = document.getElementById("payList");
   payList.innerHTML = payments.length ? "" : emptyState("No payments recorded yet.");
   payments.forEach(p => {
@@ -7557,7 +7624,7 @@ async function renderFeeStructure(body) {
       <div class="list-main"><div class="list-title">${c.name}${c.section?(' '+c.section):''}</div>
       <div class="list-sub">${stat.count} fee item${stat.count===1?'':'s'}${stat.count?` · ${currency()}${stat.total.toLocaleString()}`:''}</div></div>
       <div style="color:var(--ink-soft);display:flex;align-items:center;">${ic.chevronRight}</div></div>`);
-    row.onclick = () => renderFeeStructureClass(body, c, terms);
+    row.onclick = () => { pushNavState(() => renderFeeStructure(body)); renderFeeStructureClass(body, c, terms); };
     list.appendChild(row);
   });
 }
@@ -7565,7 +7632,6 @@ async function renderFeeStructureClass(body, cls, terms) {
   const items = await dbSelectActive("fee_structures", { select:"*,terms(name)", class_id:`eq.${cls.id}`, order:"created_at.desc" });
   const total = items.reduce((a,b)=>a+Number(b.amount), 0);
   body.innerHTML = `
-    <button class="btn btn-ghost btn-sm" id="backBtn" style="margin-bottom:12px;">${ic.back} Back to classes</button>
     <div class="section-head">
       <h3 style="color:var(--red);">${cls.name}${cls.section?(' '+cls.section):''} — Fee Items</h3>
       <button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} Add fee item</button>
@@ -7573,7 +7639,6 @@ async function renderFeeStructureClass(body, cls, terms) {
     <div class="card" id="list"></div>
     ${items.length ? `<div class="card row" style="font-weight:700;"><div style="color:var(--navy);">Total for this class</div><div style="color:var(--red);font-size:16px;">${currency()}${total.toLocaleString()}</div></div>` : ''}
   `;
-  document.getElementById("backBtn").onclick = () => renderFeeStructure(body);
   const list = document.getElementById("list");
   list.innerHTML = items.length ? "" : emptyState("No fee items for this class yet.");
   const refresh = () => renderFeeStructureClass(body, cls, terms);
@@ -8606,14 +8671,13 @@ async function renderUsers(container, sub=null) {
         <div class="list-main"><div class="list-title">${it.label}</div></div>
         ${it.badge ? `<span class="badge badge-amber" style="margin-right:4px;">${it.badge}</span>` : ""}
         ${ic.chevronRight}</div>`);
-      row.onclick = () => renderUsers(container, it.id);
+      row.onclick = () => { pushNavState(() => renderUsers(container)); renderUsers(container, it.id); };
       list.appendChild(row);
     });
     return;
   }
 
-  container.innerHTML = `<button class="btn btn-ghost btn-sm" id="usersBackBtn" style="margin-bottom:12px;">${ic.back} Back to Account</button><div id="usersBody"><div class="center-loading">Loading…</div></div>`;
-  document.getElementById("usersBackBtn").onclick = () => renderUsers(container);
+  container.innerHTML = `<div id="usersBody"><div class="center-loading">Loading…</div></div>`;
   const body = document.getElementById("usersBody");
 
   if (sub === "pendingregs") {
@@ -9006,14 +9070,13 @@ async function renderSettings(container, sub=null) {
         <div class="avatar" style="background:${it.tint};color:${it.color};">${it.icon}</div>
         <div class="list-main"><div class="list-title">${it.label}</div><div class="list-sub">${it.desc}</div></div>
         ${ic.chevronRight}</div>`);
-      row.onclick = () => renderSettings(container, it.id);
+      row.onclick = () => { pushNavState(() => renderSettings(container)); renderSettings(container, it.id); };
       list.appendChild(row);
     });
     return;
   }
   const menuItem = SETTINGS_MENU_ITEMS.find(it => it.id === sub);
-  container.innerHTML = `<button class="btn btn-ghost btn-sm" id="settingsBackBtn" style="margin-bottom:12px;">${ic.back} Back to Settings</button><div id="settingsHubBody"><div class="center-loading">Loading…</div></div>`;
-  document.getElementById("settingsBackBtn").onclick = () => renderSettings(container);
+  container.innerHTML = `<div id="settingsHubBody"><div class="center-loading">Loading…</div></div>`;
   const body = document.getElementById("settingsHubBody");
   if (sub === "academic") return renderAcademic(body);
   if (sub === "users") return renderUsers(body);
@@ -9075,7 +9138,7 @@ async function renderSchoolSettingsPanel(container) {
         <div class="avatar" style="background:${p.tint};color:${p.color};">${p.icon}</div>
         <div class="list-main"><div class="list-title">${p.label}</div></div>
         ${ic.chevronRight}</div>`);
-      row.onclick = () => showSchoolSettingsPanel(p.id);
+      row.onclick = () => { pushNavState(showSchoolSettingsMenu); showSchoolSettingsPanel(p.id); };
       list.appendChild(row);
     });
   }
@@ -9101,8 +9164,7 @@ async function renderSchoolSettingsPanel(container) {
 
   function showSchoolSettingsPanel(id) {
     const p = SETTINGS_PANELS.find(x => x.id === id);
-    container.innerHTML = `<button class="btn btn-ghost btn-sm" id="schoolSettingsBackBtn" style="margin-bottom:12px;">${ic.back} Back to School settings</button><div id="schoolSettingsPanelBody"></div>`;
-    document.getElementById("schoolSettingsBackBtn").onclick = showSchoolSettingsMenu;
+    container.innerHTML = `<div id="schoolSettingsPanelBody"></div>`;
     const body = document.getElementById("schoolSettingsPanelBody");
 
     if (id === "overview") {
