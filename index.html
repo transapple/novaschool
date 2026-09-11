@@ -3300,9 +3300,9 @@ function statusScreenActions(opts = {}) {
   const { retry = true, contact = true } = opts;
   if (CURRENT_SCHOOL) {
     return `
-      <button class="btn btn-ghost" id="statusLogout" style="width:100%;">${auth ? "Log out" : "Not your school? Start over"}</button>
-      ${retry ? `<button class="btn btn-primary" id="statusRetry" style="width:100%;margin-top:8px;">Check again</button>` : ""}
-      ${contact ? `<div style="margin-top:16px;"><span class="link-btn" id="statusContact" style="cursor:pointer;font-size:13px;">Think this is a mistake? Contact TransApple</span></div>` : ""}
+      ${contact ? `<button class="btn btn-primary" id="statusContact" style="width:100%;">${ic.chat} Chat with TransApple — log a complaint</button>` : ""}
+      ${retry ? `<button class="btn ${contact ? "btn-ghost" : "btn-primary"}" id="statusRetry" style="width:100%;margin-top:8px;">Check again</button>` : ""}
+      <button class="btn btn-ghost" id="statusLogout" style="width:100%;margin-top:8px;">${auth ? "Log out" : "Not your school? Start over"}</button>
     `;
   }
   return `<button class="btn btn-primary" id="statusBackToLogin" style="width:100%;">Back to log in</button>`;
