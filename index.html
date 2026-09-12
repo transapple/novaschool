@@ -615,7 +615,7 @@ let cache = {};
 
 
 let CURRENT_SCHOOL_ID = null;
-const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff", "school_support_messages", "teacher_identities"]);
+const SCHOOL_SCOPE_EXEMPT = new Set(["schools", "mother_announcements", "push_subscriptions_staff", "school_support_messages", "teacher_identities", "platform_changelog"]);
 let tab = "dashboard";
 let pendingSubTab = null; 
 let loading = false;
@@ -2301,9 +2301,19 @@ async function sb(path, opts = {}) {
     
     
     
-    throw new OfflineError("Check your internet connection and try again. If this keeps happening, please contact the developer.");
+    throw new OfflineError("You're offline right now — this needs an internet connection. Anything you've already entered is safely saved and will sync automatically once you're back online.");
   } finally {
     clearTimeout(timeoutId);
+  }
+  // We just completed a real round trip to the server, so we know for a
+  // fact we're back online — clear the "offline" sticky state right here
+  // instead of waiting on the browser's "online" event, which doesn't
+  // always fire (especially in PWAs/mobile webviews). Without this, the
+  // status pill could keep showing "Offline — changes saved locally" even
+  // after connectivity had genuinely returned and everything had synced.
+  if (offlineBannerStickyUntilOnline) {
+    offlineBannerStickyUntilOnline = false;
+    updateNetStatusPill();
   }
   let data = null;
   try { data = await res.json(); } catch(e) { data = null; }
@@ -2597,9 +2607,60 @@ async function dbDelete(table, id) {
     return null;
   }
 }
+// Reads a table "excluding trashed rows." Some tables (e.g. classes) have
+// no deleted_at column at all, so that filtered query always errors and
+// falls back to a plain query — which is what actually gets cached. That's
+// fine online, but offline it's a trap: the filtered query's cache key was
+// never populated (it always errored before it could cache anything), so a
+// cache-miss on it would wrongly read as "zero rows" instead of "try the
+// other cache key" — which is exactly the bug that made the class list
+// look empty while registering a student offline. So while offline, check
+// both possible cache keys directly and use whichever one actually has
+// data, instead of letting a swallowed OfflineError masquerade as a real
+// empty result.
 async function dbSelectActive(table, params={}) {
-  try { return await dbSelect(table, Object.assign({ deleted_at:"is.null" }, params)); }
-  catch (e) { return await dbSelect(table, params); }
+  const filteredParams = Object.assign({ deleted_at:"is.null" }, params);
+  const filteredPath = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, filteredParams)))}`;
+  const filteredKey = table + "::" + filteredPath;
+  // Cache-first, same as dbSelect: if we already have a cached answer for the
+  // filtered query, use it instantly and let the background refresh (kicked
+  // off inside dbSelect) keep it warm.
+  const cachedFiltered = await offlineCacheGet(filteredKey);
+  if (cachedFiltered !== undefined) {
+    dbSelect(table, filteredParams).catch(() => {});
+    return cachedFiltered;
+  }
+  // No cached filtered data yet. Go straight to the network ourselves
+  // (instead of delegating to dbSelect, which would swallow a connectivity
+  // failure and quietly return []) so we can tell a genuine "can't reach the
+  // server" (OfflineError) apart from a real query error like a missing
+  // deleted_at column. Deliberately NOT gated on navigator.onLine: that flag
+  // only reflects the network adapter, not whether the server is actually
+  // reachable (captive portals, flaky wifi, etc. — see the note on the
+  // status-pill code below), so trusting it here would let this exact class
+  // of bug back in for anyone whose browser reports "online" while requests
+  // are actually failing.
+  try {
+    const data = await sb(filteredPath);
+    offlineCachePut(filteredKey, data);
+    return data;
+  } catch (e) {
+    if (e instanceof OfflineError) {
+      // Genuinely can't reach the server. Some tables (e.g. ones with no
+      // deleted_at column) never succeed on the filtered query and so only
+      // ever populate the plain cache key — check that one too before
+      // giving up, so a temporarily-unreachable server can't make a list
+      // look empty when we actually have cached data for it.
+      const plainPath = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
+      const cachedPlain = await offlineCacheGet(table + "::" + plainPath);
+      if (cachedPlain !== undefined) return cachedPlain;
+      noteOfflineDataServed();
+      return [];
+    }
+    // A real server-side error (not connectivity) — fall back to the plain
+    // (unfiltered) query, same as before.
+    return await dbSelect(table, params);
+  }
 }
 // Delete-by-filter for tables with no single "id" primary key (e.g. join
 // tables like class_subjects keyed on class_id+subject_id). Same
@@ -4240,7 +4301,14 @@ function staffSeesAnnouncement(a, dept) {
 }
 async function fetchStaffAnnouncements(limit = 30) {
   if (!CURRENT_SCHOOL_ID) return [];
-  const rows = await sb(`/rest/v1/mother_announcements?${qs({ order: "created_at.desc", limit: String(limit) })}`);
+  // Was calling sb() directly, which bypasses the offline cache entirely —
+  // unlike every other list in the app (including fetchStaffMessages right
+  // below), staff announcements never got cached, so the staff bell badge
+  // and panel silently went blank while offline instead of showing the last
+  // known announcements. dbSelect gives it the same cache-first/offline-safe
+  // behavior as everything else (mother_announcements is already in
+  // SCHOOL_SCOPE_EXEMPT, so this doesn't change what gets fetched).
+  const rows = await dbSelect("mother_announcements", { order: "created_at.desc", limit: String(limit) });
   const dept = profile?.department;
   return rows.filter(a => (a.target_all || (a.target_school_ids || []).includes(CURRENT_SCHOOL_ID)) && staffSeesAnnouncement(a, dept));
 }
@@ -4430,7 +4498,14 @@ async function unsubscribeStaffPush() {
 const UPDATE_SITE_URL = "https://transapple.github.io/novaschool/";
 async function fetchLatestChangelog() {
   try {
-    const rows = await sb(`/rest/v1/platform_changelog?${qs({ select: "*", order: "created_at.desc", limit: "1" })}`);
+    // Was calling sb() directly, which bypasses the offline cache — even
+    // though primeSchoolCache() explicitly warms this on login (implying it
+    // was meant to be available offline), it never actually got cached, so
+    // the "what's new" update banner just disappeared as soon as the device
+    // went offline. dbSelect makes it cache-first like everything else
+    // (platform_changelog is in SCHOOL_SCOPE_EXEMPT since it's a
+    // platform-wide table, not scoped to one school).
+    const rows = await dbSelect("platform_changelog", { select: "*", order: "created_at.desc", limit: "1" });
     return rows[0] || null;
   } catch (e) { return null; }
 }
@@ -10351,9 +10426,13 @@ function noteOfflineDataServed() {
   refreshActiveView();
 }
 
-function flashOfflineBannerForNav() {
-  if (!navigator.onLine || offlineBannerStickyUntilOnline) updateNetStatusPill();
-}
+// NOTE: this used to be called on every single tab/screen navigation to
+// re-flash the status pill, which meant browsing around while offline made
+// "Offline" keep popping up over and over — noisy and alarming rather than
+// informative. The pill already announces real state changes on its own
+// (going offline/online, a write getting queued, a sync finishing), so
+// plain navigation no longer re-announces it.
+function flashOfflineBannerForNav() {}
 window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); });
 window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; flushOutbox(); updateNetStatusPill(); });
 
