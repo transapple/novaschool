@@ -2601,8 +2601,46 @@ async function dbSelectActive(table, params={}) {
   try { return await dbSelect(table, Object.assign({ deleted_at:"is.null" }, params)); }
   catch (e) { return await dbSelect(table, params); }
 }
+// Delete-by-filter for tables with no single "id" primary key (e.g. join
+// tables like class_subjects keyed on class_id+subject_id). Same
+// offline-safe shape as dbDelete: applied to the cache immediately and
+// queued in the outbox (op "deleteWhere") if there's no connection.
+async function applyOptimisticDeleteWhere(table, filter) {
+  await offlineCacheMutateTable(table, (rows) => {
+    const matches = (r) => r && Object.keys(filter).every(k => String(r[k]) === String(filter[k]));
+    if (!rows.some(matches)) return null;
+    return rows.filter(r => !matches(r));
+  });
+}
+function deleteWhereParams(table, filter) {
+  return scopedParams(table, Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, `eq.${v}`])));
+}
+async function dbDeleteWhere(table, filter) {
+  try {
+    return await sb(`/rest/v1/${table}?${qs(deleteWhereParams(table, filter))}`, { method:"DELETE" });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    await applyOptimisticDeleteWhere(table, filter);
+    await outboxAdd({ table, op:"deleteWhere", filter, createdAt: Date.now() });
+    noteOfflineDataServed(); queueSyncAttempt();
+    return null;
+  }
+}
+
+// ---- Active-view refresh: whichever top-level tab is currently on screen
+// registers a "redraw yourself from cache" callback here. Any offline write,
+// or a background sync finishing, calls refreshActiveView() so the visible
+// screen updates immediately instead of only the pending-sync badge changing.
+// Re-running a tab's renderer is cheap and safe: dbSelect() is cache-first,
+// so this never blocks on the network. ----
+let __activeRefresh = null;
+function setActiveRefresh(fn) { __activeRefresh = fn; }
+function refreshActiveView() {
+  try { if (__activeRefresh) __activeRefresh(); } catch (e) { /* best-effort */ }
+}
 
 // ---- Outbox sync engine: replays queued offline writes once back online ----
+const OUTBOX_MAX_ATTEMPTS = 5;
 let outboxSyncing = false;
 let outboxSyncScheduled = false;
 function queueSyncAttempt() {
@@ -2611,6 +2649,20 @@ function queueSyncAttempt() {
   outboxSyncScheduled = true;
   setTimeout(() => { outboxSyncScheduled = false; flushOutbox(); }, 300);
 }
+async function outboxCounts() {
+  const all = await outboxAll();
+  const failed = all.filter(e => e.failed).length;
+  return { pending: all.length - failed, failed, total: all.length };
+}
+// Lets the user manually retry entries that gave up after OUTBOX_MAX_ATTEMPTS,
+// e.g. from tapping the "couldn't sync" badge.
+async function outboxRetryFailed() {
+  const all = await outboxAll();
+  for (const entry of all) {
+    if (entry.failed) await outboxUpdate(entry.localId, { failed: false, attempts: 0, lastError: null });
+  }
+  flushOutbox();
+}
 async function flushOutbox() {
   if (outboxSyncing || !navigator.onLine) return;
   outboxSyncing = true;
@@ -2618,6 +2670,7 @@ async function flushOutbox() {
   try {
     const entries = (await outboxAll()).sort((a, b) => a.createdAt - b.createdAt);
     for (const entry of entries) {
+      if (entry.failed) continue; // gave up after repeated non-connectivity errors; wait for manual retry
       try {
         if (entry.op === "insert") {
           const { id: tempId, ...rest } = entry.body;
@@ -2630,16 +2683,24 @@ async function flushOutbox() {
           await sb(`/rest/v1/${entry.table}?on_conflict=${entry.onConflict}`, { method:"POST", body: JSON.stringify(entry.body), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
         } else if (entry.op === "delete") {
           await sb(`/rest/v1/${entry.table}?${qs(scopedParams(entry.table, {id:`eq.${entry.targetId}`}))}`, { method:"DELETE" });
+        } else if (entry.op === "deleteWhere") {
+          await sb(`/rest/v1/${entry.table}?${qs(deleteWhereParams(entry.table, entry.filter))}`, { method:"DELETE" });
         }
         await outboxRemove(entry.localId);
       } catch (e) {
         if (e instanceof OfflineError) break; // connectivity dropped again mid-sync — stop, the next trigger will retry
-        await outboxUpdate(entry.localId, { lastError: e.message || "Sync failed", erroredAt: Date.now() });
+        // A real (non-connectivity) failure, e.g. a validation or conflict error.
+        // Retry a few times in case it's transient, then stop hammering it and
+        // surface it to the user instead of leaving the badge stuck forever.
+        const attempts = (entry.attempts || 0) + 1;
+        const failed = attempts >= OUTBOX_MAX_ATTEMPTS;
+        await outboxUpdate(entry.localId, { attempts, lastError: e.message || "Sync failed", erroredAt: Date.now(), failed });
       }
     }
   } finally {
     outboxSyncing = false;
     updateSyncBadge();
+    refreshActiveView();
   }
 }
 
@@ -2775,7 +2836,7 @@ async function tryRestoreRememberedSession() {
         auth = { user: { id: profile.id } };
         markDeviceSeen();
         pinLocked = false;
-        offlineBannerStickyUntilOnline = true; showOfflineBanner();
+        offlineBannerStickyUntilOnline = true; updateNetStatusPill();
         startSchoolSync();
         return true;
       }
@@ -5054,6 +5115,7 @@ const TAB_ANIM = { dashboard:"riseIn", "aio-ai":"popScale", health:"popScale", s
 
 
 async function renderDashboard(container) {
+  setActiveRefresh(() => renderDashboard(container));
   const today = new Date().toISOString().slice(0,10);
   const [students, teachers, classes, attToday, staffAttToday] = await Promise.all([
     dbSelectActive("students", { status:"eq.active", select:"id" }),
@@ -5185,6 +5247,7 @@ async function renderUpcomingWeek(body) {
 
 
 async function renderAcademic(container, sub=null) {
+  setActiveRefresh(() => renderAcademic(container, sub));
   if (!sub) {
     const items = [
       { id:"terms",     label:"Terms",      icon:ic.calendar },
@@ -5501,7 +5564,7 @@ function openSubjectModal(body, classes, s, linkedClassIds) {
     const toAdd = selectedIds.filter(id => !linkedClassIds.includes(id));
     const toRemove = linkedClassIds.filter(id => !selectedIds.includes(id));
     if (toAdd.length) await dbInsert("class_subjects", toAdd.map(class_id => ({ class_id, subject_id: subjectId })));
-    for (const class_id of toRemove) { await sb(`/rest/v1/class_subjects?class_id=eq.${class_id}&subject_id=eq.${subjectId}`, { method:"DELETE" }); }
+    for (const class_id of toRemove) { await dbDeleteWhere("class_subjects", { class_id, subject_id: subjectId }); }
     renderSubjects(body);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
 }
@@ -5538,6 +5601,7 @@ const INVENTORY_MODULE_DEFS = {
   stationery: { label:"Stationery Store",       itemNoun:"stationery item",categoryLabel:"Category (e.g. Paper, Pens, Printing)",              locationLabel:"Store location" },
 };
 async function renderInventory(container, sub="property") {
+  setActiveRefresh(() => renderInventory(container, sub));
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pillDefs = [["property","Property Register"],["classroom","Classroom Equipment"],["lab","Laboratory Equipment"],["stationery","Stationery Store"],["maintenance","Asset Maintenance"],["stock","Stock Levels"]];
@@ -5776,6 +5840,7 @@ function daysOverdue(dueDate) {
   return Math.round((today - due) / 86400000);
 }
 async function renderLibrary(container, sub="catalog") {
+  setActiveRefresh(() => renderLibrary(container, sub));
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pillDefs = [["catalog","Book Catalog"],["borrowing","Borrowing & Returns"],["overdue","Overdue Books"],["fines","Library Fines"]];
@@ -6111,6 +6176,7 @@ async function renderLibraryFines(body) {
 
 
 async function renderStudents(container, opts={}) {
+  setActiveRefresh(() => renderStudents(container, opts));
   const search = opts.search || "";
   const classFilter = opts.classFilter || "";
   const sortBy = opts.sortBy || "az";
@@ -6286,6 +6352,7 @@ function openStudentModal(container, classes, s) {
 
 
 async function renderTeachers(container, opts={}) {
+  setActiveRefresh(() => renderTeachers(container, opts));
   const search = opts.search || "";
   const sortBy = opts.sortBy || "az";
   let params = { ...sortToParams(sortBy, "full_name", "created_at", "gender") };
@@ -7110,6 +7177,7 @@ function openDocumentModal(body, container, teacher, d) {
 
 
 async function renderAttendance(container, opts={}) {
+  setActiveRefresh(() => renderAttendance(container, opts));
   const sub = opts.sub || "students";
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<h3 style="color:var(--amber-dark);margin-bottom:12px;">Attendance</h3><div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
@@ -7325,6 +7393,7 @@ const ATT_WINDOW_DAYS = 30;
 function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
 
 async function renderSchoolHealth(container) {
+  setActiveRefresh(() => renderSchoolHealth(container));
   container.innerHTML = `<div class="center-loading">Loading…</div>`;
   const today = new Date().toISOString().slice(0,10);
   const windowStart = daysAgoISO(ATT_WINDOW_DAYS);
@@ -7468,6 +7537,7 @@ function renderLowAttendanceList(container, lowList, students, windowStart) {
 
 
 async function renderFees(container, sub="payments") {
+  setActiveRefresh(() => renderFees(container, sub));
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
@@ -8076,6 +8146,7 @@ function dedupeExams(exams) {
   return out;
 }
 async function renderExams(container, sub="exams") {
+  setActiveRefresh(() => renderExams(container, sub));
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
@@ -8292,6 +8363,7 @@ const COMMS_MESSAGE_TYPES = [
   ["notice","Notice"],
 ];
 async function renderComms(container, sub="messages") {
+  setActiveRefresh(() => renderComms(container, sub));
   const prevPillScroll = document.getElementById("pills")?.scrollLeft;
   container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
   const pills = document.getElementById("pills");
@@ -8908,6 +8980,7 @@ function aioWireEvents() {
 // ---- Tab renderer: called fresh every time the user switches to "aio-ai"
 // (see renderTabContent's `renderers` map). ----
 async function renderAioAi(container) {
+  setActiveRefresh(() => renderAioAi(container));
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       <p style="margin:0 0 14px 0;color:var(--ink-soft);font-size:13px;flex-shrink:0;">Ask about attendance, fees, performance, or anything else happening at your school.</p>
@@ -8963,6 +9036,7 @@ function aioAskAbout(question) {
 }
 
 async function renderContactTransApple(container) {
+  setActiveRefresh(() => renderContactTransApple(container));
   container.innerHTML = `
     <div class="section-head"><h3 style="color:var(--navy-2);">Contact TransApple</h3></div>
     <div class="tiny-note" style="margin-bottom:12px;"></div>
@@ -9155,6 +9229,7 @@ async function renderDeptLockCard() {
 
 
 async function renderUsers(container, sub=null) {
+  setActiveRefresh(() => renderUsers(container, sub));
   const isAdmin = hasFullAccess(profile);
   const restrictedDept = profile?.department === "academic" || profile?.department === "finance" || profile?.department === "parents";
   const deptLabel = DEPARTMENTS[profile?.department]?.label || "";
@@ -9630,6 +9705,7 @@ const SETTINGS_MENU_ITEMS = [
   { id:"trash",    label:"Trash",             desc:"Restore or permanently delete items", icon:ic.trash,    color:"var(--slate)",     tint:"var(--slate-tint)" },
 ];
 async function renderSettings(container, sub=null) {
+  setActiveRefresh(() => renderSettings(container, sub));
   if (!sub) {
     container.innerHTML = `
       <h3 style="color:var(--navy);margin-bottom:4px;">Settings</h3>
@@ -10046,6 +10122,7 @@ async function renderSettingsReadOnly(container, s, motherAdmins) {
 
 
 async function renderTrash(container) {
+  setActiveRefresh(() => renderTrash(container));
   container.innerHTML = `<h3 style="color:var(--slate);margin-bottom:10px;">Trash</h3><div class="section-head"><div style="font-size:13px;color:var(--ink-soft);">Items stay here until restored or permanently deleted.</div><button class="btn btn-ghost btn-sm" id="emptyBtn">${ic.trash} Empty trash</button></div><div id="trashList"><div class="center-loading">Loading…</div></div>`;
   const listEl = document.getElementById("trashList");
   let allTrashed = [];
@@ -10262,43 +10339,23 @@ document.addEventListener("wheel", (e) => {
 document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 
 
-function ensureOfflineBanner() {
-  let el = document.getElementById("offlineBanner");
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = "offlineBanner";
-  el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--amber);color:#fff;font-size:12.5px;font-weight:700;text-align:center;padding:8px 10px;transform:translateY(-100%);transition:transform .25s ease;box-shadow:0 2px 8px rgba(0,0,0,.12);";
-  el.textContent = "You're offline — showing last saved data";
-  document.body.appendChild(el);
-  return el;
-}
-let offlineBannerHideTimer = null;
-function showOfflineBanner() {
-  const el = ensureOfflineBanner();
-  requestAnimationFrame(() => { el.style.transform = "translateY(0)"; });
-  if (offlineBannerHideTimer) clearTimeout(offlineBannerHideTimer);
-  offlineBannerHideTimer = setTimeout(() => { hideOfflineBanner(); }, 5000);
-}
-function hideOfflineBanner() {
-  const el = document.getElementById("offlineBanner");
-  if (el) el.style.transform = "translateY(-100%)";
-  if (offlineBannerHideTimer) { clearTimeout(offlineBannerHideTimer); offlineBannerHideTimer = null; }
-}
+// The top "You're offline — showing last saved data" banner has been
+// removed — the always-flashing status pill below is now the single place
+// offline state is shown. offlineBannerStickyUntilOnline is still tracked:
+// it's what tells the pill to stay orange even once navigator.onLine flips
+// back to true but we haven't yet confirmed a real server round-trip.
 let offlineBannerStickyUntilOnline = false;
 function noteOfflineDataServed() {
   offlineBannerStickyUntilOnline = true;
-  showOfflineBanner();
+  updateNetStatusPill();
+  refreshActiveView();
 }
-
-
-
-
 
 function flashOfflineBannerForNav() {
-  if (!navigator.onLine || offlineBannerStickyUntilOnline) showOfflineBanner();
+  if (!navigator.onLine || offlineBannerStickyUntilOnline) updateNetStatusPill();
 }
-window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; showOfflineBanner(); });
-window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; hideOfflineBanner(); flushOutbox(); });
+window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); });
+window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; flushOutbox(); updateNetStatusPill(); });
 
 // Small pending-changes indicator, separate from the "offline" banner above —
 // this one tells the user their edits are safely queued and shows when
@@ -10316,14 +10373,27 @@ function ensureSyncBadge() {
 let syncBadgeHideTimer = null;
 let lastKnownOutboxCount = 0;
 async function updateSyncBadge() {
-  const count = await outboxCount();
+  updateNetStatusPill();
+  const { pending, failed } = await outboxCounts();
+  const count = pending + failed;
   const el = ensureSyncBadge();
-  if (outboxSyncing && count > 0) {
-    el.textContent = `Syncing ${count} change${count === 1 ? "" : "s"}…`;
+  if (failed > 0) {
+    el.onclick = () => outboxRetryFailed();
+    el.style.pointerEvents = "auto"; el.style.cursor = "pointer";
+  } else {
+    el.onclick = null;
+    el.style.pointerEvents = "none"; el.style.cursor = "default";
+  }
+  if (outboxSyncing && pending > 0) {
+    el.textContent = `Syncing ${pending} change${pending === 1 ? "" : "s"}…`;
     el.style.opacity = "1"; el.style.transform = "translateY(0)";
     if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
-  } else if (count > 0) {
-    el.textContent = `${count} change${count === 1 ? "" : "s"} waiting to sync`;
+  } else if (failed > 0) {
+    el.textContent = `Couldn't sync ${failed} change${failed === 1 ? "" : "s"} — tap to retry`;
+    el.style.opacity = "1"; el.style.transform = "translateY(0)";
+    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
+  } else if (pending > 0) {
+    el.textContent = `${pending} change${pending === 1 ? "" : "s"} waiting to sync`;
     el.style.opacity = "1"; el.style.transform = "translateY(0)";
     if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
   } else {
@@ -10343,6 +10413,50 @@ async function updateSyncBadge() {
 // "online" event, retry on tab focus and on a steady interval too.
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && navigator.onLine) flushOutbox(); });
 setInterval(() => { if (navigator.onLine) flushOutbox(); }, 20000);
+
+// ---- Network/sync status pill: 🟢 Online & Synced / 🟠 Offline — Changes
+// saved locally / 🔄 Syncing… Flashes for 3 seconds whenever the status
+// changes (login, going offline/online, a write getting queued or synced)
+// and then fades out, rather than sitting on screen permanently. It reads
+// the same underlying signals (navigator.onLine, the "have we served
+// offline/cached data since the last real online confirmation" flag, the
+// outbox contents, and whether a flush is currently running) so it never
+// needs its own separate bookkeeping. ----
+function ensureNetStatusPill() {
+  let el = document.getElementById("netStatusPill");
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "netStatusPill";
+  el.style.cssText = "position:fixed;top:8px;right:8px;z-index:10000;font-size:11.5px;font-weight:700;padding:5px 10px 5px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:flex;align-items:center;gap:5px;opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease,background-color .2s ease,color .2s ease;pointer-events:none;white-space:nowrap;";
+  document.body.appendChild(el);
+  return el;
+}
+let netStatusPillHideTimer = null;
+async function updateNetStatusPill() {
+  const el = ensureNetStatusPill();
+  const { pending, failed } = await outboxCounts();
+  let dot, label, bg, fg;
+  if (outboxSyncing) {
+    dot = "🔄"; label = "Syncing…"; bg = "#dbeafe"; fg = "#1e40af";
+  } else if (!navigator.onLine || offlineBannerStickyUntilOnline || pending > 0 || failed > 0) {
+    dot = "🟠";
+    label = failed > 0 ? "Offline — some changes need retry" : "Offline — changes saved locally";
+    bg = "#fef3c7"; fg = "#92400e";
+  } else {
+    dot = "🟢"; label = "Online & Synced"; bg = "#dcfce7"; fg = "#166534";
+  }
+  el.style.backgroundColor = bg; el.style.color = fg;
+  el.textContent = `${dot} ${label}`;
+  if (failed > 0) { el.style.pointerEvents = "auto"; el.style.cursor = "pointer"; el.onclick = () => outboxRetryFailed(); }
+  else { el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null; }
+  el.style.opacity = "1"; el.style.transform = "translateY(0)";
+  if (netStatusPillHideTimer) clearTimeout(netStatusPillHideTimer);
+  netStatusPillHideTimer = setTimeout(() => {
+    el.style.opacity = "0"; el.style.transform = "translateY(-6px)";
+  }, 3000);
+}
+window.addEventListener("online", updateNetStatusPill);
+window.addEventListener("offline", updateNetStatusPill);
 
 // ---- Cache priming: warm the offline cache for every core module right
 // after login, so opening any of them afterwards reads from cache instantly
@@ -10379,7 +10493,8 @@ async function primeSchoolCache() {
 
 (async function boot() {
   startHeaderClock(); 
-  if (!navigator.onLine) { offlineBannerStickyUntilOnline = true; showOfflineBanner(); }
+  updateNetStatusPill();
+  if (!navigator.onLine) { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); }
   
   
   
@@ -10407,11 +10522,53 @@ async function primeSchoolCache() {
 
 
 if ("serviceWorker" in navigator) {
-  // Minimal service worker: exists solely to receive Web Push notifications
-  // (staff push toggle in Settings). No install/offline app-shell caching.
+  // Service worker: receives Web Push notifications (staff push toggle in
+  // Settings) AND precaches the app shell so a fully-closed app can still
+  // launch with no network — otherwise the OS/browser has nothing to show
+  // but its own generic "you're offline" page. Only the app's own document
+  // and same-origin static assets are cached here; Supabase API calls (a
+  // different origin) and every non-GET request pass straight through to
+  // the network untouched, so login, live reads, and the outbox sync are
+  // never served from this cache.
   const swSource = `
-    self.addEventListener("install", (e) => { self.skipWaiting(); });
-    self.addEventListener("activate", (e) => { self.clients.claim(); });
+    const APP_SHELL_URL = ${JSON.stringify(location.href)};
+    const SHELL_CACHE = "aio-shell-v1";
+    self.addEventListener("install", (e) => {
+      self.skipWaiting();
+      e.waitUntil(
+        caches.open(SHELL_CACHE).then((cache) => cache.add(APP_SHELL_URL)).catch(() => {})
+      );
+    });
+    self.addEventListener("activate", (e) => {
+      self.clients.claim();
+      e.waitUntil(
+        caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL_CACHE).map((k) => caches.delete(k))))
+      );
+    });
+    self.addEventListener("fetch", (e) => {
+      const req = e.request;
+      if (req.method !== "GET") return; // never intercept writes (e.g. Supabase POST/PATCH/DELETE)
+      let url;
+      try { url = new URL(req.url); } catch (err) { return; }
+      if (url.origin !== self.location.origin) return; // never touch cross-origin API calls
+      if (req.mode === "navigate") {
+        e.respondWith(
+          fetch(req).then((res) => {
+            const copy = res.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(APP_SHELL_URL, copy)).catch(() => {});
+            return res;
+          }).catch(() => caches.match(APP_SHELL_URL).then((cached) => cached || caches.match(req)))
+        );
+        return;
+      }
+      e.respondWith(
+        fetch(req).then((res) => {
+          const copy = res.clone();
+          caches.open(SHELL_CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
+          return res;
+        }).catch(() => caches.match(req))
+      );
+    });
     self.addEventListener("push", (e) => {
       let data = {};
       try { data = e.data ? e.data.json() : {}; } catch (err) { data = { title: "Notification", body: e.data ? e.data.text() : "" }; }
@@ -10437,7 +10594,7 @@ if ("serviceWorker" in navigator) {
   const swBlob = new Blob([swSource], { type: "application/javascript" });
   const swUrl = URL.createObjectURL(swBlob);
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(swUrl).catch((err) => console.warn("SW registration failed:", err));
+    navigator.serviceWorker.register(swUrl, { scope: "/" }).catch((err) => console.warn("SW registration failed:", err));
   });
 }
 
