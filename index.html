@@ -10357,56 +10357,12 @@ function flashOfflineBannerForNav() {
 window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); });
 window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; flushOutbox(); updateNetStatusPill(); });
 
-// Small pending-changes indicator, separate from the "offline" banner above —
-// this one tells the user their edits are safely queued and shows when
-// they've finished syncing back to Supabase, whether or not the app itself
-// currently thinks it's online.
-function ensureSyncBadge() {
-  let el = document.getElementById("syncBadge");
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = "syncBadge";
-  el.style.cssText = "position:fixed;bottom:16px;left:16px;z-index:9999;background:#1f2937;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;pointer-events:none;";
-  document.body.appendChild(el);
-  return el;
-}
-let syncBadgeHideTimer = null;
-let lastKnownOutboxCount = 0;
+// The bottom-left "N changes waiting to sync" badge has been removed — the
+// top-right status pill (which already flashes 🟠/🔄/🟢 and offers the
+// same tap-to-retry action when a write has failed) is now the only sync
+// indicator. This just forwards to it.
 async function updateSyncBadge() {
   updateNetStatusPill();
-  const { pending, failed } = await outboxCounts();
-  const count = pending + failed;
-  const el = ensureSyncBadge();
-  if (failed > 0) {
-    el.onclick = () => outboxRetryFailed();
-    el.style.pointerEvents = "auto"; el.style.cursor = "pointer";
-  } else {
-    el.onclick = null;
-    el.style.pointerEvents = "none"; el.style.cursor = "default";
-  }
-  if (outboxSyncing && pending > 0) {
-    el.textContent = `Syncing ${pending} change${pending === 1 ? "" : "s"}…`;
-    el.style.opacity = "1"; el.style.transform = "translateY(0)";
-    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
-  } else if (failed > 0) {
-    el.textContent = `Couldn't sync ${failed} change${failed === 1 ? "" : "s"} — tap to retry`;
-    el.style.opacity = "1"; el.style.transform = "translateY(0)";
-    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
-  } else if (pending > 0) {
-    el.textContent = `${pending} change${pending === 1 ? "" : "s"} waiting to sync`;
-    el.style.opacity = "1"; el.style.transform = "translateY(0)";
-    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
-  } else {
-    if (lastKnownOutboxCount > 0) {
-      el.textContent = "✓ All changes synced";
-      el.style.opacity = "1"; el.style.transform = "translateY(0)";
-      if (syncBadgeHideTimer) clearTimeout(syncBadgeHideTimer);
-      syncBadgeHideTimer = setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateY(8px)"; }, 3000);
-    } else {
-      el.style.opacity = "0"; el.style.transform = "translateY(8px)";
-    }
-  }
-  lastKnownOutboxCount = count;
 }
 // navigator.onLine only reflects the network adapter, not whether Supabase is
 // actually reachable (captive portals, flaky wifi, etc.) — so on top of the
