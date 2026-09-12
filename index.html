@@ -1048,7 +1048,18 @@ async function loadCurrentSchool() {
     // of status — only the RENDER decides what to do with that status.
     const rows = await sb(`/rest/v1/rpc/get_my_school`, { method:"POST", body: JSON.stringify({}) });
     CURRENT_SCHOOL = (rows && rows[0]) || null;
-  } catch (e) { CURRENT_SCHOOL = null; }
+    if (CURRENT_SCHOOL) offlineCachePut("school_snapshot::" + CURRENT_SCHOOL_ID, CURRENT_SCHOOL);
+  } catch (e) {
+    // Offline: fall back to the last confirmed copy of this school's record
+    // instead of nulling it out — otherwise going offline would wrongly look
+    // like the school got suspended (see schoolIsActive() above).
+    if (e instanceof OfflineError) {
+      const cached = await offlineCacheGet("school_snapshot::" + CURRENT_SCHOOL_ID);
+      CURRENT_SCHOOL = cached !== undefined ? cached : null;
+    } else {
+      CURRENT_SCHOOL = null;
+    }
+  }
 }
 function isFeatureEnabled(navId) {
   if (CORE_NAV_IDS.has(navId)) return true;
@@ -2305,15 +2316,21 @@ async function sb(path, opts = {}) {
 
 
 const OFFLINE_DB_NAME = "novaOfflineCache";
+const OFFLINE_DB_VERSION = 2;
 const OFFLINE_STORE = "reads";
+const OUTBOX_STORE = "outbox";
 let offlineDBPromise = null;
 function openOfflineDB() {
   if (offlineDBPromise) return offlineDBPromise;
   offlineDBPromise = new Promise((resolve) => {
     if (!("indexedDB" in window)) { resolve(null); return; }
     let req;
-    try { req = indexedDB.open(OFFLINE_DB_NAME, 1); } catch (e) { resolve(null); return; }
-    req.onupgradeneeded = () => { try { req.result.createObjectStore(OFFLINE_STORE); } catch (e) {} };
+    try { req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); } catch (e) { resolve(null); return; }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      try { if (!db.objectStoreNames.contains(OFFLINE_STORE)) db.createObjectStore(OFFLINE_STORE); } catch (e) {}
+      try { if (!db.objectStoreNames.contains(OUTBOX_STORE)) db.createObjectStore(OUTBOX_STORE, { keyPath: "localId", autoIncrement: true }); } catch (e) {}
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
   });
@@ -2340,6 +2357,146 @@ async function offlineCacheGet(key) {
     });
   } catch (e) { return undefined; }
 }
+// Every dbSelect() cache key is stored as "<table>::/rest/v1/<table>?...". This
+// walks every cached entry for a given table (regardless of its filter params)
+// so an optimistic write can be reflected across all the different cached
+// "views" of that table at once, and so a synced/rejected write can later be
+// reconciled back into every one of them.
+async function offlineCacheEntriesForTable(table) {
+  try {
+    const db = await openOfflineDB(); if (!db) return [];
+    const prefix = table + "::";
+    return await new Promise((resolve) => {
+      const out = [];
+      const tx = db.transaction(OFFLINE_STORE, "readonly");
+      const range = IDBKeyRange.bound(prefix, prefix + "\uffff");
+      const req = tx.objectStore(OFFLINE_STORE).openCursor(range);
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) { out.push({ key: cursor.key, value: cursor.value.value }); cursor.continue(); }
+        else resolve(out);
+      };
+      req.onerror = () => resolve(out);
+    });
+  } catch (e) { return []; }
+}
+async function offlineCacheMutateTable(table, mutateFn) {
+  const entries = await offlineCacheEntriesForTable(table);
+  for (const entry of entries) {
+    const rows = Array.isArray(entry.value) ? entry.value : null;
+    if (!rows) continue;
+    const next = mutateFn(rows);
+    if (next) await offlineCachePut(entry.key, next);
+  }
+}
+async function applyOptimisticInsert(table, row) {
+  await offlineCacheMutateTable(table, (rows) => [row, ...rows]);
+}
+async function applyOptimisticUpdate(table, id, patch) {
+  await offlineCacheMutateTable(table, (rows) => {
+    let changed = false;
+    const next = rows.map(r => { if (r && r.id === id) { changed = true; return Object.assign({}, r, patch); } return r; });
+    return changed ? next : null;
+  });
+}
+async function applyOptimisticDelete(table, id) {
+  await offlineCacheMutateTable(table, (rows) => {
+    if (!rows.some(r => r && r.id === id)) return null;
+    return rows.filter(r => !(r && r.id === id));
+  });
+}
+async function reconcileTempId(table, tempId, realRow) {
+  await offlineCacheMutateTable(table, (rows) => {
+    let changed = false;
+    const next = rows.map(r => { if (r && r.id === tempId) { changed = true; return realRow; } return r; });
+    return changed ? next : null;
+  });
+}
+
+// ---- Outbox: durable queue of writes made while offline ----
+async function outboxAdd(entry) {
+  try {
+    const db = await openOfflineDB(); if (!db) return null;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(OUTBOX_STORE, "readwrite");
+      const req = tx.objectStore(OUTBOX_STORE).add(entry);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+async function outboxAll() {
+  try {
+    const db = await openOfflineDB(); if (!db) return [];
+    return await new Promise((resolve) => {
+      const tx = db.transaction(OUTBOX_STORE, "readonly");
+      const req = tx.objectStore(OUTBOX_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch (e) { return []; }
+}
+async function outboxCount() {
+  try {
+    const db = await openOfflineDB(); if (!db) return 0;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(OUTBOX_STORE, "readonly");
+      const req = tx.objectStore(OUTBOX_STORE).count();
+      req.onsuccess = () => resolve(req.result || 0);
+      req.onerror = () => resolve(0);
+    });
+  } catch (e) { return 0; }
+}
+async function outboxRemove(localId) {
+  try {
+    const db = await openOfflineDB(); if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(OUTBOX_STORE, "readwrite");
+      tx.objectStore(OUTBOX_STORE).delete(localId);
+      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+    });
+  } catch (e) {}
+}
+async function outboxUpdate(localId, patch) {
+  try {
+    const db = await openOfflineDB(); if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(OUTBOX_STORE, "readwrite");
+      const store = tx.objectStore(OUTBOX_STORE);
+      const req = store.get(localId);
+      req.onsuccess = () => {
+        const row = req.result; if (!row) { resolve(); return; }
+        store.put(Object.assign({}, row, patch));
+      };
+      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+    });
+  } catch (e) {}
+}
+// After a queued insert resolves to a real server id, any still-queued entry
+// that referred to the old temp id (as its own targetId, or as a foreign key
+// inside its body — e.g. a fee payment created offline for a student that was
+// also created offline) gets rewritten to point at the real id before it's
+// sent, so dependent offline writes still sync correctly in order.
+async function reconcileOutboxRefs(tempId, realId) {
+  const entries = await outboxAll();
+  for (const entry of entries) {
+    let changed = false;
+    let targetId = entry.targetId;
+    if (targetId === tempId) { targetId = realId; changed = true; }
+    let body = entry.body;
+    if (body && typeof body === "object") {
+      const rewrite = (obj) => {
+        const out = Array.isArray(obj) ? obj.slice() : Object.assign({}, obj);
+        for (const k of Object.keys(out)) {
+          if (out[k] === tempId) { out[k] = realId; changed = true; }
+        }
+        return out;
+      };
+      body = Array.isArray(body) ? body.map(rewrite) : rewrite(body);
+    }
+    if (changed) await outboxUpdate(entry.localId, { targetId, body });
+  }
+}
 const qs = (obj) => Object.entries(obj).filter(([,v])=>v!==undefined && v!==null && v!=="").map(([k,v])=>`${k}=${v}`).join("&");
 
 
@@ -2355,42 +2512,135 @@ function scopedBody(table, body) {
   if (Array.isArray(body)) return body.map(row => Object.assign({ school_id: CURRENT_SCHOOL_ID }, row));
   return Object.assign({ school_id: CURRENT_SCHOOL_ID }, body);
 }
+// Cache-first reads: if this exact query has ever been cached, it's returned
+// INSTANTLY (no network wait at all — this is what makes reopening a module
+// feel immediate instead of showing a spinner), while a fresh copy is fetched
+// silently in the background to keep the cache warm for next time. Only a
+// query that's never been seen before falls back to waiting on the network,
+// and even that gets cached immediately so it's instant from then on.
 async function dbSelect(table, params={}) {
   const path = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
   const offlineKey = table + "::" + path;
+  const cached = await offlineCacheGet(offlineKey);
+  if (cached !== undefined) {
+    sb(path).then(fresh => offlineCachePut(offlineKey, fresh)).catch(() => {});
+    return cached;
+  }
   try {
     const data = await sb(path);
-    offlineCachePut(offlineKey, data); 
+    offlineCachePut(offlineKey, data);
     return data;
   } catch (e) {
     if (e instanceof OfflineError) {
-      const cached = await offlineCacheGet(offlineKey);
-      noteOfflineDataServed(); 
-      if (cached !== undefined) return cached;
-      
-      
-      
-      
+      noteOfflineDataServed();
       return [];
     }
     throw e;
   }
 }
+// A write made while offline is never lost: it's applied to the local cache
+// immediately (so the screen reflects it right away) and queued in the
+// outbox, which syncs to Supabase automatically the moment connectivity
+// returns (see flushOutbox()). A write made while online behaves exactly as
+// before — straight to the server, nothing queued.
+function genLocalId() { return "local_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 async function dbInsert(table, body) {
-  return sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scopedBody(table, body)), headers:{ "Prefer":"return=representation" } });
+  const scoped = scopedBody(table, body);
+  try {
+    return await sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"return=representation" } });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    const rows = (Array.isArray(scoped) ? scoped : [scoped]).map(r => Object.assign({ id: genLocalId(), created_at: new Date().toISOString() }, r));
+    for (const row of rows) {
+      await applyOptimisticInsert(table, row);
+      await outboxAdd({ table, op:"insert", body: row, createdAt: Date.now() });
+    }
+    noteOfflineDataServed(); queueSyncAttempt();
+    return rows;
+  }
 }
 async function dbUpdate(table, id, body) {
-  return sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+  try {
+    return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    await applyOptimisticUpdate(table, id, body);
+    await outboxAdd({ table, op:"update", targetId:id, body, createdAt: Date.now() });
+    noteOfflineDataServed(); queueSyncAttempt();
+    return [Object.assign({ id }, body)];
+  }
 }
 async function dbUpsert(table, body, onConflict) {
-  return sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scopedBody(table, body)), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
+  const scoped = scopedBody(table, body);
+  try {
+    return await sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    const rows = Array.isArray(scoped) ? scoped : [scoped];
+    for (const row of rows) {
+      if (row.id) await applyOptimisticUpdate(table, row.id, row);
+      else await applyOptimisticInsert(table, Object.assign({ id: genLocalId() }, row));
+    }
+    await outboxAdd({ table, op:"upsert", body: scoped, onConflict, createdAt: Date.now() });
+    noteOfflineDataServed(); queueSyncAttempt();
+    return rows;
+  }
 }
 async function dbDelete(table, id) {
-  return sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
+  try {
+    return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
+  } catch (e) {
+    if (!(e instanceof OfflineError)) throw e;
+    await applyOptimisticDelete(table, id);
+    await outboxAdd({ table, op:"delete", targetId:id, createdAt: Date.now() });
+    noteOfflineDataServed(); queueSyncAttempt();
+    return null;
+  }
 }
 async function dbSelectActive(table, params={}) {
   try { return await dbSelect(table, Object.assign({ deleted_at:"is.null" }, params)); }
   catch (e) { return await dbSelect(table, params); }
+}
+
+// ---- Outbox sync engine: replays queued offline writes once back online ----
+let outboxSyncing = false;
+let outboxSyncScheduled = false;
+function queueSyncAttempt() {
+  updateSyncBadge();
+  if (outboxSyncScheduled) return;
+  outboxSyncScheduled = true;
+  setTimeout(() => { outboxSyncScheduled = false; flushOutbox(); }, 300);
+}
+async function flushOutbox() {
+  if (outboxSyncing || !navigator.onLine) return;
+  outboxSyncing = true;
+  updateSyncBadge();
+  try {
+    const entries = (await outboxAll()).sort((a, b) => a.createdAt - b.createdAt);
+    for (const entry of entries) {
+      try {
+        if (entry.op === "insert") {
+          const { id: tempId, ...rest } = entry.body;
+          const rows = await sb(`/rest/v1/${entry.table}`, { method:"POST", body: JSON.stringify(rest), headers:{ "Prefer":"return=representation" } });
+          const real = Array.isArray(rows) ? rows[0] : rows;
+          if (real) { await reconcileTempId(entry.table, tempId, real); await reconcileOutboxRefs(tempId, real.id); }
+        } else if (entry.op === "update") {
+          await sb(`/rest/v1/${entry.table}?${qs(scopedParams(entry.table, {id:`eq.${entry.targetId}`}))}`, { method:"PATCH", body: JSON.stringify(entry.body), headers:{ "Prefer":"return=representation" } });
+        } else if (entry.op === "upsert") {
+          await sb(`/rest/v1/${entry.table}?on_conflict=${entry.onConflict}`, { method:"POST", body: JSON.stringify(entry.body), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
+        } else if (entry.op === "delete") {
+          await sb(`/rest/v1/${entry.table}?${qs(scopedParams(entry.table, {id:`eq.${entry.targetId}`}))}`, { method:"DELETE" });
+        }
+        await outboxRemove(entry.localId);
+      } catch (e) {
+        if (e instanceof OfflineError) break; // connectivity dropped again mid-sync — stop, the next trigger will retry
+        await outboxUpdate(entry.localId, { lastError: e.message || "Sync failed", erroredAt: Date.now() });
+      }
+    }
+  } finally {
+    outboxSyncing = false;
+    updateSyncBadge();
+  }
 }
 
 
@@ -2473,10 +2723,17 @@ async function login(username, password, remember) {
   await loadCurrentSchool();
   auth = { user: { id: profile.id } }; 
   if (remember) rememberSession(username); else clearRememberedSession();
+  // Snapshot this signed-in profile so a later fully-offline app launch (see
+  // tryRestoreRememberedSession()) can still sign the device back in without
+  // needing to reach the server — the password itself is never cached, only
+  // the already-verified profile.
+  await offlineCachePut("profile_snapshot::" + username, profile);
   markDeviceSeen();
   pinLocked = false;
   tab = "dashboard";
   startSchoolSync();
+  flushOutbox();
+  primeSchoolCache();
   render();
 }
 
@@ -2495,11 +2752,35 @@ async function tryRestoreRememberedSession() {
     setCurrentSchool(profile.school_id);
     await loadCurrentSchool();
     auth = { user: { id: profile.id } };
+    await offlineCachePut("profile_snapshot::" + username, profile);
     markDeviceSeen();
     pinLocked = false;
     startSchoolSync();
+    flushOutbox();
+    primeSchoolCache();
     return true;
   } catch (e) {
+    // No connectivity at all — don't sign the device out. If this same
+    // device has successfully signed in before, resume from that last
+    // confirmed profile instead (read-only trust: the server never
+    // re-validates the password here, it just lets the last-known session
+    // continue locally). The token stays remembered either way, so once
+    // back online the very next restore attempt re-validates for real.
+    if (e instanceof OfflineError) {
+      const cachedProfile = await offlineCacheGet("profile_snapshot::" + username);
+      if (cachedProfile) {
+        profile = cachedProfile;
+        setCurrentSchool(profile.school_id);
+        await loadCurrentSchool();
+        auth = { user: { id: profile.id } };
+        markDeviceSeen();
+        pinLocked = false;
+        offlineBannerStickyUntilOnline = true; showOfflineBanner();
+        startSchoolSync();
+        return true;
+      }
+      return false;
+    }
     clearRememberedSession();
     persistSessionToken(null);
     return false;
@@ -10017,7 +10298,84 @@ function flashOfflineBannerForNav() {
   if (!navigator.onLine || offlineBannerStickyUntilOnline) showOfflineBanner();
 }
 window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; showOfflineBanner(); });
-window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; hideOfflineBanner(); });
+window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; hideOfflineBanner(); flushOutbox(); });
+
+// Small pending-changes indicator, separate from the "offline" banner above —
+// this one tells the user their edits are safely queued and shows when
+// they've finished syncing back to Supabase, whether or not the app itself
+// currently thinks it's online.
+function ensureSyncBadge() {
+  let el = document.getElementById("syncBadge");
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "syncBadge";
+  el.style.cssText = "position:fixed;bottom:16px;left:16px;z-index:9999;background:#1f2937;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;pointer-events:none;";
+  document.body.appendChild(el);
+  return el;
+}
+let syncBadgeHideTimer = null;
+let lastKnownOutboxCount = 0;
+async function updateSyncBadge() {
+  const count = await outboxCount();
+  const el = ensureSyncBadge();
+  if (outboxSyncing && count > 0) {
+    el.textContent = `Syncing ${count} change${count === 1 ? "" : "s"}…`;
+    el.style.opacity = "1"; el.style.transform = "translateY(0)";
+    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
+  } else if (count > 0) {
+    el.textContent = `${count} change${count === 1 ? "" : "s"} waiting to sync`;
+    el.style.opacity = "1"; el.style.transform = "translateY(0)";
+    if (syncBadgeHideTimer) { clearTimeout(syncBadgeHideTimer); syncBadgeHideTimer = null; }
+  } else {
+    if (lastKnownOutboxCount > 0) {
+      el.textContent = "✓ All changes synced";
+      el.style.opacity = "1"; el.style.transform = "translateY(0)";
+      if (syncBadgeHideTimer) clearTimeout(syncBadgeHideTimer);
+      syncBadgeHideTimer = setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateY(8px)"; }, 3000);
+    } else {
+      el.style.opacity = "0"; el.style.transform = "translateY(8px)";
+    }
+  }
+  lastKnownOutboxCount = count;
+}
+// navigator.onLine only reflects the network adapter, not whether Supabase is
+// actually reachable (captive portals, flaky wifi, etc.) — so on top of the
+// "online" event, retry on tab focus and on a steady interval too.
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && navigator.onLine) flushOutbox(); });
+setInterval(() => { if (navigator.onLine) flushOutbox(); }, 20000);
+
+// ---- Cache priming: warm the offline cache for every core module right
+// after login, so opening any of them afterwards reads from cache instantly
+// instead of waiting on the network. Best-effort and silent — a failure here
+// (e.g. already offline at login) just means that module falls back to its
+// normal load-on-open behaviour instead of being pre-warmed. ----
+async function primeSchoolCache() {
+  if (!profile) return;
+  const isParent = profile.role === "parent" || profile.department === "parents";
+  const tasks = isParent ? [
+    () => fetchParentMeetings(),
+    () => fetchParentAnnouncements(),
+    () => fetchParentFeeReminders(),
+    () => dbSelect("school_settings", {}),
+  ] : [
+    () => dbSelectActive("classes", { order:"name.asc" }),
+    () => dbSelectActive("teachers", { status:"eq.active", order:"full_name.asc" }),
+    () => dbSelectActive("terms", { order:"start_date.desc" }),
+    () => dbSelectActive("exam_types", { order:"name.asc" }),
+    () => dbSelectActive("grades", { order:"min_score.desc" }),
+    () => dbSelectActive("inventory_items", { order:"name.asc" }),
+    () => dbSelectActive("library_books", { order:"title.asc" }),
+    () => dbSelectActive("school_communications", { order:"created_at.desc" }),
+    () => dbSelectActive("school_meetings", { order:"meeting_date.asc" }),
+    () => dbSelect("students", { status:"eq.active", select:"id,full_name,admission_no", order:"full_name.asc" }),
+    () => dbSelect("profiles", { order:"full_name.asc", select:"id,full_name,phone,whatsapp,email,department,position,role,username,pin,photo_url,suspended_at,deleted_at,approval_status,is_owner,created_at" }),
+    () => fetchStaffAnnouncements(),
+    () => fetchStaffMessages(),
+    () => fetchLatestChangelog(),
+    () => dbSelect("school_settings", {}),
+  ];
+  await Promise.allSettled(tasks.map(t => t()));
+}
 
 (async function boot() {
   startHeaderClock(); 
