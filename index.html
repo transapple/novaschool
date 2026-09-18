@@ -2301,7 +2301,7 @@ async function sb(path, opts = {}) {
     
     
     
-    throw new OfflineError("You're offline right now — this needs an internet connection. Anything you've already entered is safely saved and will sync automatically once you're back online.");
+    throw new OfflineError("Couldn't connect right now. Please try again.");
   } finally {
     clearTimeout(timeoutId);
   }
@@ -10469,21 +10469,17 @@ function ensureNetStatusPill() {
 let netStatusPillHideTimer = null;
 async function updateNetStatusPill() {
   const el = ensureNetStatusPill();
-  const { pending, failed } = await outboxCounts();
-  let dot, label, bg, fg;
-  if (outboxSyncing) {
-    dot = "🔄"; label = "Syncing…"; bg = "#dbeafe"; fg = "#1e40af";
-  } else if (!navigator.onLine || offlineBannerStickyUntilOnline || pending > 0 || failed > 0) {
-    dot = "🟠";
-    label = failed > 0 ? "Offline — some changes need retry" : "Offline — changes saved locally";
-    bg = "#fef3c7"; fg = "#92400e";
-  } else {
-    dot = "🟢"; label = "Online & Synced"; bg = "#dcfce7"; fg = "#166534";
+  // Offline/connectivity messaging no longer shows on screen — this now only
+  // flashes for an in-progress sync, and otherwise stays hidden.
+  if (!outboxSyncing) {
+    el.style.opacity = "0"; el.style.transform = "translateY(-6px)";
+    el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null;
+    if (netStatusPillHideTimer) clearTimeout(netStatusPillHideTimer);
+    return;
   }
-  el.style.backgroundColor = bg; el.style.color = fg;
-  el.textContent = `${dot} ${label}`;
-  if (failed > 0) { el.style.pointerEvents = "auto"; el.style.cursor = "pointer"; el.onclick = () => outboxRetryFailed(); }
-  else { el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null; }
+  el.style.backgroundColor = "#dbeafe"; el.style.color = "#1e40af";
+  el.textContent = "🔄 Syncing…";
+  el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null;
   el.style.opacity = "1"; el.style.transform = "translateY(0)";
   if (netStatusPillHideTimer) clearTimeout(netStatusPillHideTimer);
   netStatusPillHideTimer = setTimeout(() => {
