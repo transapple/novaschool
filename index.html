@@ -6316,10 +6316,74 @@ async function renderStudents(container, opts={}) {
   });
   if (canManageStudents) addFab(container, () => openStudentModal(container, classes, null));
 }
+// ---------- Student SIN (Student Identification Number) ----------
+// The SIN is now the student's admission number: it is typed/pasted once at the
+// top of "Register student", stored as-is in students.admission_no (existing
+// text column — no schema change), and used to pre-fill the rest of the form.
+// SIN_SAMPLE_SHAPE documents the shape seen in the Digital Students app
+// (SM-09-4837-KQ shown unbroken as SM094837KQ). Validation mirrors the database
+// (sin_normalize() + '^[A-Z0-9]{6,20}$' inside lookup_student_by_sin /
+// register_student_identity), so the form never accepts a SIN the server would reject.
+const SIN_SAMPLE_SHAPE = "SM094837KQ";
+const SIN_MIN_LEN = 6, SIN_MAX_LEN = 20;
+function normalizeSIN(raw) {
+  // SINs are always handled as one unbroken, upper-case string (no dashes/spaces).
+  return String(raw || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+function sinLooksValid(sin) { return sin.length >= SIN_MIN_LEN && sin.length <= SIN_MAX_LEN; }
+
+// Reads students.admission_no (+ full_name, deleted_at) for THIS school only
+// (scopedParams adds school_id) to stop the same SIN being registered twice.
+// deleted_at is read so a student sitting in Trash is reported as such.
+// Uses sb() directly, not dbSelect(), because dbSelect is cache-first and a
+// duplicate check must never run against a stale cached answer.
+async function findStudentBySIN(sin) {
+  const rows = await sb(`/rest/v1/students?${qs(scopedParams("students", { select:"id,full_name,deleted_at", admission_no:`ilike.${sin}`, limit:"1" }))}`);
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+// Saves/refreshes the school-independent record for a SIN and returns its id
+// (public.student_identities.id). register_student_identity creates the record on
+// a SIN's first registration and afterwards only fills fields that are still blank —
+// it never overwrites what is already on file. The returned id is stored in
+// students.student_identity_id, which is what links this school's student row to
+// the SIN's record ledger (trg_sin_students only writes when that column is set).
+async function registerStudentIdentity(sin, p) {
+  return sb(`/rest/v1/rpc/register_student_identity`, { method:"POST", body: JSON.stringify({
+    p_sin: sin, p_full_name: p.full_name, p_date_of_birth: p.date_of_birth || null, p_gender: p.gender || null,
+    p_photo_url: p.photo_url || null, p_village: p.village || null, p_sub_county: p.sub_county || null, p_district: p.district || null,
+    p_guardian_name: p.guardian_name || null, p_guardian_relation: p.guardian_relation || null, p_guardian_contact: p.guardian_contact || null,
+    p_medical_info: p.medical_info || null, p_emergency_name: p.emergency_name || null,
+    p_emergency_relation: p.emergency_relation || null, p_emergency_contact: p.emergency_contact || null,
+  }) });
+}
+
+// SIN -> registration details. Calls the RPC lookup_student_by_sin(p_sin text)
+// (SECURITY DEFINER; needs a signed-in school session). It reads
+// public.student_identities and returns zero or one row whose columns are named
+// like public.students: full_name, date_of_birth (YYYY-MM-DD), gender, photo_url,
+// village, sub_county, district, guardian_name/relation/contact, medical_info,
+// emergency_name/relation/contact (plus id, phone, email, which the form ignores).
+// The RPC also records a "sin_lookup" entry in the student's record ledger.
+// Returns: a record object | null (SIN not on file) | { unavailable:true } (RPC
+// missing, or offline) so the form still works by hand.
+async function lookupStudentBySIN(sin) {
+  try {
+    const rows = await sb(`/rest/v1/rpc/lookup_student_by_sin`, { method:"POST", body: JSON.stringify({ p_sin: sin }) });
+    const rec = Array.isArray(rows) ? rows[0] : rows;
+    return rec && typeof rec === "object" ? rec : null;
+  } catch (e) {
+    if (e instanceof OfflineError) return { unavailable:true, reason:"offline" };
+    if (/could not find the function|schema cache/i.test(e.message || "")) return { unavailable:true, reason:"not_deployed" };
+    throw e;
+  }
+}
+
 function openStudentModal(container, classes, s) {
   const isEdit = !!s;
   const initialGender = s?.gender || "Male";
   let capturedPhotoDataUrl = null; 
+  let sinPhotoUrl = null; // photo_url returned by the SIN lookup; a Live/Pick photo always wins over it
   openModal(isEdit ? "Edit student" : "Register student", `
     <div class="field" style="text-align:center;">
       <label>Photo</label>
@@ -6331,8 +6395,16 @@ function openStudentModal(container, classes, s) {
       <input id="f_photo_live" type="file" accept="image/*" capture="user" style="display:none;"/>
       <input id="f_photo_pick" type="file" accept="image/*" style="display:none;"/>
     </div>
+    ${isEdit ? "" : `<div class="field">
+      <label>Student Identification Number (SIN)</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="f_sin" placeholder="e.g. ${SIN_SAMPLE_SHAPE}" autocomplete="off" autocapitalize="characters" spellcheck="false" style="flex:1;min-width:0;text-transform:uppercase;"/>
+        <button type="button" class="btn btn-ghost btn-sm" id="sinFetchBtn">Fetch</button>
+      </div>
+      <div id="sinStatus" class="tiny-note" style="text-align:left;margin-top:6px;"></div>
+    </div>`}
     <div class="grid2">
-      <div class="field"><label>Admission no.</label><input id="f_adm" readonly value="${s?.admission_no || (isEdit ? '' : nextIdFor('student', initialGender))}"/></div>
+      <div class="field"><label>Admission no.${isEdit ? "" : " (= SIN)"}</label><input id="f_adm" readonly value="${s?.admission_no || ''}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" required value="${s?.full_name||''}"/></div>
     </div>
     ${dobFieldHtml("f_dob", s?.date_of_birth)}
@@ -6367,14 +6439,29 @@ function openStudentModal(container, classes, s) {
     <div class="field"><label>Status</label><select id="f_status" required>
       ${["active","inactive","graduated","transferred"].map(v=>`<option value="${v}" ${s?.status===v?'selected':''}>${v}</option>`).join("")}</select></div>
   `, async (ov) => {
+    if (!isEdit) {
+      // New registration: the SIN IS the admission number (students.admission_no).
+      const sin = normalizeSIN(val(ov,"f_sin"));
+      if (!sin) throw new Error("Student Identification Number (SIN) is required.");
+      if (!sinLooksValid(sin)) throw new Error(`SIN must be ${SIN_MIN_LEN}–${SIN_MAX_LEN} letters/numbers.`);
+      ov.querySelector("#f_adm").value = sin;
+      try {
+        const dupe = await findStudentBySIN(sin);
+        if (dupe) throw new Error(dupe.deleted_at
+          ? `SIN ${sin} belongs to ${dupe.full_name}, who is in Trash — restore that record instead of registering again.`
+          : `SIN ${sin} is already registered in this school (${dupe.full_name}).`);
+      } catch (e) {
+        if (!(e instanceof OfflineError)) throw e; // offline: allow the registration to queue like every other write
+      }
+    }
     requireFields(ov, [
       ["f_name","Full name"], ["f_dob","Date of birth"], ["f_class","Class"],
       ["f_gname","Parent/guardian name"], ["f_grel","Parent/guardian relationship"], ["f_gphone","Parent/guardian phone"],
       ["f_medical","Medical information"], ["f_village","Village"], ["f_subcounty","Subcounty"], ["f_district","District"],
     ]);
     const chosenFile = ov.querySelector("#f_photo_live").files[0] || ov.querySelector("#f_photo_pick").files[0];
-    if (!isEdit && !capturedPhotoDataUrl && !chosenFile) throw new Error("A registration photo is required — use Live or Pick.");
-    const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (s?.photo_url || null));
+    if (!isEdit && !capturedPhotoDataUrl && !chosenFile && !sinPhotoUrl) throw new Error("A registration photo is required — use Live or Pick, or fetch it with the SIN.");
+    const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (sinPhotoUrl || s?.photo_url || null));
     const payload = {
       admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), date_of_birth: val(ov,"f_dob")||null,
       gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
@@ -6384,7 +6471,15 @@ function openStudentModal(container, classes, s) {
       emergency_name: val(ov,"f_ename"), emergency_relation: val(ov,"f_erel"), emergency_contact: val(ov,"f_ephone"),
       status: val(ov,"f_status"), photo_url,
     };
-    if (isEdit) await dbUpdate("students", s.id, payload); else { await dbInsert("students", payload); await advanceIdSeq("student"); }
+    // admission_no is no longer generated from school_settings (student_id_prefix/seq), so the
+    // sequence is not advanced any more — the SIN typed above is the admission number.
+    if (!isEdit) {
+      // Save the SIN's record first and link this student to it (students.student_identity_id).
+      // Offline: register anyway, unlinked, and let the normal write queue carry the insert.
+      try { payload.student_identity_id = await registerStudentIdentity(payload.admission_no, payload); }
+      catch (e) { if (!(e instanceof OfflineError)) throw e; }
+    }
+    if (isEdit) await dbUpdate("students", s.id, payload); else await dbInsert("students", payload);
     renderStudents(container);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
   wireDobField(document, "f_dob");
@@ -6419,9 +6514,89 @@ function openStudentModal(container, classes, s) {
   };
   
   if (!isEdit) {
+    const sinInput = document.getElementById("f_sin");
     const admInput = document.getElementById("f_adm");
-    const genderSelect = document.getElementById("f_gender");
-    genderSelect.onchange = () => { admInput.value = nextIdFor("student", genderSelect.value); };
+    const fetchBtn = document.getElementById("sinFetchBtn");
+    const statusEl = document.getElementById("sinStatus");
+    const setStatus = (msg, kind) => {
+      // textContent (not innerHTML): the message can contain names coming from the database.
+      statusEl.textContent = msg;
+      statusEl.style.color = kind === "ok" ? "var(--teal-dark)" : kind === "warn" ? "var(--amber-dark)" : kind === "err" ? "#C0392B" : "";
+    };
+    // Keep the admission number mirroring the SIN as it is typed.
+    sinInput.oninput = () => { admInput.value = normalizeSIN(sinInput.value); setStatus("", ""); };
+
+    // Writes a looked-up value into a form field only when the lookup actually returned one.
+    const setField = (id, value) => {
+      const node = document.getElementById(id);
+      if (!node || value === undefined || value === null || String(value).trim() === "") return false;
+      node.value = String(value).trim();
+      return true;
+    };
+    const setDob = (iso) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+      if (!m) return false;
+      document.getElementById("f_dob_y").value = m[1];
+      document.getElementById("f_dob_m").value = String(Number(m[2]));
+      document.getElementById("f_dob_d").value = String(Number(m[3]));
+      document.getElementById("f_dob").value = `${m[1]}-${m[2]}-${m[3]}`;
+      return true;
+    };
+    const setGender = (g) => {
+      const wanted = String(g || "").trim().toLowerCase();
+      const sel = document.getElementById("f_gender");
+      const opt = [...sel.options].find(o => o.value.toLowerCase() === wanted || o.text.toLowerCase() === wanted);
+      if (!opt) return false; // e.g. "other" has no option in this form — leave it for the user
+      sel.value = opt.value;
+      return true;
+    };
+
+    // Required-field labels used to tell the user what is still missing after a fill.
+    const REQUIRED_AFTER_FILL = [
+      ["f_name","Full name"], ["f_dob","Date of birth"], ["f_class","Class"], ["f_gname","Guardian name"],
+      ["f_grel","Guardian relationship"], ["f_gphone","Guardian phone"], ["f_medical","Medical information"],
+      ["f_village","Village"], ["f_subcounty","Subcounty"], ["f_district","District"],
+    ];
+
+    let busy = false;
+    const fetchFromSIN = async () => {
+      if (busy) return;
+      const sin = normalizeSIN(sinInput.value);
+      sinInput.value = sin; admInput.value = sin;
+      if (!sinLooksValid(sin)) { setStatus(`Enter the student's SIN (${SIN_MIN_LEN}–${SIN_MAX_LEN} letters/numbers).`, "err"); return; }
+      busy = true; fetchBtn.disabled = true; setStatus("Looking up SIN…", "");
+      try {
+        // 1) Already registered in this school? Stop before filling anything.
+        try {
+          const dupe = await findStudentBySIN(sin);
+          if (dupe) { setStatus(dupe.deleted_at ? `${dupe.full_name} (${sin}) is in Trash — restore that record instead.` : `${dupe.full_name} is already registered here with this SIN.`, "err"); return; }
+        } catch (e) { if (!(e instanceof OfflineError)) throw e; }
+        // 2) Read the details for this SIN and fill the form.
+        const rec = await lookupStudentBySIN(sin);
+        if (rec && rec.unavailable) {
+          setStatus(rec.reason === "offline" ? "You're offline — SIN lookup needs a connection. Fill the details by hand." : "SIN lookup isn't available right now — fill the details by hand. The SIN is still saved as the admission number.", "warn");
+          return;
+        }
+        if (!rec) { setStatus("This SIN isn't on file yet — fill the details by hand. They'll be saved under this SIN when you register.", "warn"); return; }
+        let filled = 0;
+        if (setField("f_name", rec.full_name)) filled++;
+        if (setDob(rec.date_of_birth)) filled++;
+        if (setGender(rec.gender)) filled++;
+        [["f_village","village"],["f_subcounty","sub_county"],["f_district","district"],
+         ["f_gname","guardian_name"],["f_grel","guardian_relation"],["f_gphone","guardian_contact"],
+         ["f_medical","medical_info"],
+         ["f_ename","emergency_name"],["f_erel","emergency_relation"],["f_ephone","emergency_contact"]
+        ].forEach(([id,col]) => { if (setField(id, rec[col])) filled++; });
+        if (rec.photo_url) { sinPhotoUrl = rec.photo_url; setPreview(rec.photo_url); filled++; }
+        // Class and Status are school-specific decisions, so they are never filled from the SIN.
+        const missing = REQUIRED_AFTER_FILL.filter(([id]) => !String(document.getElementById(id).value || "").trim()).map(([,label]) => label);
+        setStatus(`Filled ${filled} field${filled===1?"":"s"} from SIN ${sin}. ${missing.length ? "Still to complete: " + missing.join(", ") + "." : "Review, then Register."}`, "ok");
+      } catch (e) {
+        setStatus(e.message || "Couldn't look up that SIN.", "err");
+      } finally { busy = false; fetchBtn.disabled = false; }
+    };
+    fetchBtn.onclick = fetchFromSIN;
+    sinInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); fetchFromSIN(); } };
   }
 }
 
