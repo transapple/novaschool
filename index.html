@@ -2838,6 +2838,7 @@ function assertStrongPassword(pw) {
 async function login(username, password, remember) {
   const rows = await sb(`/rest/v1/rpc/verify_login`, { method:"POST", body: JSON.stringify({ p_username: username, p_password: password }) });
   const row = Array.isArray(rows) ? rows[0] : rows;
+  if (row && row.__error) throw new Error(row.__error);
   if (!row || !row.id) throw new Error("Incorrect username or password.");
   persistSessionToken(row.session_token);
   profile = scrubProfile(row);
@@ -3015,7 +3016,8 @@ function logout() {
 
 
 async function resetPassword({ username, pin, phone, new_password }) {
-  await sb(`/rest/v1/rpc/reset_password`, { method:"POST", body: JSON.stringify({ p_username: username, p_pin: pin, p_phone: phone, p_new_password: new_password }) });
+  const res = await sb(`/rest/v1/rpc/reset_password`, { method:"POST", body: JSON.stringify({ p_username: username, p_pin: pin, p_phone: phone, p_new_password: new_password }) });
+  if (res && res.__error) throw new Error(res.__error);
 }
 
 
@@ -3124,6 +3126,32 @@ function startHeaderClock() {
   tickHeaderClock();
   __headerClockTimer = setInterval(tickHeaderClock, 1000);
 }
+// Photos (people) are shrunk before they are stored: a phone-camera original is several MB
+// of base64 in the database and gets sent back on every read. ~480px JPEG is ~30-60 KB.
+// The database rejects any new/changed photo over ~200 KB, so every photo path uses this.
+// (Certificates, logos and stamps keep using fileToDataURL below.)
+function fileToPhotoDataURL(file, maxDim = 480, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+        const h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/jpeg", quality));
+      } catch (e) { reject(new Error("Could not read image file.")); }
+      finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image file.")); };
+    img.src = url;
+  });
+}
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     if (!file) return resolve(null);
@@ -3229,9 +3257,10 @@ function openCameraCapture(onCapture, onUnavailable) {
     if (!stream) return;
     settled = true;
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 480; canvas.height = video.videoHeight || 480;
+    const vw = video.videoWidth || 480, vh = video.videoHeight || 480, sc = Math.min(1, 480 / Math.max(vw, vh));
+    canvas.width = Math.max(1, Math.round(vw * sc)); canvas.height = Math.max(1, Math.round(vh * sc));
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
     close();
     onCapture(dataUrl);
   };
@@ -3645,7 +3674,7 @@ function renderLogin() {
       signupPickInput.onchange = async () => {
         if (!signupPickInput.files[0]) return;
         signupPhotoDataUrl = null;
-        const dataUrl = await fileToDataURL(signupPickInput.files[0]);
+        const dataUrl = await fileToPhotoDataURL(signupPickInput.files[0]);
         if (dataUrl) { signupPhotoDataUrl = dataUrl; setSignupPreview(dataUrl); }
       };
       document.getElementById("submitBtn").onclick = async () => {
@@ -5169,7 +5198,7 @@ function openEditParentAccountModal(container) {
   `, async (ov) => {
     requireFields(ov, [["f_acct_name","Full name"]]);
     const file = ov.querySelector("#f_acct_photo").files[0];
-    const photo_url = file ? await fileToDataURL(file) : (profile?.photo_url || null);
+    const photo_url = file ? await fileToPhotoDataURL(file) : (profile?.photo_url || null);
     const payload = { full_name: val(ov,"f_acct_name"), phone: val(ov,"f_acct_phone")||null, photo_url };
     await dbUpdate("profiles", profile.id, payload);
     Object.assign(profile, payload);
@@ -5179,7 +5208,7 @@ function openEditParentAccountModal(container) {
   const photoInput = document.getElementById("f_acct_photo");
   photoInput.onchange = async () => {
     if (!photoInput.files[0]) return;
-    const dataUrl = await fileToDataURL(photoInput.files[0]);
+    const dataUrl = await fileToPhotoDataURL(photoInput.files[0]);
     if (dataUrl) document.getElementById("acctPhotoPreviewWrap").innerHTML = avatarHtml(profile?.full_name, dataUrl, 72);
   };
 }
@@ -6251,7 +6280,24 @@ async function renderLibraryFines(body) {
 
 
 async function renderStudents(container, opts={}) {
+  const sub = opts.sub || "roster";
   setActiveRefresh(() => renderStudents(container, opts));
+  const prevPillScroll = document.getElementById("pills")?.scrollLeft;
+  container.innerHTML = `<div class="pill-row" id="pills"></div><div id="secBody"><div class="center-loading">Loading…</div></div>`;
+  const pillDefs = [["roster","Roster"],["requests","Requests"]];
+  const pills = document.getElementById("pills");
+  pillDefs.forEach(([id,label])=>{
+    const p = el(`<div class="pill ${sub===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderStudents(container, {sub:id});
+    pills.appendChild(p);
+  });
+  if (typeof prevPillScroll === "number") pills.scrollLeft = prevPillScroll;
+  scrollIntoViewIfHidden(pills, pills.querySelector(".pill.active"));
+  const body = document.getElementById("secBody");
+  if (sub === "requests") return renderStudentRequests(body, container, opts);
+  return renderStudentRoster(body, container, opts);
+}
+async function renderStudentRoster(body, container, opts={}) {
   const search = opts.search || "";
   const classFilter = opts.classFilter || "";
   const sortBy = opts.sortBy || "az";
@@ -6266,7 +6312,7 @@ async function renderStudents(container, opts={}) {
   
   
   const canManageStudents = hasFullAccess(profile) || profile?.department === "academic";
-  container.innerHTML = `
+  body.innerHTML = `
     <h3 style="color:var(--sky);margin-bottom:12px;">Students</h3>
     <div class="search-bar">
       <input id="searchInput" placeholder="" value="${search}"/>
@@ -6275,9 +6321,9 @@ async function renderStudents(container, opts={}) {
     </div>
     <div class="card" id="list"></div>
   `;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderStudents(container,{search:e.target.value,classFilter,sortBy}),350);
-  document.getElementById("classFilterSel").onchange = (e)=>renderStudents(container,{search,classFilter:e.target.value,sortBy});
-  document.getElementById("sortSel").onchange = (e)=>renderStudents(container,{search,classFilter,sortBy:e.target.value});
+  document.getElementById("searchInput").oninput = debounce((e)=>renderStudents(container,{sub:"roster",search:e.target.value,classFilter,sortBy}),350);
+  document.getElementById("classFilterSel").onchange = (e)=>renderStudents(container,{sub:"roster",search,classFilter:e.target.value,sortBy});
+  document.getElementById("sortSel").onchange = (e)=>renderStudents(container,{sub:"roster",search,classFilter,sortBy:e.target.value});
   const list = document.getElementById("list");
   list.innerHTML = students.length ? "" : emptyState("No students found.");
   students.forEach(s => {
@@ -6297,12 +6343,16 @@ async function renderStudents(container, opts={}) {
         ["Village", s.village], ["Subcounty", s.sub_county], ["District", s.district],
         ["Emergency contact", s.emergency_name], ["Emergency relationship", s.emergency_relation], ["Emergency phone", s.emergency_contact],
         ["Status", s.status],
-      ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null);
+      ], canManageStudents ? (() => openStudentModal(container, classes, s)) : null,
+      (canManageStudents && s.student_identity_id && s.status === "active")
+        ? [{ label:"Reset portal password", onClick: () => askResetStudentPassword(s) }] : []);
       
       
       
       const fab = openParentQuickCompose(s);
       const cleanup = () => fab.remove();
+      const resetBtn = overlay.querySelector("#modalExtra0");
+      if (resetBtn) resetBtn.addEventListener("click", cleanup);
       overlay.querySelector(".modal-close").addEventListener("click", cleanup);
       overlay.querySelector("#modalCancel").addEventListener("click", cleanup);
       overlay.addEventListener("click", (e) => { if (e.target === overlay) cleanup(); });
@@ -6310,12 +6360,134 @@ async function renderStudents(container, opts={}) {
       if (editBtn) editBtn.addEventListener("click", cleanup);
     };
     const edit = canManageStudents ? (() => openStudentModal(container, classes, s)) : null;
-    const del = canManageStudents ? (async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{search,classFilter,sortBy}); })(); }) : null;
+    const del = canManageStudents ? (async () => { if (await customConfirm(`Move ${s.full_name} to trash?`, { danger:true, okLabel:"Move to trash" })) safe(async()=>{ await softDelete("students", s.id); renderStudents(container,{sub:"roster",search,classFilter,sortBy}); })(); }) : null;
     bindRowGestures(row, { onView:view, onEdit:edit, onDelete:del });
     list.appendChild(row);
   });
   if (canManageStudents) addFab(container, () => openStudentModal(container, classes, null));
 }
+
+// ---------- Student portal requests (registration/transfer/etc. applications, and
+// access/transfer/data-release authorizations) submitted from the Digital Students app.
+// Reviewed here via school_list_student_applications / school_list_student_authorizations
+// and resolved via school_resolve_student_application / school_resolve_student_authorization,
+// all scoped server-side to current_school_id() — nothing pending is ever left unresolved
+// without a school-side screen to act on it.
+function reqEsc(s) { return String(s==null?"":s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+const REQ_APP_KIND_LABEL = { registration:"Registration", transfer:"Transfer", class_change:"Class change", document_update:"Document update" };
+const REQ_AUTH_KIND_LABEL = { access_grant:"Access grant", transfer_request:"Transfer request", data_release:"Data release" };
+const REQ_STATUS_CLS = { pending:"badge-amber", approved:"badge-green", rejected:"badge-red", withdrawn:"badge-grey", revoked:"badge-grey" };
+
+async function renderStudentRequests(body, container, opts={}) {
+  const kind = opts.reqKind || "applications";
+  const statusFilter = opts.reqStatus || "pending";
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <div class="pill-row" id="reqPills" style="margin:0;"></div>
+      <select id="reqStatusSel"><option value="pending" ${statusFilter==="pending"?"selected":""}>Pending</option><option value="all" ${statusFilter==="all"?"selected":""}>All</option></select>
+    </div>
+    <div class="card" id="reqList"><div class="center-loading">Loading…</div></div>
+  `;
+  const rp = document.getElementById("reqPills");
+  [["applications","Applications"],["authorizations","Authorizations"]].forEach(([id,label])=>{
+    const p = el(`<div class="pill ${kind===id?'active':''}">${label}</div>`);
+    p.onclick = () => renderStudents(container, {sub:"requests", reqKind:id, reqStatus:statusFilter});
+    rp.appendChild(p);
+  });
+  document.getElementById("reqStatusSel").onchange = (e) => renderStudents(container, {sub:"requests", reqKind:kind, reqStatus:e.target.value});
+
+  const list = document.getElementById("reqList");
+  const canResolve = hasFullAccess(profile) || profile?.department === "academic";
+  const p_status = statusFilter === "all" ? null : "pending";
+  const rpcName = kind === "applications" ? "school_list_student_applications" : "school_list_student_authorizations";
+  let rows;
+  try {
+    rows = await sb(`/rest/v1/rpc/${rpcName}`, { method:"POST", body: JSON.stringify({ p_status }) });
+  } catch (e) {
+    list.innerHTML = emptyState(e.message || "Couldn't load requests.");
+    return;
+  }
+  rows = Array.isArray(rows) ? rows : [];
+  list.innerHTML = rows.length ? "" : emptyState(statusFilter==="pending" ? "No pending requests." : "No requests yet.");
+  const KIND_LABEL = kind === "applications" ? REQ_APP_KIND_LABEL : REQ_AUTH_KIND_LABEL;
+  rows.forEach(r => {
+    const when = r.submitted_at || r.requested_at;
+    const row = el(`<div class="list-row" style="cursor:pointer;">
+      <div class="list-main">
+        <div class="list-title">${reqEsc(r.student_full_name || "Unknown student")} <span class="tiny-note">${reqEsc(r.student_sin || "")}</span></div>
+        <div class="list-sub">${KIND_LABEL[r.kind] || reqEsc(r.kind)}${r.notes ? " — " + reqEsc(r.notes) : ""} · ${when ? new Date(when).toLocaleString() : ""}</div>
+      </div>
+      <span class="badge ${REQ_STATUS_CLS[r.status] || 'badge-grey'}">${r.status}</span>
+    </div>`);
+    row.onclick = () => {
+      const extra = (canResolve && r.status === "pending")
+        ? [ { label:"Reject", run: () => askResolveStudentRequest(kind, r, false, container, opts) },
+            { label:"Approve", primary:true, run: () => askResolveStudentRequest(kind, r, true, container, opts) } ]
+        : [];
+      const overlay = openViewModal(r.student_full_name || "Request", [
+        ["Student", r.student_full_name], ["SIN", r.student_sin],
+        ["Type", KIND_LABEL[r.kind] || r.kind], ["Status", r.status],
+        ["Student's notes", r.notes], ["School's notes", r.resolution_notes],
+        ["Submitted", when ? new Date(when).toLocaleString() : ""],
+        ["Resolved", r.resolved_at ? new Date(r.resolved_at).toLocaleString() : ""],
+      ], null, extra);
+      extra.forEach((b,i) => { const btn = overlay.querySelector(`#modalExtra${i}`); if (btn) btn.onclick = () => { overlay.remove(); b.run(); }; });
+    };
+    list.appendChild(row);
+  });
+}
+
+function askResolveStudentRequest(kind, r, approve, container, opts) {
+  const rpcName = kind === "applications" ? "school_resolve_student_application" : "school_resolve_student_authorization";
+  openModal(approve ? "Approve request" : "Reject request",
+    `<p style="margin-bottom:10px;">${approve ? "Approve" : "Reject"} the ${(kind==="applications"?REQ_APP_KIND_LABEL:REQ_AUTH_KIND_LABEL)[r.kind] || r.kind} request from <b>${reqEsc(r.student_full_name)}</b>?</p>
+     <div class="field"><label>Note to the student (optional)</label><textarea id="m_notes" rows="3"></textarea></div>`,
+    async (ov) => {
+      const notes = val(ov, "m_notes");
+      const res = await sb(`/rest/v1/rpc/${rpcName}`, { method:"POST", body: JSON.stringify({ p_id: r.id, p_approve: approve, p_notes: notes || null }) });
+      if (!res || res.success === false) throw new Error((res && res.error) || "Could not resolve the request.");
+      toast(approve ? "Request approved" : "Request rejected", false);
+      renderStudents(container, opts);
+    },
+    { saveLabel: approve ? "Approve" : "Reject" }
+  );
+}
+// ---------- Reset a student's Digital Students password ----------
+// school_reset_student_password (server-side: admin or students.write, active student of THIS
+// school, portal account must exist). It returns a temporary password ONCE; the student is
+// signed out everywhere, must choose a new password at next sign-in, and is notified.
+function askResetStudentPassword(s) {
+  openModal("Reset portal password",
+    `<p style="margin-bottom:10px;">Reset the Digital Students password for <b>${reqEsc(s.full_name)}</b>?</p>
+     <p class="tiny-note" style="margin-bottom:12px;">They will be signed out on every device and given a temporary password that you hand to them. They must choose their own at their next sign-in.</p>
+     <label style="display:flex;gap:8px;align-items:flex-start;"><input type="checkbox" id="m_no2fa" style="margin-top:3px;"/> <span>Also turn off their two-step verification (for a student who lost their phone)</span></label>`,
+    async (ov) => {
+      const res = await sb(`/rest/v1/rpc/school_reset_student_password`, { method:"POST",
+        body: JSON.stringify({ p_student_id: s.id, p_disable_2fa: !!ov.querySelector("#m_no2fa").checked }) });
+      if (!res || res.success === false) throw new Error((res && res.error) || "Could not reset the password.");
+      showStudentTempPassword(s, res);
+    },
+    { saveLabel: "Reset password" }
+  );
+}
+function showStudentTempPassword(s, res) {
+  const notes = [
+    res.two_step_cleared ? "Two-step verification was turned off." : "",
+    res.has_two_step ? "This student has two-step verification on and will also need their authenticator app." : "",
+  ].filter(Boolean).join(" ");
+  const ov = openViewModal("Temporary password", [
+    ["Student", reqEsc(s.full_name)],
+    ["Username", reqEsc(res.username || "")],
+    ["Temporary password", `<span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;letter-spacing:.06em;user-select:all;">${reqEsc(res.temp_password)}</span> <button class="btn btn-ghost btn-sm" id="tmpCopy" type="button">Copy</button>`],
+    ["Note", `Shown only once — write it down or copy it now, then give it to the student in person. ${reqEsc(notes)}`],
+  ], null, []);
+  const cp = ov.querySelector("#tmpCopy");
+  if (cp) cp.onclick = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.temp_password).then(() => toast("Copied", false), () => toast("Copy isn't available here. Select the password instead."));
+    else toast("Copy isn't available here. Select the password instead.");
+  };
+}
+
 // ---------- Student SIN (Student Identification Number) ----------
 // The SIN is now the student's admission number: it is typed/pasted once at the
 // top of "Register student", stored as-is in students.admission_no (existing
@@ -6325,12 +6497,20 @@ async function renderStudents(container, opts={}) {
 // (sin_normalize() + '^[A-Z0-9]{6,20}$' inside lookup_student_by_sin /
 // register_student_identity), so the form never accepts a SIN the server would reject.
 const SIN_SAMPLE_SHAPE = "SM094837KQ";
-const SIN_MIN_LEN = 6, SIN_MAX_LEN = 20;
+const SIN_LEN = 10; // fixed — mirrors the server-side check on student_identities.sin
 function normalizeSIN(raw) {
   // SINs are always handled as one unbroken, upper-case string (no dashes/spaces).
   return String(raw || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
-function sinLooksValid(sin) { return sin.length >= SIN_MIN_LEN && sin.length <= SIN_MAX_LEN; }
+function sinLooksValid(sin) { return sin.length === SIN_LEN; }
+// Generates a random 10-character SIN (2 letters + 8 digits, like the sample shape) for
+// staff who'd rather not type one. Only the school ever mints a SIN — this just saves typing.
+function generateSINCandidate() {
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I/O to avoid confusion with 1/0
+  let s = letters[Math.floor(Math.random() * letters.length)] + letters[Math.floor(Math.random() * letters.length)];
+  for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 10);
+  return s;
+}
 
 // Reads students.admission_no (+ full_name, deleted_at) for THIS school only
 // (scopedParams adds school_id) to stop the same SIN being registered twice.
@@ -6396,9 +6576,10 @@ function openStudentModal(container, classes, s) {
       <input id="f_photo_pick" type="file" accept="image/*" style="display:none;"/>
     </div>
     ${isEdit ? "" : `<div class="field">
-      <label>Student Identification Number (SIN)</label>
+      <label>Student Identification Number (SIN) — exactly ${SIN_LEN} characters, given to the student to create their portal account</label>
       <div style="display:flex;gap:8px;align-items:center;">
-        <input id="f_sin" placeholder="e.g. ${SIN_SAMPLE_SHAPE}" autocomplete="off" autocapitalize="characters" spellcheck="false" style="flex:1;min-width:0;text-transform:uppercase;"/>
+        <input id="f_sin" placeholder="e.g. ${SIN_SAMPLE_SHAPE}" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="${SIN_LEN}" style="flex:1;min-width:0;text-transform:uppercase;"/>
+        <button type="button" class="btn btn-ghost btn-sm" id="sinGenBtn">Generate</button>
         <button type="button" class="btn btn-ghost btn-sm" id="sinFetchBtn">Fetch</button>
       </div>
       <div id="sinStatus" class="tiny-note" style="text-align:left;margin-top:6px;"></div>
@@ -6443,7 +6624,7 @@ function openStudentModal(container, classes, s) {
       // New registration: the SIN IS the admission number (students.admission_no).
       const sin = normalizeSIN(val(ov,"f_sin"));
       if (!sin) throw new Error("Student Identification Number (SIN) is required.");
-      if (!sinLooksValid(sin)) throw new Error(`SIN must be ${SIN_MIN_LEN}–${SIN_MAX_LEN} letters/numbers.`);
+      if (!sinLooksValid(sin)) throw new Error(`SIN must be exactly ${SIN_LEN} letters/numbers.`);
       ov.querySelector("#f_adm").value = sin;
       try {
         const dupe = await findStudentBySIN(sin);
@@ -6461,7 +6642,7 @@ function openStudentModal(container, classes, s) {
     ]);
     const chosenFile = ov.querySelector("#f_photo_live").files[0] || ov.querySelector("#f_photo_pick").files[0];
     if (!isEdit && !capturedPhotoDataUrl && !chosenFile && !sinPhotoUrl) throw new Error("A registration photo is required — use Live or Pick, or fetch it with the SIN.");
-    const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToDataURL(chosenFile) : (sinPhotoUrl || s?.photo_url || null));
+    const photo_url = capturedPhotoDataUrl || (chosenFile ? await fileToPhotoDataURL(chosenFile) : (sinPhotoUrl || s?.photo_url || null));
     const payload = {
       admission_no: val(ov,"f_adm"), full_name: val(ov,"f_name"), date_of_birth: val(ov,"f_dob")||null,
       gender: val(ov,"f_gender"), class_id: val(ov,"f_class")||null,
@@ -6503,13 +6684,13 @@ function openStudentModal(container, classes, s) {
   liveInput.onchange = async () => {
     if (!liveInput.files[0]) return;
     capturedPhotoDataUrl = null; pickInput.value = ""; 
-    const dataUrl = await fileToDataURL(liveInput.files[0]);
+    const dataUrl = await fileToPhotoDataURL(liveInput.files[0]);
     if (dataUrl) setPreview(dataUrl);
   };
   pickInput.onchange = async () => {
     if (!pickInput.files[0]) return;
     capturedPhotoDataUrl = null; liveInput.value = ""; 
-    const dataUrl = await fileToDataURL(pickInput.files[0]);
+    const dataUrl = await fileToPhotoDataURL(pickInput.files[0]);
     if (dataUrl) setPreview(dataUrl);
   };
   
@@ -6517,6 +6698,7 @@ function openStudentModal(container, classes, s) {
     const sinInput = document.getElementById("f_sin");
     const admInput = document.getElementById("f_adm");
     const fetchBtn = document.getElementById("sinFetchBtn");
+    const genBtn = document.getElementById("sinGenBtn");
     const statusEl = document.getElementById("sinStatus");
     const setStatus = (msg, kind) => {
       // textContent (not innerHTML): the message can contain names coming from the database.
@@ -6525,6 +6707,30 @@ function openStudentModal(container, classes, s) {
     };
     // Keep the admission number mirroring the SIN as it is typed.
     sinInput.oninput = () => { admInput.value = normalizeSIN(sinInput.value); setStatus("", ""); };
+
+    // Mints a random 10-char SIN and checks it isn't already registered at this school
+    // before filling it in — staff never have to invent one by hand.
+    genBtn.onclick = async () => {
+      genBtn.disabled = true;
+      try {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const candidate = generateSINCandidate();
+          let taken = false;
+          try { taken = !!(await findStudentBySIN(candidate)); }
+          catch (e) { if (!(e instanceof OfflineError)) throw e; }
+          if (!taken) {
+            sinInput.value = candidate; admInput.value = candidate;
+            setStatus(`Generated SIN ${candidate}. Give this to the student to set up their portal account.`, "ok");
+            return;
+          }
+        }
+        setStatus("Couldn't find a free SIN — try again.", "err");
+      } catch (e) {
+        setStatus(e.message || "Couldn't generate a SIN.", "err");
+      } finally {
+        genBtn.disabled = false;
+      }
+    };
 
     // Writes a looked-up value into a form field only when the lookup actually returned one.
     const setField = (id, value) => {
@@ -6563,7 +6769,7 @@ function openStudentModal(container, classes, s) {
       if (busy) return;
       const sin = normalizeSIN(sinInput.value);
       sinInput.value = sin; admInput.value = sin;
-      if (!sinLooksValid(sin)) { setStatus(`Enter the student's SIN (${SIN_MIN_LEN}–${SIN_MAX_LEN} letters/numbers).`, "err"); return; }
+      if (!sinLooksValid(sin)) { setStatus(`Enter the student's SIN (exactly ${SIN_LEN} letters/numbers).`, "err"); return; }
       busy = true; fetchBtn.disabled = true; setStatus("Looking up SIN…", "");
       try {
         // 1) Already registered in this school? Stop before filling anything.
@@ -6708,7 +6914,7 @@ function openTeacherModal(container, t) {
     ]);
     const photoFile = ov.querySelector("#f_photo").files[0];
     if (!isEdit && !photoFile) throw new Error("A photo is required.");
-    const photo_url = photoFile ? await fileToDataURL(photoFile) : (t?.photo_url || null);
+    const photo_url = photoFile ? await fileToPhotoDataURL(photoFile) : (t?.photo_url || null);
     const payload = {
       staff_no: val(ov,"f_staffno"), full_name: val(ov,"f_name"), phone: val(ov,"f_phone"), email: val(ov,"f_email") || null,
       gender: val(ov,"f_gender"), specialty: val(ov,"f_spec"), qualification: val(ov,"f_qual"), grade: val(ov,"f_grade"),
@@ -6734,7 +6940,7 @@ function openTeacherModal(container, t) {
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
   const photoInput = document.getElementById("f_photo");
   photoInput.onchange = async () => {
-    const dataUrl = await fileToDataURL(photoInput.files[0]);
+    const dataUrl = await fileToPhotoDataURL(photoInput.files[0]);
     if (dataUrl) document.getElementById("photoPreviewWrap").innerHTML = avatarHtml(t?.full_name, dataUrl, 72);
   };
   
