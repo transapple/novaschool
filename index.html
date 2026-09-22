@@ -851,6 +851,47 @@ const SCHOOL_LEVELS = {
   primary: "Primary",
   secondary: "Secondary",
 };
+const SCHOOL_LEVEL_SHORT = {
+  pre_primary: "Nur",
+  primary: "Pri",
+  secondary: "Sec",
+};
+function offeredSchoolLevels() {
+  const s = schoolSettings || {};
+  return (s.school_levels || []).filter(k => SCHOOL_LEVELS[k]);
+}
+function activeSchoolLevel() {
+  const levels = offeredSchoolLevels();
+  if (!levels.length) return null;
+  const s = schoolSettings || {};
+  return levels.includes(s.active_level) ? s.active_level : levels[0];
+}
+async function setActiveSchoolLevel(level) {
+  await dbUpsert("school_settings", { active_level: level }, "school_id");
+  schoolSettings = Object.assign({}, schoolSettings, { active_level: level });
+}
+function levelSwitchBtnHtml() {
+  const levels = offeredSchoolLevels();
+  if (levels.length < 2 || !hasFullAccess(profile)) return "";
+  const active = activeSchoolLevel();
+  return `<button type="button" class="btn btn-ghost btn-sm" id="levelSwitchBtn" title="Tap to switch the active school level" style="font-weight:700;">${SCHOOL_LEVEL_SHORT[active] || active}</button>`;
+}
+function wireLevelSwitchBtn(onSwitch) {
+  const btn = document.getElementById("levelSwitchBtn");
+  if (!btn) return;
+  btn.onclick = safe(async () => {
+    const levels = offeredSchoolLevels();
+    const active = activeSchoolLevel();
+    const idx = levels.indexOf(active);
+    const next = levels[(idx + 1) % levels.length];
+    btn.disabled = true;
+    try {
+      await setActiveSchoolLevel(next);
+      btn.textContent = SCHOOL_LEVEL_SHORT[next] || next;
+      if (onSwitch) await onSwitch(next);
+    } finally { btn.disabled = false; }
+  });
+}
 const REPORT_TEMPLATES = {
   template1: { label: "Classic Navy",   color: "#1B2A4A" },
   template2: { label: "Emerald",        color: "#227A61" },
@@ -1170,17 +1211,11 @@ let CURRENT_SCHOOL = null;
 async function loadCurrentSchool() {
   if (!CURRENT_SCHOOL_ID) { CURRENT_SCHOOL = null; return; }
   try {
-    try { await sb(`/rest/v1/rpc/enforce_subscription_expiry`, { method:"POST", body: JSON.stringify({ p_school_id: CURRENT_SCHOOL_ID }) }); } catch (e) { /* offline or not yet migrated — fall through and read whatever status is stored */ }
+    try { await sb(`/rest/v1/rpc/enforce_subscription_expiry`, { method:"POST", body: JSON.stringify({ p_school_id: CURRENT_SCHOOL_ID }) }); } catch (e) { /* not yet migrated — fall through and read whatever status is stored */ }
     const rows = await sb(`/rest/v1/rpc/get_my_school`, { method:"POST", body: JSON.stringify({}) });
     CURRENT_SCHOOL = (rows && rows[0]) || null;
-    if (CURRENT_SCHOOL) offlineCachePut("school_snapshot::" + CURRENT_SCHOOL_ID, CURRENT_SCHOOL);
   } catch (e) {
-    if (e instanceof OfflineError) {
-      const cached = await offlineCacheGet("school_snapshot::" + CURRENT_SCHOOL_ID);
-      CURRENT_SCHOOL = cached !== undefined ? cached : null;
-    } else {
-      CURRENT_SCHOOL = null;
-    }
+    CURRENT_SCHOOL = null;
   }
 }
 function isFeatureEnabled(navId) {
@@ -1207,31 +1242,39 @@ function schoolBlockedMessage() {
 }
 
 let __schoolSyncTimer = null;
+const EDITING_GRACE_MS = 90000; // treat the user as "busy" for 90s after their last action,
+// not just the instant a field is focused — covers pauses between fields, glancing away,
+// tapping custom buttons (attendance marks, toggles), etc.
+let __lastFormInteraction = 0;
+function noteFormInteraction() { __lastFormInteraction = Date.now(); }
+// Any of these mean the person is actively doing something — typing, tapping a
+// custom control (attendance present/absent buttons, toggles, cards that aren't
+// real <input> elements, drag handles, etc.), or just touching the screen. A
+// background sync has no business re-rendering out from under any of it, so
+// every one of these resets the "busy" clock, not just form input/change.
+["input", "change", "click", "pointerdown", "keydown", "touchstart"].forEach(evt => {
+  document.addEventListener(evt, noteFormInteraction, true);
+});
+// A network call in flight (saving attendance, submitting a form, etc.) also
+// counts as busy — a background re-render firing while a save is still awaiting
+// its response can wipe the screen out from under it or hit stale DOM nodes.
+let __inFlightRequests = 0;
 function isUserEditing() {
   const el = document.activeElement;
-  return !!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;
+  if (document.querySelector(".overlay")) return true; // a modal/sheet is open — an active workflow is in progress
+  if (__inFlightRequests > 0) return true; // a save/submit is still in flight
+  return (Date.now() - __lastFormInteraction) < EDITING_GRACE_MS;
 }
 function startSchoolSync() {
   stopSchoolSync();
   const tick = async () => {
     if (!CURRENT_SCHOOL_ID) return;
-    const prevStatus = CURRENT_SCHOOL?.status;
-    const prevFeatures = JSON.stringify(CURRENT_SCHOOL?.features || {});
-    const prevUpgradeRequested = CURRENT_SCHOOL?.upgrade_requested_at || null;
-    const prevUpgradeCompleted = CURRENT_SCHOOL?.upgrade_completed_at || null;
-    const prevDeletedAt = CURRENT_SCHOOL?.deleted_at || null;
     await loadCurrentSchool();
-    if (!auth) return; 
-    const changed = prevStatus !== CURRENT_SCHOOL?.status
-      || prevFeatures !== JSON.stringify(CURRENT_SCHOOL?.features || {})
-      || prevUpgradeRequested !== (CURRENT_SCHOOL?.upgrade_requested_at || null)
-      || prevUpgradeCompleted !== (CURRENT_SCHOOL?.upgrade_completed_at || null)
-      || prevDeletedAt !== (CURRENT_SCHOOL?.deleted_at || null);
-    if (!changed) return;
-    if (!schoolIsActive()) { render(); return; }
+    if (!auth) return;
+    if (schoolIsActive()) return; // in good standing — nothing disruptive needed, don't touch the screen
     if (isUserEditing()) {
-      // User is mid-entry (e.g. typing marks) — don't wipe the screen under them.
-      // Re-check once they finish with this field instead of forcing a render now.
+      // Still lock out a suspended/deleted school, but never mid-keystroke — check again once they're done.
       document.addEventListener("focusout", () => { if (!isUserEditing()) tick(); }, { once: true });
       return;
     }
@@ -2392,34 +2435,23 @@ end;
 $reset_password$;
 grant execute on function reset_password(text,text,text,uuid) to anon, authenticated;`;
 
-class OfflineError extends Error {}
 async function sb(path, opts = {}) {
-  
-  
   const headers = Object.assign({
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + SUPABASE_KEY,
     "Content-Type": "application/json",
   }, SESSION_TOKEN ? { "x-session-token": SESSION_TOKEN } : {}, opts.headers || {});
   let res;
-  
-  
-  
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  __inFlightRequests++; // mark busy so a background refresh doesn't re-render mid-request
   try {
     res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers, signal: controller.signal }));
   } catch (e) {
-    
-    
-    
-    throw new OfflineError("Couldn't connect right now. Please try again.");
+    throw new Error("Couldn't connect right now. Please try again.");
   } finally {
     clearTimeout(timeoutId);
-  }
-  if (offlineBannerStickyUntilOnline) {
-    offlineBannerStickyUntilOnline = false;
-    updateNetStatusPill();
+    __inFlightRequests--;
   }
   let data = null;
   try { data = await res.json(); } catch(e) { data = null; }
@@ -2430,178 +2462,6 @@ async function sb(path, opts = {}) {
   return data;
 }
 
-const OFFLINE_DB_NAME = "novaOfflineCache";
-const OFFLINE_DB_VERSION = 2;
-const OFFLINE_STORE = "reads";
-const OUTBOX_STORE = "outbox";
-let offlineDBPromise = null;
-function openOfflineDB() {
-  if (offlineDBPromise) return offlineDBPromise;
-  offlineDBPromise = new Promise((resolve) => {
-    if (!("indexedDB" in window)) { resolve(null); return; }
-    let req;
-    try { req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); } catch (e) { resolve(null); return; }
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      try { if (!db.objectStoreNames.contains(OFFLINE_STORE)) db.createObjectStore(OFFLINE_STORE); } catch (e) {}
-      try { if (!db.objectStoreNames.contains(OUTBOX_STORE)) db.createObjectStore(OUTBOX_STORE, { keyPath: "localId", autoIncrement: true }); } catch (e) {}
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-  });
-  return offlineDBPromise;
-}
-async function offlineCachePut(key, value) {
-  try {
-    const db = await openOfflineDB(); if (!db) return;
-    await new Promise((resolve) => {
-      const tx = db.transaction(OFFLINE_STORE, "readwrite");
-      tx.objectStore(OFFLINE_STORE).put({ value, savedAt: Date.now() }, key);
-      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
-    });
-  } catch (e) {}
-}
-async function offlineCacheGet(key) {
-  try {
-    const db = await openOfflineDB(); if (!db) return undefined;
-    return await new Promise((resolve) => {
-      const tx = db.transaction(OFFLINE_STORE, "readonly");
-      const req = tx.objectStore(OFFLINE_STORE).get(key);
-      req.onsuccess = () => resolve(req.result ? req.result.value : undefined);
-      req.onerror = () => resolve(undefined);
-    });
-  } catch (e) { return undefined; }
-}
-async function offlineCacheEntriesForTable(table) {
-  try {
-    const db = await openOfflineDB(); if (!db) return [];
-    const prefix = table + "::";
-    return await new Promise((resolve) => {
-      const out = [];
-      const tx = db.transaction(OFFLINE_STORE, "readonly");
-      const range = IDBKeyRange.bound(prefix, prefix + "\uffff");
-      const req = tx.objectStore(OFFLINE_STORE).openCursor(range);
-      req.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) { out.push({ key: cursor.key, value: cursor.value.value }); cursor.continue(); }
-        else resolve(out);
-      };
-      req.onerror = () => resolve(out);
-    });
-  } catch (e) { return []; }
-}
-async function offlineCacheMutateTable(table, mutateFn) {
-  const entries = await offlineCacheEntriesForTable(table);
-  for (const entry of entries) {
-    const rows = Array.isArray(entry.value) ? entry.value : null;
-    if (!rows) continue;
-    const next = mutateFn(rows);
-    if (next) await offlineCachePut(entry.key, next);
-  }
-}
-async function applyOptimisticInsert(table, row) {
-  if (table === "students" && row.sin == null) row = Object.assign({}, row, { sin_status: row.sin_status || "pending" });
-  await offlineCacheMutateTable(table, (rows) => [row, ...rows]);
-}
-async function applyOptimisticUpdate(table, id, patch) {
-  await offlineCacheMutateTable(table, (rows) => {
-    let changed = false;
-    const next = rows.map(r => { if (r && r.id === id) { changed = true; return Object.assign({}, r, patch); } return r; });
-    return changed ? next : null;
-  });
-}
-async function applyOptimisticDelete(table, id) {
-  await offlineCacheMutateTable(table, (rows) => {
-    if (!rows.some(r => r && r.id === id)) return null;
-    return rows.filter(r => !(r && r.id === id));
-  });
-}
-async function reconcileTempId(table, tempId, realRow) {
-  await offlineCacheMutateTable(table, (rows) => {
-    let changed = false;
-    const next = rows.map(r => { if (r && r.id === tempId) { changed = true; return realRow; } return r; });
-    return changed ? next : null;
-  });
-}
-
-async function outboxAdd(entry) {
-  try {
-    const db = await openOfflineDB(); if (!db) return null;
-    return await new Promise((resolve) => {
-      const tx = db.transaction(OUTBOX_STORE, "readwrite");
-      const req = tx.objectStore(OUTBOX_STORE).add(entry);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    });
-  } catch (e) { return null; }
-}
-async function outboxAll() {
-  try {
-    const db = await openOfflineDB(); if (!db) return [];
-    return await new Promise((resolve) => {
-      const tx = db.transaction(OUTBOX_STORE, "readonly");
-      const req = tx.objectStore(OUTBOX_STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-  } catch (e) { return []; }
-}
-async function outboxCount() {
-  try {
-    const db = await openOfflineDB(); if (!db) return 0;
-    return await new Promise((resolve) => {
-      const tx = db.transaction(OUTBOX_STORE, "readonly");
-      const req = tx.objectStore(OUTBOX_STORE).count();
-      req.onsuccess = () => resolve(req.result || 0);
-      req.onerror = () => resolve(0);
-    });
-  } catch (e) { return 0; }
-}
-async function outboxRemove(localId) {
-  try {
-    const db = await openOfflineDB(); if (!db) return;
-    await new Promise((resolve) => {
-      const tx = db.transaction(OUTBOX_STORE, "readwrite");
-      tx.objectStore(OUTBOX_STORE).delete(localId);
-      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
-    });
-  } catch (e) {}
-}
-async function outboxUpdate(localId, patch) {
-  try {
-    const db = await openOfflineDB(); if (!db) return;
-    await new Promise((resolve) => {
-      const tx = db.transaction(OUTBOX_STORE, "readwrite");
-      const store = tx.objectStore(OUTBOX_STORE);
-      const req = store.get(localId);
-      req.onsuccess = () => {
-        const row = req.result; if (!row) { resolve(); return; }
-        store.put(Object.assign({}, row, patch));
-      };
-      tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
-    });
-  } catch (e) {}
-}
-async function reconcileOutboxRefs(tempId, realId) {
-  const entries = await outboxAll();
-  for (const entry of entries) {
-    let changed = false;
-    let targetId = entry.targetId;
-    if (targetId === tempId) { targetId = realId; changed = true; }
-    let body = entry.body;
-    if (body && typeof body === "object") {
-      const rewrite = (obj) => {
-        const out = Array.isArray(obj) ? obj.slice() : Object.assign({}, obj);
-        for (const k of Object.keys(out)) {
-          if (out[k] === tempId) { out[k] = realId; changed = true; }
-        }
-        return out;
-      };
-      body = Array.isArray(body) ? body.map(rewrite) : rewrite(body);
-    }
-    if (changed) await outboxUpdate(entry.localId, { targetId, body });
-  }
-}
 const qs = (obj) => Object.entries(obj).filter(([,v])=>v!==undefined && v!==null && v!=="").map(([k,v])=>`${k}=${v}`).join("&");
 
 function scopedParams(table, params) {
@@ -2616,188 +2476,38 @@ function scopedBody(table, body) {
 }
 async function dbSelect(table, params={}) {
   const path = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
-  const offlineKey = table + "::" + path;
-  const cached = await offlineCacheGet(offlineKey);
-  if (cached !== undefined) {
-    sb(path).then(fresh => offlineCachePut(offlineKey, fresh)).catch(() => {});
-    return cached;
-  }
-  try {
-    const data = await sb(path);
-    offlineCachePut(offlineKey, data);
-    return data;
-  } catch (e) {
-    if (e instanceof OfflineError) {
-      noteOfflineDataServed();
-      return [];
-    }
-    throw e;
-  }
+  return await sb(path);
 }
-function genLocalId() { return "local_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 async function dbInsert(table, body) {
   const scoped = scopedBody(table, body);
-  try {
-    return await sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"return=representation" } });
-  } catch (e) {
-    if (!(e instanceof OfflineError)) throw e;
-    const rows = (Array.isArray(scoped) ? scoped : [scoped]).map(r => Object.assign({ id: genLocalId(), created_at: new Date().toISOString() }, r));
-    for (const row of rows) {
-      await applyOptimisticInsert(table, row);
-      await outboxAdd({ table, op:"insert", body: row, createdAt: Date.now() });
-    }
-    noteOfflineDataServed(); queueSyncAttempt();
-    return rows;
-  }
+  return await sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"return=representation" } });
 }
 async function dbUpdate(table, id, body) {
-  try {
-    return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
-  } catch (e) {
-    if (!(e instanceof OfflineError)) throw e;
-    await applyOptimisticUpdate(table, id, body);
-    await outboxAdd({ table, op:"update", targetId:id, body, createdAt: Date.now() });
-    noteOfflineDataServed(); queueSyncAttempt();
-    return [Object.assign({ id }, body)];
-  }
+  return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
 }
 async function dbUpsert(table, body, onConflict) {
   const scoped = scopedBody(table, body);
-  try {
-    return await sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
-  } catch (e) {
-    if (!(e instanceof OfflineError)) throw e;
-    const rows = Array.isArray(scoped) ? scoped : [scoped];
-    for (const row of rows) {
-      if (row.id) await applyOptimisticUpdate(table, row.id, row);
-      else await applyOptimisticInsert(table, Object.assign({ id: genLocalId() }, row));
-    }
-    await outboxAdd({ table, op:"upsert", body: scoped, onConflict, createdAt: Date.now() });
-    noteOfflineDataServed(); queueSyncAttempt();
-    return rows;
-  }
+  return await sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
 }
 async function dbDelete(table, id) {
-  try {
-    return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
-  } catch (e) {
-    if (!(e instanceof OfflineError)) throw e;
-    await applyOptimisticDelete(table, id);
-    await outboxAdd({ table, op:"delete", targetId:id, createdAt: Date.now() });
-    noteOfflineDataServed(); queueSyncAttempt();
-    return null;
-  }
+  return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
 }
 async function dbSelectActive(table, params={}) {
   const filteredParams = Object.assign({ deleted_at:"is.null" }, params);
   const filteredPath = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, filteredParams)))}`;
-  const filteredKey = table + "::" + filteredPath;
-  const cachedFiltered = await offlineCacheGet(filteredKey);
-  if (cachedFiltered !== undefined) {
-    dbSelect(table, filteredParams).catch(() => {});
-    return cachedFiltered;
-  }
-  try {
-    const data = await sb(filteredPath);
-    offlineCachePut(filteredKey, data);
-    return data;
-  } catch (e) {
-    if (e instanceof OfflineError) {
-      const plainPath = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
-      const cachedPlain = await offlineCacheGet(table + "::" + plainPath);
-      if (cachedPlain !== undefined) return cachedPlain;
-      noteOfflineDataServed();
-      return [];
-    }
-    return await dbSelect(table, params);
-  }
-}
-async function applyOptimisticDeleteWhere(table, filter) {
-  await offlineCacheMutateTable(table, (rows) => {
-    const matches = (r) => r && Object.keys(filter).every(k => String(r[k]) === String(filter[k]));
-    if (!rows.some(matches)) return null;
-    return rows.filter(r => !matches(r));
-  });
+  return await sb(filteredPath);
 }
 function deleteWhereParams(table, filter) {
   return scopedParams(table, Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, `eq.${v}`])));
 }
 async function dbDeleteWhere(table, filter) {
-  try {
-    return await sb(`/rest/v1/${table}?${qs(deleteWhereParams(table, filter))}`, { method:"DELETE" });
-  } catch (e) {
-    if (!(e instanceof OfflineError)) throw e;
-    await applyOptimisticDeleteWhere(table, filter);
-    await outboxAdd({ table, op:"deleteWhere", filter, createdAt: Date.now() });
-    noteOfflineDataServed(); queueSyncAttempt();
-    return null;
-  }
+  return await sb(`/rest/v1/${table}?${qs(deleteWhereParams(table, filter))}`, { method:"DELETE" });
 }
 
 let __activeRefresh = null;
 function setActiveRefresh(fn) { __activeRefresh = fn; }
 function refreshActiveView() {
   try { if (__activeRefresh) __activeRefresh(); } catch (e) { /* best-effort */ }
-}
-
-const OUTBOX_MAX_ATTEMPTS = 5;
-let outboxSyncing = false;
-let outboxSyncScheduled = false;
-function queueSyncAttempt() {
-  updateSyncBadge();
-  if (outboxSyncScheduled) return;
-  outboxSyncScheduled = true;
-  setTimeout(() => { outboxSyncScheduled = false; flushOutbox(); }, 300);
-}
-async function outboxCounts() {
-  const all = await outboxAll();
-  const failed = all.filter(e => e.failed).length;
-  return { pending: all.length - failed, failed, total: all.length };
-}
-async function outboxRetryFailed() {
-  const all = await outboxAll();
-  for (const entry of all) {
-    if (entry.failed) await outboxUpdate(entry.localId, { failed: false, attempts: 0, lastError: null });
-  }
-  flushOutbox();
-}
-async function flushOutbox() {
-  if (outboxSyncing || !navigator.onLine) return;
-  outboxSyncing = true;
-  updateSyncBadge();
-  try {
-    const entries = (await outboxAll()).sort((a, b) => a.createdAt - b.createdAt);
-    for (const entry of entries) {
-      if (entry.failed) continue; // gave up after repeated non-connectivity errors; wait for manual retry
-      try {
-        if (entry.op === "insert") {
-          const { id: tempId, ...rest } = entry.body;
-          const rows = await sb(`/rest/v1/${entry.table}`, { method:"POST", body: JSON.stringify(rest), headers:{ "Prefer":"return=representation" } });
-          const real = Array.isArray(rows) ? rows[0] : rows;
-          if (real) { await reconcileTempId(entry.table, tempId, real); await reconcileOutboxRefs(tempId, real.id); }
-        } else if (entry.op === "update") {
-          await sb(`/rest/v1/${entry.table}?${qs(scopedParams(entry.table, {id:`eq.${entry.targetId}`}))}`, { method:"PATCH", body: JSON.stringify(entry.body), headers:{ "Prefer":"return=representation" } });
-        } else if (entry.op === "upsert") {
-          await sb(`/rest/v1/${entry.table}?on_conflict=${entry.onConflict}`, { method:"POST", body: JSON.stringify(entry.body), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
-        } else if (entry.op === "delete") {
-          await sb(`/rest/v1/${entry.table}?${qs(scopedParams(entry.table, {id:`eq.${entry.targetId}`}))}`, { method:"DELETE" });
-        } else if (entry.op === "deleteWhere") {
-          await sb(`/rest/v1/${entry.table}?${qs(deleteWhereParams(entry.table, entry.filter))}`, { method:"DELETE" });
-        }
-        await outboxRemove(entry.localId);
-        if (entry.table === "students" && entry.op === "insert") { try { await syncPendingSins(); } catch (e2) { /* best-effort */ } }
-      } catch (e) {
-        if (e instanceof OfflineError) break; // connectivity dropped again mid-sync — stop, the next trigger will retry
-        const attempts = (entry.attempts || 0) + 1;
-        const failed = attempts >= OUTBOX_MAX_ATTEMPTS;
-        await outboxUpdate(entry.localId, { attempts, lastError: e.message || "Sync failed", erroredAt: Date.now(), failed });
-      }
-    }
-  } finally {
-    outboxSyncing = false;
-    updateSyncBadge();
-    refreshActiveView();
-  }
 }
 
 async function listMySupportRequests() {
@@ -2872,29 +2582,12 @@ async function tryRestoreRememberedSession() {
     setCurrentSchool(profile.school_id);
     await loadCurrentSchool();
     auth = { user: { id: profile.id } };
-    await offlineCachePut("profile_snapshot::" + username, profile);
     markDeviceSeen();
     pinLocked = false;
     startSchoolSync();
-    flushOutbox();
     primeSchoolCache();
     return true;
   } catch (e) {
-    if (e instanceof OfflineError) {
-      const cachedProfile = await offlineCacheGet("profile_snapshot::" + username);
-      if (cachedProfile) {
-        profile = cachedProfile;
-        setCurrentSchool(profile.school_id);
-        await loadCurrentSchool();
-        auth = { user: { id: profile.id } };
-        markDeviceSeen();
-        pinLocked = false;
-        offlineBannerStickyUntilOnline = true; updateNetStatusPill();
-        startSchoolSync();
-        return true;
-      }
-      return false;
-    }
     clearRememberedSession();
     persistSessionToken(null);
     return false;
@@ -3342,7 +3035,6 @@ function renderTabContent() {
   const renderers = { dashboard: renderDashboard, "aio-ai": renderAioAi, health: renderSchoolHealth, students: renderStudents, teachers: renderTeachers, attendance: renderAttendance, fees: renderFees, exams: renderExams, academic: renderAcademic, inventory: renderInventory, library: renderLibrary, comms: renderComms, users: renderUsers, contact: renderContactTransApple, settings: renderSettings, trash: renderTrash };
   const initialSub = pendingSubTab; pendingSubTab = null;
   (renderers[tab] || renderDashboard)(content, initialSub || undefined).catch(errShow(content));
-  flashOfflineBannerForNav();
 }
 
 function goToChatHistory() {
@@ -3598,12 +3290,10 @@ async function authCompleteLogin(row, remember) {
   await loadCurrentSchool();
   if (remember) authSetPrefill({ code: (CURRENT_SCHOOL && CURRENT_SCHOOL.school_code) || "", username: p.username, remember: true });
   auth = { user: { id: profile.id } };
-  if (remember) await offlineCachePut("profile_snapshot::" + profile.username, profile);
   markDeviceSeen();
   pinLocked = false;
   await loadSchoolSettings(); // brand colour / logo / ID prefixes now that a session exists
   startSchoolSync();
-  flushOutbox();
   primeSchoolCache();
   tab = "dashboard"; pendingSubTab = null; authView = "login";
   render();
@@ -4722,7 +4412,6 @@ function renderParentApp() {
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
   const renderers = { pchildren: renderParentChildren, pfees: renderParentFees, pnotifications: renderParentMeetings, pcontact: renderParentContact, psettings: renderParentSettings };
   (renderers[tab] || renderParentChildren)(content).catch(errShow(content));
-  flashOfflineBannerForNav();
 }
 
 async function getParentChildren() {
@@ -5249,7 +4938,9 @@ async function renderDashboard(container) {
   ]);
   const present = attToday.filter(a=>a.status==="present").length;
   const staffPresent = staffAttToday.filter(a=>a.status==="present").length;
+  const levelBtnHtml = levelSwitchBtnHtml();
   container.innerHTML = `
+    ${levelBtnHtml ? `<div class="row" style="justify-content:flex-end;margin-bottom:8px;">${levelBtnHtml}</div>` : ""}
     <div class="stat-grid">
       <div class="stat"><div class="num">${students.length}</div><div class="lbl">Total students</div></div>
       <div class="stat"><div class="num">${teachers.length}</div><div class="lbl">Total staff</div></div>
@@ -5262,6 +4953,7 @@ async function renderDashboard(container) {
   `;
   document.getElementById("presentTodayStat").onclick = safe(() => showPresentTodayBreakdown(today));
   document.getElementById("staffPresentTodayStat").onclick = safe(() => showStaffPresentTodayBreakdown(today));
+  wireLevelSwitchBtn(() => renderDashboard(container));
   renderAttendanceByClass(document.getElementById("panelAttendanceByClass"), classes);
   renderExamActivity(document.getElementById("panelActivity"));
   renderUpcomingWeek(document.getElementById("panelUpcoming"));
@@ -6482,7 +6174,7 @@ async function schoolFinalizeStudent(studentId) { return sinRpc("school_finalize
 
 let sinSyncBusy = false;
 async function syncPendingSins() {
-  if (sinSyncBusy || !navigator.onLine) return null;
+  if (sinSyncBusy) return null;
   sinSyncBusy = true;
   try { return await sb(`/rest/v1/rpc/school_sync_pending_students`, { method:"POST", body:"{}" }); }
   catch (e) { return null; } // best-effort; the next roster load tries again
@@ -6605,19 +6297,14 @@ function openStudentModal(container, classes, s) {
     payload.status = "active";
     const rows = await dbInsert("students", payload);
     const saved = Array.isArray(rows) ? rows[0] : rows;
-    if (!saved || String(saved.id).startsWith("local_")) {
-      toast("Saved offline as “SIN pending”. It will be linked when you are back online.", false);
-      renderStudents(container);
-      return;
-    }
     let outcome = null;
     let finalizeErr = null;
     try { outcome = await schoolFinalizeStudent(saved.id); }
     catch (e) { finalizeErr = e; }
     renderStudents(container);
     if (outcome) showRegistrationOutcome(payload.full_name, outcome);
-    else if (finalizeErr && !(finalizeErr instanceof OfflineError)) toast(`Saved as “SIN pending”. Could not link it yet: ${reqEsc(finalizeErr.message || "")}`, true);
-    else toast("Saved as “SIN pending”. It will be linked when you are back online.", false);
+    else if (finalizeErr) toast(`Saved as “SIN pending”. Could not link it yet: ${reqEsc(finalizeErr.message || "")}`, true);
+    else toast("Saved as “SIN pending”.", false);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
 
   wireDobField(document, "f_dob");
@@ -6721,7 +6408,7 @@ function openStudentModal(container, classes, s) {
         setStatus(res.message || "Couldn't use that SIN.", "err"); // invalid_sin, unknown_sin, locked, already_here
       }
     } catch (e) {
-      setStatus(e instanceof OfflineError ? "You're offline — checking needs a connection. You can still register; it will be saved as “SIN pending”." : (e.message || "Couldn't check."), e instanceof OfflineError ? "warn" : "err");
+      setStatus(e.message || "Couldn't check.", "err");
     } finally {
       busy = false;
       const now = normalizeSIN(sinInput.value);
@@ -8941,23 +8628,27 @@ function reportCardHeaderHtml(s, tplColor, examLbl) {
 async function renderReportCard(body) {
   await loadGrades();
   const s = schoolSettings || {};
-  const offeredLevels = (s.school_levels || []).filter(k => SCHOOL_LEVELS[k]);
-  if (!offeredLevels.length) { body.innerHTML = emptyState("Select which school level(s) you offer in Settings → Preferences first."); return; }
-  body.innerHTML = `<div class="card"><div class="field" style="margin-bottom:0;"><label>Level</label>
-      <select id="selLevel">${offeredLevels.map(k=>`<option value="${k}">${SCHOOL_LEVELS[k]}</option>`).join("")}</select>
-    </div></div>
+  const offeredLevels = offeredSchoolLevels();
+  if (!offeredLevels.length) { body.innerHTML = emptyState("School level(s) offered haven't been set up yet — contact support."); return; }
+  const level = activeSchoolLevel();
+  body.innerHTML = `<div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div><div class="tiny-note" style="margin-bottom:2px;">Active level</div><div style="font-weight:700;font-size:15px;">${SCHOOL_LEVELS[level]}</div></div>
+        ${levelSwitchBtnHtml()}
+      </div>
+    </div>
     <div class="card"><div class="field"><label>Class</label><select id="selClass2"></select></div>
     <div class="field"><label>Exam</label><select id="selExam2"></select></div>
     <div class="field" style="margin-bottom:0;"><label>Student</label><select id="selStudent2"></select></div></div>
     <div id="cardArea"></div>`;
-  const selLevel = document.getElementById("selLevel");
+  wireLevelSwitchBtn(() => renderReportCard(body));
   const selClass2 = document.getElementById("selClass2");
   const selExam2 = document.getElementById("selExam2");
   const selStudent2 = document.getElementById("selStudent2");
   let examsForClass = [];
   async function loadClasses() {
-    const classes = await dbSelectActive("classes", { level:`eq.${selLevel.value}`, order:"name.asc" });
-    selClass2.innerHTML = classes.length ? classes.map(c=>`<option value="${c.id}">${c.name}${c.section?(' '+c.section):''}</option>`).join("") : `<option value="">No ${SCHOOL_LEVELS[selLevel.value]} classes yet</option>`;
+    const classes = await dbSelectActive("classes", { level:`eq.${level}`, order:"name.asc" });
+    selClass2.innerHTML = classes.length ? classes.map(c=>`<option value="${c.id}">${c.name}${c.section?(' '+c.section):''}</option>`).join("") : `<option value="">No ${SCHOOL_LEVELS[level]} classes yet</option>`;
     await loadExams();
   }
   async function loadExams() {
@@ -8974,7 +8665,7 @@ async function renderReportCard(body) {
     buildCard();
   }
   async function buildCard() {
-    const examId = selExam2.value, studentId = selStudent2.value, level = selLevel.value;
+    const examId = selExam2.value, studentId = selStudent2.value;
     const area = document.getElementById("cardArea");
     if (!examId || !studentId) { area.innerHTML=""; return; }
     const [results, studentRows, reportRows] = await Promise.all([
@@ -9068,7 +8759,6 @@ async function renderReportCard(body) {
       } catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
     };
   }
-  selLevel.onchange = loadClasses;
   selClass2.onchange = loadExams;
   selExam2.onchange = loadStudents;
   selStudent2.onchange = buildCard;
@@ -10446,16 +10136,6 @@ async function renderSchoolSettingsPanel(container) {
               ${Object.entries(BRAND_PRESETS).map(([key,pr])=>`<div class="swatch ${key===selectedColor?'on':''}" data-key="${key}" title="${pr.label}" style="background:${pr.base};">${ic.check}</div>`).join("")}
             </div>
           </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>School level(s) offered</label>
-            <div class="row" style="gap:16px;flex-wrap:wrap;margin-top:6px;">
-              ${Object.entries(SCHOOL_LEVELS).map(([key,label])=>`
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;">
-                  <input type="checkbox" class="f_schoollevel" value="${key}" ${(s.school_levels||[]).includes(key)?'checked':''} style="width:18px;height:18px;"/>
-                  ${label}
-                </label>`).join("")}
-            </div>
-          </div>
         </div>
         ${(s.school_levels||[]).length ? `
         <div class="card">
@@ -10501,7 +10181,6 @@ async function renderSchoolSettingsPanel(container) {
         savePanel({
           brand_color: selectedColor,
           teacher_eval_visibility: val(body,"f_evalvis") || "scores_only",
-          school_levels: Array.from(body.querySelectorAll(".f_schoollevel:checked")).map(cb => cb.value),
           ...tplPayload,
         }, "Preferences saved.");
       };
@@ -10798,53 +10477,6 @@ document.addEventListener("wheel", (e) => {
 }, { passive: false });
 document.addEventListener("click", (e) => { if (e.target.matches && e.target.matches("input.datefield")) openDateCalendar(e.target); });
 
-let offlineBannerStickyUntilOnline = false;
-function noteOfflineDataServed() {
-  offlineBannerStickyUntilOnline = true;
-  updateNetStatusPill();
-  refreshActiveView();
-}
-
-function flashOfflineBannerForNav() {}
-window.addEventListener("offline", () => { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); });
-window.addEventListener("online", () => { offlineBannerStickyUntilOnline = false; flushOutbox(); updateNetStatusPill(); });
-
-async function updateSyncBadge() {
-  updateNetStatusPill();
-}
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && navigator.onLine) flushOutbox(); });
-setInterval(() => { if (navigator.onLine) flushOutbox(); }, 20000);
-
-function ensureNetStatusPill() {
-  let el = document.getElementById("netStatusPill");
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = "netStatusPill";
-  el.style.cssText = "position:fixed;top:8px;right:8px;z-index:10000;font-size:11.5px;font-weight:700;padding:5px 10px 5px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:flex;align-items:center;gap:5px;opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease,background-color .2s ease,color .2s ease;pointer-events:none;white-space:nowrap;";
-  document.body.appendChild(el);
-  return el;
-}
-let netStatusPillHideTimer = null;
-async function updateNetStatusPill() {
-  const el = ensureNetStatusPill();
-  if (!outboxSyncing) {
-    el.style.opacity = "0"; el.style.transform = "translateY(-6px)";
-    el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null;
-    if (netStatusPillHideTimer) clearTimeout(netStatusPillHideTimer);
-    return;
-  }
-  el.style.backgroundColor = "#dbeafe"; el.style.color = "#1e40af";
-  el.textContent = "🔄 Syncing…";
-  el.style.pointerEvents = "none"; el.style.cursor = "default"; el.onclick = null;
-  el.style.opacity = "1"; el.style.transform = "translateY(0)";
-  if (netStatusPillHideTimer) clearTimeout(netStatusPillHideTimer);
-  netStatusPillHideTimer = setTimeout(() => {
-    el.style.opacity = "0"; el.style.transform = "translateY(-6px)";
-  }, 3000);
-}
-window.addEventListener("online", updateNetStatusPill);
-window.addEventListener("offline", updateNetStatusPill);
-
 async function primeSchoolCache() {
   if (!profile) return;
   const isParent = profile.role === "parent" || profile.department === "parents";
@@ -10883,8 +10515,6 @@ function renderBootLoader() {
 (async function boot() {
   renderBootLoader(); // shown immediately so nothing white/blank ever appears
   startHeaderClock(); 
-  updateNetStatusPill();
-  if (!navigator.onLine) { offlineBannerStickyUntilOnline = true; updateNetStatusPill(); }
   await Promise.all([loadSchoolSettings(), tryRestoreRememberedSession()]);
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } 
   render(); // lands straight on the dashboard (home)
