@@ -1207,6 +1207,10 @@ function schoolBlockedMessage() {
 }
 
 let __schoolSyncTimer = null;
+function isUserEditing() {
+  const el = document.activeElement;
+  return !!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+}
 function startSchoolSync() {
   stopSchoolSync();
   const tick = async () => {
@@ -1223,14 +1227,19 @@ function startSchoolSync() {
       || prevUpgradeRequested !== (CURRENT_SCHOOL?.upgrade_requested_at || null)
       || prevUpgradeCompleted !== (CURRENT_SCHOOL?.upgrade_completed_at || null)
       || prevDeletedAt !== (CURRENT_SCHOOL?.deleted_at || null);
-    if (changed) {
-      if (!schoolIsActive()) { render(); return; } 
-      if (!hasNavAccess(profile, tab)) tab = "dashboard";
-      render();
+    if (!changed) return;
+    if (!schoolIsActive()) { render(); return; }
+    if (isUserEditing()) {
+      // User is mid-entry (e.g. typing marks) — don't wipe the screen under them.
+      // Re-check once they finish with this field instead of forcing a render now.
+      document.addEventListener("focusout", () => { if (!isUserEditing()) tick(); }, { once: true });
+      return;
     }
+    if (!hasNavAccess(profile, tab)) tab = "dashboard";
+    render();
   };
   __schoolSyncTimer = setInterval(tick, 45000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !isUserEditing()) tick(); });
 }
 function stopSchoolSync() { if (__schoolSyncTimer) { clearInterval(__schoolSyncTimer); __schoolSyncTimer = null; } }
 
