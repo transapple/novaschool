@@ -1379,7 +1379,7 @@ const DEPARTMENTS = {
     access: ["dashboard","aio-ai","students","fees","users","contact"],
   },
   parents: {
-    label: "Parents & Community",
+    label: "Parents",
     positions: ["Parent Liaison Officer","Communications Officer","PTA Coordinator"],
     
     
@@ -3108,7 +3108,7 @@ const AUTH_DEPT_HINTS = {
   administration: "Full access to the whole school",
   academic: "Teaching, attendance and exams",
   finance: "Fees and billing",
-  parents: "Parent & community communication",
+  parents: "Parents / guardians communication",
 };
 
 function authEsc(v) {
@@ -4292,12 +4292,13 @@ function openUpdateSite() { window.open(UPDATE_SITE_URL, "_blank", "noopener"); 
 const NAV_PARENT = [
   { id:"pchildren", label:"My Children", icon:ic.student },
   { id:"pfees", label:"Fees", icon:ic.fees },
+  { id:"pteachers", label:"Teachers", icon:ic.teacher },
   { id:"pnotifications", label:"Notifications", icon:ic.megaphone },
   { id:"pcontact", label:"Contact", icon:ic.phone },
   { id:"psettings", label:"Settings", icon:ic.settings },
 ];
-const PARENT_TAB_COLOR = { pchildren:"var(--sky)", pfees:"var(--red)", pnotifications:"#c2410c", pcontact:"var(--indigo)", psettings:"var(--slate)" };
-const PARENT_TAB_ANIM = { pchildren:"slideInLeft", pfees:"wiggleIn", pnotifications:"popScale", pcontact:"fadeSlideDown", psettings:"riseIn" };
+const PARENT_TAB_COLOR = { pchildren:"var(--sky)", pfees:"var(--red)", pteachers:"var(--purple)", pnotifications:"#c2410c", pcontact:"var(--indigo)", psettings:"var(--slate)" };
+const PARENT_TAB_ANIM = { pchildren:"slideInLeft", pfees:"wiggleIn", pteachers:"popScale", pnotifications:"popScale", pcontact:"fadeSlideDown", psettings:"riseIn" };
 
 function parentReadKey() { return `novaReadNotifs_${profile?.id || "anon"}`; }
 function getReadNotifIds() {
@@ -4410,7 +4411,7 @@ function renderParentApp() {
   pageTitle.style.animation = `${PARENT_TAB_ANIM[tab]||"fadeSlideDown"} .38s ease`;
   const content = document.getElementById("content");
   content.innerHTML = `<div class="center-loading">Loading…</div>`;
-  const renderers = { pchildren: renderParentChildren, pfees: renderParentFees, pnotifications: renderParentMeetings, pcontact: renderParentContact, psettings: renderParentSettings };
+  const renderers = { pchildren: renderParentChildren, pfees: renderParentFees, pteachers: renderParentTeachers, pnotifications: renderParentMeetings, pcontact: renderParentContact, psettings: renderParentSettings };
   (renderers[tab] || renderParentChildren)(content).catch(errShow(content));
 }
 
@@ -4638,6 +4639,55 @@ async function renderParentChildFeeDetail(container, child) {
     row.onclick = () => openReceiptModal(p, child);
     payList.appendChild(row);
   });
+}
+
+async function renderParentTeachers(container) {
+  container.innerHTML = `<div class="center-loading">Loading…</div>`;
+  let teachers = [], classes = [];
+  try {
+    [teachers, classes] = await Promise.all([
+      dbSelectActive("teachers", { status:"eq.active", select:"id,full_name,photo_url,specialty,grade", order:"full_name.asc" }),
+      dbSelectActive("classes", { select:"id,name,section,class_teacher_id" }).catch(()=>[]),
+    ]);
+  } catch (e) { renderMissingSetup(container, "The teacher directory isn't available yet.", () => renderParentTeachers(container)); return; }
+  container.innerHTML = `
+    <h3 style="color:var(--purple);margin-bottom:12px;">Teachers</h3>
+    <div class="card" id="teacherList"></div>
+  `;
+  const list = document.getElementById("teacherList");
+  list.innerHTML = teachers.length ? "" : emptyState("No teachers have been added yet.");
+  teachers.forEach(t => {
+    const classesTaught = classes.filter(c => c.class_teacher_id === t.id);
+    const classNames = classesTaught.map(c => c.name + (c.section ? (' '+c.section) : '')).join(", ");
+    const row = el(`<div class="list-row" style="cursor:pointer;">
+      ${avatarHtml(t.full_name, t.photo_url)}
+      <div class="list-main">
+        <div class="list-title">${t.full_name}</div>
+        <div class="list-sub">${t.specialty ? `Teaches ${t.specialty}` : "General"}${classNames ? ` · Class teacher: ${classNames}` : ""}</div>
+      </div>
+    </div>`);
+    row.onclick = () => openParentTeacherDetail(t, classNames);
+    list.appendChild(row);
+  });
+}
+function openParentTeacherDetail(t, classNames) {
+  openInfoModal(t.full_name, `
+    <div class="tiny-note" style="text-align:left;margin:0 0 12px;"></div>
+    ${t.specialty ? `<div class="view-row"><div class="vlabel">Subject</div><div class="vvalue">${t.specialty}</div></div>` : ""}
+    <div class="view-row"><div class="vlabel">Class teacher of</div><div class="vvalue">${classNames || "Not assigned to a class"}</div></div>
+    <button class="btn btn-primary" id="msgTeacherBtn" style="width:100%;margin-top:14px;">${ic.chat} Message this teacher</button>
+  `);
+  const btn = document.getElementById("msgTeacherBtn");
+  if (btn) btn.onclick = async () => {
+    let staffAccount = null;
+    try {
+      const rows = await dbSelect("profiles", { linked_teacher_id:`eq.${t.id}`, deleted_at:"is.null", select:"id,full_name" });
+      staffAccount = rows[0] || null;
+    } catch (e) {}
+    if (!staffAccount) { toast("This teacher doesn't have an app account to message yet.", true); return; }
+    document.querySelectorAll(".overlay").forEach(o => o.remove());
+    openPrivateMessageModal(staffAccount, null);
+  };
 }
 
 async function getOrAssignReceiptNo(payment) {
