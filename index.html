@@ -5691,6 +5691,7 @@ async function renderInventoryModule(body, moduleKey, opts={}) {
   const def = INVENTORY_MODULE_DEFS[moduleKey];
   const search = opts.search || "";
   const sortBy = opts.sortBy || "az";
+  const __gen = beginSearchGen(body);
   let items = [];
   let missingTable = false;
   try {
@@ -5698,6 +5699,7 @@ async function renderInventoryModule(body, moduleKey, opts={}) {
     if (search) params.name = `ilike.*${search}*`;
     items = await dbSelectActive("inventory_items", params);
   } catch (e) { missingTable = true; }
+  if (isStaleSearch(body, __gen)) return; // a newer keystroke already started a fresher request
 
   if (missingTable) {
     body.innerHTML = missingSetupHtml("Inventory & Assets isn't available for your school yet.") +
@@ -5712,7 +5714,7 @@ async function renderInventoryModule(body, moduleKey, opts={}) {
       ${sortSelectHtml("sortSel", sortBy, false)}
     </div>
     <div class="card" id="list"></div>`;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderInventoryModule(body, moduleKey, {search:e.target.value, sortBy}), 350);
+  bindLiveSearch(document.getElementById("searchInput"), body, (val)=>renderInventoryModule(body, moduleKey, {search:val, sortBy}));
   document.getElementById("sortSel").onchange = (e)=>renderInventoryModule(body, moduleKey, {search, sortBy:e.target.value});
 
   const list = document.getElementById("list");
@@ -5926,6 +5928,7 @@ async function renderLibrary(container, sub="catalog") {
 async function renderBookCatalog(body, opts={}) {
   const search = opts.search || "";
   const sortBy = opts.sortBy || "az";
+  const __gen = beginSearchGen(body);
   let books = [];
   let missingTable = false;
   try {
@@ -5933,6 +5936,7 @@ async function renderBookCatalog(body, opts={}) {
     if (search) params.title = `ilike.*${search}*`;
     books = await dbSelectActive("library_books", params);
   } catch (e) { missingTable = true; }
+  if (isStaleSearch(body, __gen)) return;
 
   if (missingTable) {
     body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
@@ -5947,7 +5951,7 @@ async function renderBookCatalog(body, opts={}) {
       ${sortSelectHtml("sortSel", sortBy, false)}
     </div>
     <div class="card" id="list"></div>`;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderBookCatalog(body,{search:e.target.value,sortBy}),350);
+  bindLiveSearch(document.getElementById("searchInput"), body, (val)=>renderBookCatalog(body,{search:val,sortBy}));
   document.getElementById("sortSel").onchange = (e)=>renderBookCatalog(body,{search,sortBy:e.target.value});
 
   const list = document.getElementById("list");
@@ -6014,6 +6018,7 @@ function openBookModal(body, b, opts) {
 
 async function renderLibraryBorrowing(body, opts={}) {
   const search = opts.search || "";
+  const __gen = beginSearchGen(body);
   let loans = [], books = [];
   let missingTable = false;
   try {
@@ -6022,6 +6027,7 @@ async function renderLibraryBorrowing(body, opts={}) {
     loans = await dbSelectActive("library_loans", params);
     books = await dbSelectActive("library_books", { order:"title.asc" });
   } catch (e) { missingTable = true; }
+  if (isStaleSearch(body, __gen)) return;
 
   if (missingTable) {
     body.innerHTML = missingSetupHtml("Library isn't available for your school yet.") +
@@ -6033,7 +6039,7 @@ async function renderLibraryBorrowing(body, opts={}) {
   body.innerHTML = `<div class="section-head"><h3 style="color:var(--navy);">Borrowing &amp; Returns</h3><button class="btn btn-primary btn-sm" id="addBtn">${ic.plus} New loan</button></div>
     <input id="searchInput" value="${search}" style="margin-bottom:10px;"/>
     <div class="card" id="list"></div>`;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderLibraryBorrowing(body,{search:e.target.value}),350);
+  bindLiveSearch(document.getElementById("searchInput"), body, (val)=>renderLibraryBorrowing(body,{search:val}));
 
   const list = document.getElementById("list");
   list.innerHTML = loans.length ? "" : emptyState("No loans yet. Borrow a book to start tracking it.");
@@ -6353,6 +6359,7 @@ async function renderStudentRoster(body, container, opts={}) {
   const search = opts.search || "";
   const classFilter = opts.classFilter || "";
   const sortBy = opts.sortBy || "az";
+  const __gen = beginSearchGen(container);
   let params = { select:"*,classes(name,section)", ...sortToParams(sortBy, "full_name", "created_at", "gender") };
   if (search) params.or = `(full_name.ilike.*${encodeURIComponent(search)}*,sin.ilike.*${encodeURIComponent(search)}*)`;
   if (classFilter) params.class_id = `eq.${classFilter}`;
@@ -6362,7 +6369,7 @@ async function renderStudentRoster(body, container, opts={}) {
     dbSelectActive("classes", { order:"name.asc" }),
     dbSelectActive("students", params),
   ]);
-  
+  if (isStaleSearch(container, __gen)) return; // a newer keystroke already started a fresher request
   
   
   const canManageStudents = hasFullAccess(profile) || profile?.department === "academic";
@@ -6375,7 +6382,7 @@ async function renderStudentRoster(body, container, opts={}) {
     </div>
     <div class="card" id="list"></div>
   `;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderStudents(container,{search:e.target.value,classFilter,sortBy}),350);
+  bindLiveSearch(document.getElementById("searchInput"), container, (val)=>renderStudentRoster(body, container, {search:val,classFilter,sortBy}));
   document.getElementById("classFilterSel").onchange = (e)=>renderStudents(container,{search,classFilter:e.target.value,sortBy});
   document.getElementById("sortSel").onchange = (e)=>renderStudents(container,{search,classFilter,sortBy:e.target.value});
   const list = document.getElementById("list");
@@ -6694,9 +6701,11 @@ async function renderTeachers(container, opts={}) {
   setActiveRefresh(() => renderTeachers(container, opts));
   const search = opts.search || "";
   const sortBy = opts.sortBy || "az";
+  const __gen = beginSearchGen(container);
   let params = { ...sortToParams(sortBy, "full_name", "created_at", "gender") };
   if (search) params.full_name = `ilike.*${encodeURIComponent(search)}*`;
   const teachers = await dbSelectActive("teachers", params);
+  if (isStaleSearch(container, __gen)) return;
   container.innerHTML = `
     <h3 style="color:var(--purple);margin-bottom:12px;">Staff</h3>
     <div class="search-bar">
@@ -6705,7 +6714,7 @@ async function renderTeachers(container, opts={}) {
     </div>
     <div class="card" id="list"></div>
   `;
-  document.getElementById("searchInput").oninput = debounce((e)=>renderTeachers(container,{search:e.target.value,sortBy}),350);
+  bindLiveSearch(document.getElementById("searchInput"), container, (val)=>renderTeachers(container,{search:val,sortBy}));
   document.getElementById("sortSel").onchange = (e)=>renderTeachers(container,{search,sortBy:e.target.value});
   const list = document.getElementById("list");
   list.innerHTML = teachers.length ? "" : emptyState("No staff yet.");
@@ -10443,6 +10452,40 @@ function addFab(container, onClick) {
   return fab;
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
+
+// Live-search helper for search boxes that trigger a server refresh as you type.
+// Fixes: (1) losing what you typed if the refresh takes a moment — the input is
+// never torn down mid-keystroke; (2) an older, slower server reply overwriting a
+// newer one — replies are tagged with a generation number and stale ones are
+// dropped; (3) "cannot set properties of null" — handlers are only re-attached
+// to elements that still exist once the refresh finishes.
+function bindLiveSearch(inputEl, container, runFn, ms = 350) {
+  if (!inputEl) return;
+  const inputId = inputEl.id;
+  inputEl.oninput = (e) => {
+    const val = e.target.value;
+    clearTimeout(container.__searchTimer);
+    container.__searchTimer = setTimeout(async () => {
+      const active = document.activeElement;
+      const wasFocused = !!(active && active.id === inputId);
+      const selStart = wasFocused ? active.selectionStart : null;
+      const selEnd = wasFocused ? active.selectionEnd : null;
+      await runFn(val);
+      if (wasFocused) {
+        const freshInput = document.getElementById(inputId);
+        if (freshInput) {
+          freshInput.focus();
+          try { freshInput.setSelectionRange(selStart, selEnd); } catch (_) {}
+        }
+      }
+    }, ms);
+  };
+}
+// Call at the top of an async render function that can be re-triggered mid-flight
+// (e.g. by fast typing). Returns a token; check isStaleSearch(container, token)
+// right after any `await` and bail out before touching the DOM if it's stale.
+function beginSearchGen(container) { return (container.__searchGen = (container.__searchGen || 0) + 1); }
+function isStaleSearch(container, token) { return container.__searchGen !== token; }
 
 function toast(msg, isError=true) {
   const t = el(`<div style="position:fixed;left:50%;bottom:104px;transform:translateX(-50%);background:${isError?'#D6564F':'#2E9E7C'};color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 10px 28px rgba(0,0,0,.25);max-width:90%;text-align:center;">${msg}</div>`);
