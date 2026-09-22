@@ -846,7 +846,23 @@ const BRAND_PRESETS = {
   red:    { base:"#D6564F", dark:"#B23F39", tint:"#FDECEC", label:"Crimson" },
   indigo: { base:"#5B5FCF", dark:"#43469E", tint:"#ECEDFA", label:"Indigo" },
 };
-const CURRENCY_OPTIONS = ["₦","$","£","€","KSh","UGX","TSh","R","GH₵"];
+const SCHOOL_LEVELS = {
+  pre_primary: "Pre-Primary / Nursery",
+  primary: "Primary",
+  secondary: "Secondary",
+};
+const REPORT_TEMPLATES = {
+  template1: { label: "Classic Navy",   color: "#1B2A4A" },
+  template2: { label: "Emerald",        color: "#227A61" },
+  template3: { label: "Crimson",        color: "#B23F39" },
+  template4: { label: "Royal Purple",   color: "#5B4FC4" },
+  template5: { label: "Amber Gold",     color: "#A06A13" },
+};
+const REPORT_LEVEL_SETTINGS_KEY = {
+  pre_primary: "report_template_pre_primary",
+  primary: "report_template_primary",
+  secondary: "report_template_secondary",
+};
 const SCHOOL_SETTINGS_SQL = `create table if not exists school_settings (
   id int primary key default 1,
   school_name text,
@@ -1068,7 +1084,7 @@ async function loadSchoolSettings() {
   } catch (e) { schoolSettings = null; }
   applyBrandColor(schoolSettings?.brand_color);
 }
-function currency() { return (schoolSettings && schoolSettings.currency_symbol) || "₦"; }
+function currency() { return "UGX "; }
 
 function formatGeneratedId(prefix, seq, digits, gender) {
   if (!prefix) return "";
@@ -5558,6 +5574,7 @@ async function renderClasses(body, opts={}) {
       <div class="list-main"><div class="list-title">${c.name}${c.section?(' '+c.section):''}</div>
       <div class="list-sub">Class teacher: ${c.teachers?.full_name || "Not assigned"} · ${studentCount} student${studentCount===1?'':'s'}</div></div></div>`);
     const view = () => openViewModal(`${c.name}${c.section?(' '+c.section):''}`, [
+      ["Level", c.level ? (SCHOOL_LEVELS[c.level]||c.level) : "Not set"],
       ["Stream", c.section || "—"],
       ["Class teacher", c.teachers?.full_name || "Not assigned"],
       ["Students enrolled", studentCount],
@@ -5572,14 +5589,22 @@ async function renderClasses(body, opts={}) {
 }
 function openClassModal(body, teachers, c) {
   const isEdit = !!c;
+  const offeredLevels = (schoolSettings && schoolSettings.school_levels) || [];
+  const levelOptions = Object.keys(SCHOOL_LEVELS).filter(k => !offeredLevels.length || offeredLevels.includes(k));
   openModal(isEdit ? "Edit class" : "New class", `
     <div class="grid2">
       <div class="field"><label>Class name</label><input id="f_name" value="${c?.name||''}"/></div>
       <div class="field"><label>Stream</label><input id="f_section" value="${c?.section||''}"/></div>
     </div>
+    <div class="field"><label>Level</label>
+      <select id="f_level">
+        <option value="">— Not set —</option>
+        ${levelOptions.map(k=>`<option value="${k}" ${c?.level===k?'selected':''}>${SCHOOL_LEVELS[k]}</option>`).join("")}
+      </select>
+    </div>
     <div class="field"><label>Class teacher</label><select id="f_teacher"><option value="">— None —</option>${teachers.map(t=>`<option value="${t.id}" ${c?.class_teacher_id===t.id?'selected':''}>${t.full_name}</option>`).join("")}</select></div>
   `, async (ov) => {
-    const payload = { name: val(ov,"f_name"), section: val(ov,"f_section"), class_teacher_id: val(ov,"f_teacher") || null };
+    const payload = { name: val(ov,"f_name"), section: val(ov,"f_section"), level: val(ov,"f_level") || null, class_teacher_id: val(ov,"f_teacher") || null };
     if (isEdit) await dbUpdate("classes", c.id, payload); else await dbInsert("classes", payload);
     renderClasses(body);
   }, { saveLabel: isEdit ? "Save changes" : "Add" });
@@ -8559,38 +8584,70 @@ async function renderEnterResults(body) {
       dbSelect("students", { class_id:`eq.${classId}`, status:"eq.active", order:"full_name.asc" }),
       dbSelect("exam_results", { exam_id:`eq.${examId}`, subject_id:`eq.${subjectId}` }),
     ]);
-    const marksMap = {}, remarksMap = {};
-    results.forEach(r=>{ marksMap[r.student_id]=r.marks_obtained; remarksMap[r.student_id]=r.remarks||""; });
-    area.innerHTML = `<div class="card table-wrap"><table><thead><tr><th>Student</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody id="gridBody"></tbody></table></div>
+    const rowMap = {};
+    results.forEach(r=>{ rowMap[r.student_id]=r; });
+    const firstWithComponents = results.find(r => r.component1_max || r.component2_max);
+    const defC1Max = firstWithComponents?.component1_max ?? 20;
+    const defC2Max = firstWithComponents?.component2_max ?? Math.max(maxScore - defC1Max, 0);
+    area.innerHTML = `<div class="card" style="margin-bottom:10px;">
+        <div class="grid2">
+          <div class="field" style="margin-bottom:0;"><label>Component 1 max (e.g. CA)</label><input type="number" id="c1max" min="0" value="${defC1Max}"/></div>
+          <div class="field" style="margin-bottom:0;"><label>Component 2 max (e.g. Exam)</label><input type="number" id="c2max" min="0" value="${defC2Max}"/></div>
+        </div>
+        <div class="tiny-note" style="margin-top:4px;">Marks entered below are scored out of these two maximums; the total (X) is computed automatically.</div>
+      </div>
+      <div class="card table-wrap"><table><thead><tr><th>Student</th><th id="c1th">A1</th><th id="c2th">A2</th><th>X</th><th>Grade</th><th>Teacher initials</th><th>Remarks</th></tr></thead><tbody id="gridBody"></tbody></table></div>
       <button class="btn btn-primary" id="saveResultsBtn" style="width:100%;">Save results</button><div id="resMsg"></div>`;
+    const c1maxInp = document.getElementById("c1max"), c2maxInp = document.getElementById("c2max");
     const gb = document.getElementById("gridBody");
+    function recalcRow(sid) {
+      const c1 = gb.querySelector(`.c1Input[data-sid="${sid}"]`), c2 = gb.querySelector(`.c2Input[data-sid="${sid}"]`);
+      const cell = gb.querySelector(`.gradeCell[data-sid="${sid}"]`), totCell = gb.querySelector(`.totCell[data-sid="${sid}"]`);
+      if (!c1 || !c2 || !cell || !totCell) return;
+      const v1 = c1.value === "" ? null : Number(c1.value), v2 = c2.value === "" ? null : Number(c2.value);
+      const totMax = (Number(c1maxInp.value)||0) + (Number(c2maxInp.value)||0);
+      if (v1 === null && v2 === null) { totCell.textContent = "—"; cell.textContent = "—"; return; }
+      const total = (v1||0) + (v2||0);
+      totCell.textContent = `${total}${totMax?` / ${totMax}`:''}`;
+      cell.textContent = totMax ? gradeFor((total/totMax)*100) : "—";
+    }
     students.forEach(s => {
-      const mark = marksMap[s.id];
-      const initialGrade = (mark !== undefined && mark !== null && mark !== "") ? gradeFor((Number(mark)/maxScore)*100) : "—";
-      gb.appendChild(elRow(`<tr><td>${s.full_name}</td>
-        <td><input type="number" max="${maxScore}" min="0" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="markInput" value="${marksMap[s.id]??''}"/></td>
-        <td>${maxScore}</td>
-        <td class="gradeCell" data-sid="${s.id}" style="font-weight:700;">${initialGrade}</td>
-        <td><input type="text" style="width:100%;min-width:120px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${remarksMap[s.id]||''}"/></td></tr>`));
+      const r = rowMap[s.id] || {};
+      gb.appendChild(elRow(`<tr>
+        <td>${s.full_name}</td>
+        <td><input type="number" min="0" style="width:70px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="c1Input" value="${r.component1_marks??''}"/></td>
+        <td><input type="number" min="0" style="width:70px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="c2Input" value="${r.component2_marks??''}"/></td>
+        <td class="totCell" data-sid="${s.id}" style="font-weight:700;">${(r.marks_obtained!==undefined && r.marks_obtained!==null) ? `${r.marks_obtained}${r.max_marks?` / ${r.max_marks}`:''}` : '—'}</td>
+        <td class="gradeCell" data-sid="${s.id}" style="font-weight:700;">${(r.marks_obtained!==undefined && r.marks_obtained!==null && r.max_marks) ? gradeFor((r.marks_obtained/r.max_marks)*100) : '—'}</td>
+        <td><input type="text" style="width:70px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="initialsInput" value="${r.teacher_initials||''}"/></td>
+        <td><input type="text" style="width:100%;min-width:110px;padding:6px;border:1px solid var(--line);border-radius:6px;" data-sid="${s.id}" class="remarkInput" value="${r.remarks||''}"/></td>
+      </tr>`));
     });
-    
-    gb.querySelectorAll(".markInput").forEach(inp => {
-      inp.addEventListener("input", () => {
-        const cell = gb.querySelector(`.gradeCell[data-sid="${inp.dataset.sid}"]`);
-        if (!cell) return;
-        cell.textContent = inp.value === "" ? "—" : gradeFor((Number(inp.value)/maxScore)*100);
-      });
+    gb.querySelectorAll(".c1Input, .c2Input").forEach(inp => {
+      inp.addEventListener("input", () => recalcRow(inp.dataset.sid));
     });
+    [c1maxInp, c2maxInp].forEach(inp => inp.addEventListener("input", () => students.forEach(s=>recalcRow(s.id))));
     document.getElementById("saveResultsBtn").onclick = async () => {
       const msg = document.getElementById("resMsg");
-      const markInputs = [...gb.querySelectorAll(".markInput")].filter(i=>i.value !== "");
-      const records = markInputs.map(i => {
-        const remarkEl = gb.querySelector(`.remarkInput[data-sid="${i.dataset.sid}"]`);
-        return { exam_id: examId, student_id: i.dataset.sid, subject_id: subjectId, marks_obtained: Number(i.value), max_marks: maxScore, remarks: (remarkEl && remarkEl.value) || null };
+      const c1Max = Number(c1maxInp.value)||0, c2Max = Number(c2maxInp.value)||0;
+      const rows = [...gb.querySelectorAll("tr")];
+      const records = [];
+      students.forEach(s => {
+        const c1 = gb.querySelector(`.c1Input[data-sid="${s.id}"]`).value;
+        const c2 = gb.querySelector(`.c2Input[data-sid="${s.id}"]`).value;
+        if (c1 === "" && c2 === "") return;
+        const v1 = c1===""?0:Number(c1), v2 = c2===""?0:Number(c2);
+        const initials = gb.querySelector(`.initialsInput[data-sid="${s.id}"]`).value;
+        const remarks = gb.querySelector(`.remarkInput[data-sid="${s.id}"]`).value;
+        records.push({
+          exam_id: examId, student_id: s.id, subject_id: subjectId,
+          component1_marks: c1===""?null:v1, component1_max: c1Max,
+          component2_marks: c2===""?null:v2, component2_max: c2Max,
+          marks_obtained: v1+v2, max_marks: c1Max+c2Max,
+          teacher_initials: initials || null, remarks: remarks || null,
+        });
       });
       try {
-        
-        
         if (records.length) await dbUpsert("exam_results", records, "exam_id,student_id,subject_id");
         msg.innerHTML = `<div class="msg-ok">Results saved.</div>`;
       } catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
@@ -8860,52 +8917,120 @@ function gradeInfo(pct) {
 }
 function gradeFor(pct) { return gradeInfo(pct).grade; }
 function gradeLabel(pct) { const {grade,remark} = gradeInfo(pct); return remark ? `${grade} (${remark})` : grade; }
+function reportCardHeaderHtml(s, tplColor, examLbl) {
+  return `
+    <div style="border:2px solid ${tplColor};border-radius:10px;padding:16px;">
+    <div style="text-align:center;border-bottom:3px solid ${tplColor};padding-bottom:10px;margin-bottom:14px;">
+      ${s.logo_url ? `<img src="${s.logo_url}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:50%;margin-bottom:6px;"/>` : ""}
+      <h2 style="color:${tplColor};margin:0;letter-spacing:.5px;">${(s.school_name || "AiO School").toUpperCase()}</h2>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
+        ${[s.address, s.phone ? ('Tel: '+s.phone) : '', s.email].filter(Boolean).join(' · ')}
+      </div>
+      <div style="background:${tplColor};color:#fff;font-weight:700;letter-spacing:.5px;border-radius:6px;padding:6px 10px;margin-top:10px;display:inline-block;">${examLbl}</div>
+    </div>`;
+}
 async function renderReportCard(body) {
-  const [examsRaw] = await Promise.all([
-    dbSelect("exams", { select:"*,classes(name,section),terms(name),exam_types(name)", order:"exam_date.desc" }),
-    loadGrades(),
-  ]);
-  const exams = dedupeExams(examsRaw);
-  if (!exams.length) { body.innerHTML = emptyState("Create an exam first (see the Exams tab)."); return; }
-  body.innerHTML = `<div class="card"><div class="field"><label>Exam</label><select id="selExam2">${exams.map(x=>`<option value="${x.id}" data-class="${x.class_id}">${examLabel(x)}</option>`).join("")}</select></div>
-    <div class="field"><label>Student</label><select id="selStudent2"></select></div></div>
+  await loadGrades();
+  const s = schoolSettings || {};
+  const offeredLevels = (s.school_levels || []).filter(k => SCHOOL_LEVELS[k]);
+  if (!offeredLevels.length) { body.innerHTML = emptyState("Select which school level(s) you offer in Settings → Preferences first."); return; }
+  body.innerHTML = `<div class="card"><div class="field" style="margin-bottom:0;"><label>Level</label>
+      <select id="selLevel">${offeredLevels.map(k=>`<option value="${k}">${SCHOOL_LEVELS[k]}</option>`).join("")}</select>
+    </div></div>
+    <div class="card"><div class="field"><label>Class</label><select id="selClass2"></select></div>
+    <div class="field"><label>Exam</label><select id="selExam2"></select></div>
+    <div class="field" style="margin-bottom:0;"><label>Student</label><select id="selStudent2"></select></div></div>
     <div id="cardArea"></div>`;
+  const selLevel = document.getElementById("selLevel");
+  const selClass2 = document.getElementById("selClass2");
   const selExam2 = document.getElementById("selExam2");
   const selStudent2 = document.getElementById("selStudent2");
+  let examsForClass = [];
+  async function loadClasses() {
+    const classes = await dbSelectActive("classes", { level:`eq.${selLevel.value}`, order:"name.asc" });
+    selClass2.innerHTML = classes.length ? classes.map(c=>`<option value="${c.id}">${c.name}${c.section?(' '+c.section):''}</option>`).join("") : `<option value="">No ${SCHOOL_LEVELS[selLevel.value]} classes yet</option>`;
+    await loadExams();
+  }
+  async function loadExams() {
+    if (!selClass2.value) { selExam2.innerHTML = ""; document.getElementById("cardArea").innerHTML=""; return; }
+    const examsRaw = await dbSelect("exams", { select:"*,classes(name,section),terms(name),exam_types(name)", class_id:`eq.${selClass2.value}`, order:"exam_date.desc" });
+    examsForClass = dedupeExams(examsRaw);
+    selExam2.innerHTML = examsForClass.length ? examsForClass.map(x=>`<option value="${x.id}">${examLabel(x)}</option>`).join("") : `<option value="">No exams for this class yet</option>`;
+    await loadStudents();
+  }
   async function loadStudents() {
-    if (!selExam2.value) return;
-    const classId = selExam2.selectedOptions[0].dataset.class;
-    const students = await dbSelect("students", { class_id:`eq.${classId}`, status:"eq.active", order:"full_name.asc" });
-    selStudent2.innerHTML = students.map(s=>`<option value="${s.id}">${s.full_name}</option>`).join("");
+    if (!selClass2.value || !selExam2.value) { document.getElementById("cardArea").innerHTML=""; return; }
+    const students = await dbSelect("students", { class_id:`eq.${selClass2.value}`, status:"eq.active", order:"full_name.asc" });
+    selStudent2.innerHTML = students.length ? students.map(st=>`<option value="${st.id}">${st.full_name}</option>`).join("") : `<option value="">No active students</option>`;
     buildCard();
   }
   async function buildCard() {
-    const examId = selExam2.value, studentId = selStudent2.value;
+    const examId = selExam2.value, studentId = selStudent2.value, level = selLevel.value;
     const area = document.getElementById("cardArea");
     if (!examId || !studentId) { area.innerHTML=""; return; }
-    const results = await dbSelect("exam_results", { select:"*,subjects(name)", exam_id:`eq.${examId}`, student_id:`eq.${studentId}` });
-    const student = (await dbSelect("students", { id:`eq.${studentId}` }))[0];
-    const exam = exams.find(x=>x.id===examId);
+    const [results, studentRows, reportRows] = await Promise.all([
+      dbSelect("exam_results", { select:"*,subjects(name)", exam_id:`eq.${examId}`, student_id:`eq.${studentId}` }),
+      dbSelect("students", { id:`eq.${studentId}` }),
+      dbSelect("report_cards", { exam_id:`eq.${examId}`, student_id:`eq.${studentId}` }).catch(()=>[]),
+    ]);
+    const student = studentRows[0];
+    const rc = reportRows[0] || {};
+    const exam = examsForClass.find(x=>x.id===examId);
     const total = results.reduce((a,r)=>a+Number(r.marks_obtained||0),0);
     const maxTotal = results.reduce((a,r)=>a+Number(r.max_marks||0),0);
     const avg = maxTotal ? (total/maxTotal*100) : 0;
-    const s = schoolSettings || {};
-    area.innerHTML = `
-      <div class="card" id="printArea">
-        <div style="text-align:center;margin-bottom:14px;">
-          ${s.logo_url ? `<img src="${s.logo_url}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;margin-bottom:6px;"/>` : ""}
-          <h3 style="color:var(--navy);">${s.school_name || "AiO School"}</h3>
-          <div style="font-size:13px;color:var(--ink-soft);">${exam ? examLabel(exam) : ''} — Report Card</div>
+    const tplKey = s[REPORT_LEVEL_SETTINGS_KEY[level]] || "template1";
+    const tplColor = (REPORT_TEMPLATES[tplKey] || REPORT_TEMPLATES.template1).color;
+    const examLbl = exam ? examLabel(exam).toUpperCase() + " REPORT CARD" : "REPORT CARD";
+
+    let bodyHtml;
+    if (level === "secondary") {
+      bodyHtml = `
+        <div class="row" style="margin-bottom:10px;font-size:13.5px;justify-content:space-between;">
+          <div><b>NAME:</b> ${(student?.full_name||'').toUpperCase()}</div>
+          <div><b>REG NO:</b> ${student?.sin || ""}</div>
         </div>
+        <div class="table-wrap"><table><thead><tr style="background:${tplColor};color:#fff;">
+          <th>SUBJECT</th><th>A1</th><th>A2</th><th>X/100</th><th>GRADE</th><th>REMARKS</th><th>TRS INITIAL</th>
+        </tr></thead><tbody>
+          ${results.map(r=>{
+            const pct = r.max_marks ? (r.marks_obtained/r.max_marks)*100 : 0;
+            const gi = gradeInfo(pct);
+            return `<tr>
+              <td>${(r.subjects?.name||'').toUpperCase()}</td>
+              <td>${r.component1_marks ?? ''}${r.component1_max?`/${r.component1_max}`:''}</td>
+              <td>${r.component2_marks ?? ''}${r.component2_max?`/${r.component2_max}`:''}</td>
+              <td>${r.marks_obtained ?? ''}${r.max_marks?`/${r.max_marks}`:''}</td>
+              <td style="font-weight:700;">${gi.grade}</td>
+              <td>${r.remarks || gi.remark || ''}</td>
+              <td>${r.teacher_initials || ''}</td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
+        </tbody></table></div>`;
+    } else {
+      bodyHtml = `
         <div class="row" style="margin-bottom:10px;font-size:13.5px;">
           <div><b>${student?.full_name}</b><br/><span style="color:var(--ink-soft);">SIN: ${student?.sin || ""}</span></div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody>
-          ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained}</td><td>${r.max_marks}</td><td>${gradeLabel((r.marks_obtained/r.max_marks)*100)}</td><td>${r.remarks||''}</td></tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
-        </tbody></table></div>
-        <div class="row" style="margin-top:12px;font-weight:700;">
-          <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeLabel(avg)}</div>
+        <div class="tiny-note" style="margin-bottom:8px;">${SCHOOL_LEVELS[level]} template — simple layout for now; a dedicated design comes next.</div>
+        <div class="table-wrap"><table><thead><tr style="background:${tplColor};color:#fff;"><th>Subject</th><th>Marks</th><th>Max</th><th>Grade</th><th>Remarks</th></tr></thead><tbody>
+          ${results.map(r=>`<tr><td>${r.subjects?.name}</td><td>${r.marks_obtained??''}</td><td>${r.max_marks??''}</td><td>${gradeLabel(r.max_marks?(r.marks_obtained/r.max_marks)*100:0)}</td><td>${r.remarks||''}</td></tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);">No results entered yet</td></tr>`}
+        </tbody></table></div>`;
+    }
+
+    area.innerHTML = `
+      <div class="card" id="printArea">
+        ${reportCardHeaderHtml(s, tplColor, examLbl)}
+        ${bodyHtml}
+        <div class="card" style="background:var(--bg-soft);margin-top:12px;">
+          <div class="row" style="font-weight:700;">
+            <div>Total: ${total} / ${maxTotal}</div><div>Average: ${avg.toFixed(1)}%</div><div>Grade: ${gradeLabel(avg)}</div>
+          </div>
         </div>
+        <div class="field" style="margin-top:14px;"><label>Division</label><input id="rc_division" value="${rc.division||''}"/></div>
+        <div class="field"><label>Class Teacher's Comment</label><input id="rc_ctcomment" value="${rc.class_teacher_comment||''}"/></div>
+        <div class="field"><label>Head Teacher's Comment</label><input id="rc_htcomment" value="${rc.head_teacher_comment||''}"/></div>
+        <div class="field" style="margin-bottom:0;"><label>Next Term Begins</label><input id="rc_nextterm" type="date" value="${rc.next_term_date||''}"/></div>
         ${s.stamp_head_teacher ? `
         <div style="margin-top:22px;display:flex;justify-content:flex-end;">
           <div style="text-align:center;">
@@ -8913,14 +9038,32 @@ async function renderReportCard(body) {
             <div style="font-size:11px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:4px;margin-top:2px;">Head Teacher</div>
           </div>
         </div>` : ""}
+        </div>
       </div>
-      <button class="btn btn-ghost" id="printBtn" style="width:100%;margin-top:10px;">Print report card</button>
+      <button class="btn btn-primary" id="saveRcBtn" style="width:100%;margin-top:10px;">Save comments</button>
+      <button class="btn btn-ghost" id="printBtn" style="width:100%;margin-top:8px;">Print report card</button>
+      <div id="rcMsg"></div>
     `;
     document.getElementById("printBtn").onclick = () => window.print();
+    document.getElementById("saveRcBtn").onclick = async () => {
+      const msg = document.getElementById("rcMsg");
+      try {
+        await dbUpsert("report_cards", [{
+          exam_id: examId, student_id: studentId,
+          division: val(area,"rc_division") || null,
+          class_teacher_comment: val(area,"rc_ctcomment") || null,
+          head_teacher_comment: val(area,"rc_htcomment") || null,
+          next_term_date: val(area,"rc_nextterm") || null,
+        }], "exam_id,student_id");
+        msg.innerHTML = `<div class="msg-ok">Saved.</div>`;
+      } catch(err) { msg.innerHTML = `<div class="err">${err.message}</div>`; }
+    };
   }
+  selLevel.onchange = loadClasses;
+  selClass2.onchange = loadExams;
   selExam2.onchange = loadStudents;
   selStudent2.onchange = buildCard;
-  if (exams.length) loadStudents();
+  loadClasses();
 }
 
 const AIO_WARN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg>`;
@@ -8930,10 +9073,10 @@ const AIO_MENU_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const AIO_SUGGESTIONS = [
   "How is the school performing?",
   "How many students are absent today?",
-  "Which students need attention?",
-  "Which accounts need follow-up?",
   "How much fees are outstanding?",
-  "What happened at school today?"
+  "Any books overdue in the library?",
+  "What subjects do we offer?",
+  "Any pending requests?"
 ];
 
 let aioConversations = [];
@@ -9263,7 +9406,7 @@ async function renderAioAi(container) {
   setActiveRefresh(() => renderAioAi(container));
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
-      <p style="margin:0 0 14px 0;color:var(--ink-soft);font-size:13px;flex-shrink:0;">Ask about attendance, fees, performance, or anything else happening at your school.</p>
+      <p style="margin:0 0 14px 0;color:var(--ink-soft);font-size:13px;flex-shrink:0;">Ask about attendance, fees, students, teachers, subjects, exams and results, library, inventory, circulars, events, or anything else happening at your school.</p>
       <div class="aio-shell" id="aioShell" style="flex:1;min-height:0;">
         <aside class="aio-history" id="aioHistoryPanel">
           <div class="aio-history-head">
@@ -10294,10 +10437,33 @@ async function renderSchoolSettingsPanel(container) {
               ${Object.entries(BRAND_PRESETS).map(([key,pr])=>`<div class="swatch ${key===selectedColor?'on':''}" data-key="${key}" title="${pr.label}" style="background:${pr.base};">${ic.check}</div>`).join("")}
             </div>
           </div>
-          <div class="field" style="margin-bottom:0;"><label>Currency symbol</label>
-            <select id="f_currency">${CURRENCY_OPTIONS.map(c=>`<option value="${c}" ${((s.currency_symbol||'₦')===c)?'selected':''}>${c}</option>`).join("")}</select>
+          <div class="field" style="margin-bottom:0;">
+            <label>School level(s) offered</label>
+            <div class="row" style="gap:16px;flex-wrap:wrap;margin-top:6px;">
+              ${Object.entries(SCHOOL_LEVELS).map(([key,label])=>`
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;">
+                  <input type="checkbox" class="f_schoollevel" value="${key}" ${(s.school_levels||[]).includes(key)?'checked':''} style="width:18px;height:18px;"/>
+                  ${label}
+                </label>`).join("")}
+            </div>
           </div>
         </div>
+        ${(s.school_levels||[]).length ? `
+        <div class="card">
+          <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Report card templates</h3><p>Choose a design for each level's report cards.</p></div></div>
+          ${(s.school_levels||[]).map(lvl => `
+            <div class="field" ${lvl===(s.school_levels||[]).slice(-1)[0]?'style="margin-bottom:0;"':''}>
+              <label>${SCHOOL_LEVELS[lvl]}</label>
+              <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px;">
+                ${Object.entries(REPORT_TEMPLATES).map(([key,t])=>`
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;">
+                    <input type="radio" name="tpl_${lvl}" class="f_tpl_${lvl}" value="${key}" ${((s[REPORT_LEVEL_SETTINGS_KEY[lvl]]||'template1')===key)?'checked':''}/>
+                    <span style="width:14px;height:14px;border-radius:50%;background:${t.color};display:inline-block;"></span>
+                    ${t.label}
+                  </label>`).join("")}
+              </div>
+            </div>`).join("")}
+        </div>` : ''}
         <div class="card">
           <div class="settings-card-head"><div class="ic" style="background:var(--purple-tint);color:var(--purple);">${ic.sliders}</div><div><h3 style="color:var(--navy);">Performance evaluations</h3><p>Controls how much of their own evaluation a teacher can see. Administrators always see everything; teachers can never edit an evaluation regardless of this setting.</p></div></div>
           <div class="field" style="margin-bottom:0;"><label>What teachers can see of their own evaluations</label>
@@ -10317,11 +10483,19 @@ async function renderSchoolSettingsPanel(container) {
           sw.classList.add("on");
         };
       });
-      document.getElementById("saveSettingsBtn").onclick = () => savePanel({
-        brand_color: selectedColor,
-        currency_symbol: val(body,"f_currency") || "₦",
-        teacher_eval_visibility: val(body,"f_evalvis") || "scores_only",
-      }, "Preferences saved.");
+      document.getElementById("saveSettingsBtn").onclick = () => {
+        const tplPayload = {};
+        (s.school_levels||[]).forEach(lvl => {
+          const checked = body.querySelector(`.f_tpl_${lvl}:checked`);
+          tplPayload[REPORT_LEVEL_SETTINGS_KEY[lvl]] = checked ? checked.value : "template1";
+        });
+        savePanel({
+          brand_color: selectedColor,
+          teacher_eval_visibility: val(body,"f_evalvis") || "scores_only",
+          school_levels: Array.from(body.querySelectorAll(".f_schoollevel:checked")).map(cb => cb.value),
+          ...tplPayload,
+        }, "Preferences saved.");
+      };
       return;
     }
 
