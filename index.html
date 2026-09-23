@@ -1185,6 +1185,7 @@ const NAV = [
   {id:"academic", label:"Setup", icon:ic.sliders},
   {id:"inventory", label:"Inventory & Assets", icon:ic.box},
   {id:"library", label:"Library", icon:ic.book},
+  {id:"digital-library", label:"Digital Library (Primary)", icon:ic.book, external:"https://transapple.github.io/a/"},
   {id:"health", label:"School Health", icon:ic.pulse},
   {id:"comms", label:"Comms", icon:ic.megaphone},
   {id:"users", label:"Account", icon:ic.users},
@@ -1200,10 +1201,15 @@ const NAV_MOVED_TO_SETTINGS = new Set(["academic","users","trash"]);
 const NAV_ICON_COLOR = {
   dashboard:"var(--teal)", "aio-ai":"var(--teal-dark)", health:"#e11d48", students:"var(--sky)", teachers:"var(--purple)",
   attendance:"var(--amber-dark)", fees:"var(--red)", exams:"var(--indigo)",
-  academic:"#0e9488", inventory:"#8a5a2b", library:"#166534", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
+  academic:"#0e9488", inventory:"#8a5a2b", library:"#166534", "digital-library":"#0369a1", comms:"#c2410c", users:"var(--navy-2)", contact:"var(--teal-dark)", settings:"#7a4fc4", trash:"var(--slate)",
 };
 
 const CORE_NAV_IDS = new Set(["dashboard","users","contact","settings","trash"]);
+// Only meaningful (and only shown) for schools that offer the Primary level.
+function isNavLevelVisible(navId) {
+  if (navId === "digital-library") return offeredSchoolLevels().includes("primary");
+  return true;
+}
 const GATABLE_NAV_IDS = ["aio-ai","health","students","teachers","attendance","fees","exams","academic","comms","inventory","library"];
 const PARENT_PORTAL_FEATURE_ID = "parent_portal";
 
@@ -1401,6 +1407,7 @@ function hasFullAccess(p) { return deptAccess(p) === "all"; }
 function isOwner(p) { return !!(p && p.is_owner); }
 function hasNavAccess(p, navId) {
   if (!isFeatureEnabled(navId)) return false; 
+  if (navId === "digital-library") return true; // external resource link — open to everyone once feature/level checks pass
   const a = deptAccess(p);
   return a === "all" || a.includes(navId);
 }
@@ -2980,12 +2987,12 @@ function render() {
   
   
   
-  const visibleNav = NAV.filter(n => hasNavAccess(profile, n.id) && !(NAV_MOVED_TO_SETTINGS.has(n.id) && hasNavAccess(profile, "settings")));
+  const visibleNav = NAV.filter(n => hasNavAccess(profile, n.id) && isNavLevelVisible(n.id) && !(NAV_MOVED_TO_SETTINGS.has(n.id) && hasNavAccess(profile, "settings")));
   if (!hasNavAccess(profile, tab)) tab = (visibleNav[0] || NAV[0]).id;
   visibleNav.forEach(n => {
     const isAio = n.id === "aio-ai";
     const sItem = el(`<div class="nav-item ${tab===n.id?'active':''} ${isAio?'nav-item-ai':''}" data-nav-id="${n.id}" style="cursor:pointer">${n.icon}<span>${n.label}</span>${isAio?'<span class="nav-ai-badge">NEW</span>':''}</div>`);
-    sItem.onclick = () => { tab = n.id; render(); };
+    sItem.onclick = () => { if (n.external) { window.open(n.external, "_blank", "noopener"); return; } tab = n.id; render(); };
     sidenav.appendChild(sItem);
   });
   
@@ -2997,7 +3004,7 @@ function render() {
   primaryNav.forEach(n => {
     const bItem = el(`<div class="bn-item ${tab===n.id?'active':''}" data-nav-id="${n.id}">${n.icon}<span>${n.label}</span></div>`);
     if (tab !== n.id) bItem.style.color = NAV_ICON_COLOR[n.id] || "var(--ink-soft)";
-    bItem.onclick = () => { tab = n.id; render(); };
+    bItem.onclick = () => { if (n.external) { window.open(n.external, "_blank", "noopener"); return; } tab = n.id; render(); };
     bottomnav.appendChild(bItem);
   });
   if (overflowNav.length) {
@@ -3058,7 +3065,12 @@ function openMoreSheet(items) {
   overlay.querySelector(".modal-close").onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
   overlay.querySelectorAll("[data-more]").forEach(row => {
-    row.onclick = () => { tab = row.dataset.more; close(); render(); };
+    row.onclick = () => {
+      const n = items.find(x => x.id === row.dataset.more);
+      close();
+      if (n && n.external) { window.open(n.external, "_blank", "noopener"); return; }
+      tab = row.dataset.more; render();
+    };
   });
 }
 function errShow(container) {
