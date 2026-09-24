@@ -2485,18 +2485,18 @@ async function dbSelect(table, params={}) {
   const path = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
   return await sb(path);
 }
-async function dbInsert(table, body) {
+async function _dbInsert(table, body) {
   const scoped = scopedBody(table, body);
   return await sb(`/rest/v1/${table}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"return=representation" } });
 }
-async function dbUpdate(table, id, body) {
+async function _dbUpdate(table, id, body) {
   return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"PATCH", body: JSON.stringify(body), headers:{ "Prefer":"return=representation" } });
 }
-async function dbUpsert(table, body, onConflict) {
+async function _dbUpsert(table, body, onConflict) {
   const scoped = scopedBody(table, body);
   return await sb(`/rest/v1/${table}?on_conflict=${onConflict}`, { method:"POST", body: JSON.stringify(scoped), headers:{ "Prefer":"resolution=merge-duplicates,return=representation" } });
 }
-async function dbDelete(table, id) {
+async function _dbDelete(table, id) {
   return await sb(`/rest/v1/${table}?${qs(scopedParams(table, {id:`eq.${id}`}))}`, { method:"DELETE" });
 }
 async function dbSelectActive(table, params={}) {
@@ -2507,9 +2507,287 @@ async function dbSelectActive(table, params={}) {
 function deleteWhereParams(table, filter) {
   return scopedParams(table, Object.fromEntries(Object.entries(filter).map(([k, v]) => [k, `eq.${v}`])));
 }
-async function dbDeleteWhere(table, filter) {
+async function _dbDeleteWhere(table, filter) {
   return await sb(`/rest/v1/${table}?${qs(deleteWhereParams(table, filter))}`, { method:"DELETE" });
 }
+
+/* ================= Permanent activity log (History) =================
+   Every successful save that goes through the data layer writes one row to
+   activity_log. The table only allows SELECT + INSERT, so entries can't be
+   edited or erased. Logging is best-effort: a failure never blocks the save. */
+const ACTIVITY_SKIP_TABLES = new Set(["activity_log","private_messages","parent_messages","school_support_messages","school_support_requests","ai_conversations","ai_messages","push_subscriptions_staff","teacher_evaluation_audit"]);
+const ACTIVITY_SECRET_KEY = /password|passcode|passwd|(^|_)pass($|_)|(^|_)pin($|_)|token|secret|hash|(^|_)otp($|_)|api_?key/i;
+function scrubForLog(value, depth) {
+  depth = depth || 0;
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    if (value.startsWith("data:")) return "[file/image omitted]";
+    return value.length > 300 ? value.slice(0, 300) + "… [truncated]" : value;
+  }
+  if (Array.isArray(value)) return depth > 3 ? "[…]" : value.slice(0, 25).map(v => scrubForLog(v, depth + 1));
+  if (typeof value === "object") {
+    if (depth > 3) return "[…]";
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = ACTIVITY_SECRET_KEY.test(k) ? "[hidden]" : scrubForLog(v, depth + 1);
+    return out;
+  }
+  return value;
+}
+function activityLabel(row) {
+  if (!row || typeof row !== "object") return "";
+  return row.full_name || row.name || row.title || row.subject || row.item_name || row.book_title || row.username || "";
+}
+function activityDescribe(table, action, label) {
+  const noun = String(table).replace(/_/g, " ");
+  const verbs = { insert:"Added", update:"Updated", upsert:"Saved", delete:"Permanently deleted", trash:"Moved to trash", restore:"Restored" };
+  return `${verbs[action] || action} ${noun}${label ? ": " + label : ""}`;
+}
+async function logActivity(entry) {
+  try {
+    if (!CURRENT_SCHOOL_ID || !profile || !entry || !entry.table) return;
+    if (ACTIVITY_SKIP_TABLES.has(entry.table)) return;
+    await sb("/rest/v1/activity_log", { method:"POST", headers:{ "Prefer":"return=minimal" }, body: JSON.stringify({
+      school_id: CURRENT_SCHOOL_ID,
+      table_name: entry.table,
+      action: entry.action,
+      record_id: entry.recordId == null ? null : String(entry.recordId).slice(0, 200),
+      actor_id: profile.id || null,
+      actor_name: profile.full_name || profile.username || null,
+      actor_role: profile.role || null,
+      description: String(entry.description || "").slice(0, 500),
+      details: entry.details === undefined ? null : scrubForLog(entry.details),
+    }) });
+  } catch (e) { console.warn("activity log failed", e); }
+}
+function activityRowsOf(rows) { return Array.isArray(rows) ? rows : (rows ? [rows] : []); }
+async function dbInsert(table, body) {
+  const rows = await _dbInsert(table, body);
+  const list = activityRowsOf(rows);
+  if (!list.length) return rows;
+  await logActivity({ table, action:"insert",
+    recordId: list.length > 1 ? list.map(r => r && r.id).filter(Boolean).slice(0, 5).join(",") : (list[0] && list[0].id),
+    description: activityDescribe(table, "insert", list.length > 1 ? `${list.length} records` : activityLabel(list[0])),
+    details: { count: list.length, data: list } });
+  return rows;
+}
+async function dbUpdate(table, id, body) {
+  const rows = await _dbUpdate(table, id, body);
+  if (Array.isArray(rows) && !rows.length) return rows; // nothing was actually changed
+  const keys = Object.keys(body || {});
+  let action = "update";
+  if (keys.length === 1 && keys[0] === "deleted_at") action = body.deleted_at ? "trash" : "restore";
+  await logActivity({ table, action, recordId: id,
+    description: activityDescribe(table, action, activityLabel(activityRowsOf(rows)[0])),
+    details: { changes: body } });
+  return rows;
+}
+async function dbUpsert(table, body, onConflict) {
+  const rows = await _dbUpsert(table, body, onConflict);
+  const list = activityRowsOf(rows);
+  if (!list.length) return rows;
+  await logActivity({ table, action:"upsert",
+    recordId: list.length > 1 ? list.map(r => r && r.id).filter(Boolean).slice(0, 5).join(",") : (list[0] && list[0].id),
+    description: activityDescribe(table, "upsert", list.length > 1 ? `${list.length} records` : activityLabel(list[0])),
+    details: { count: list.length, data: list } });
+  return rows;
+}
+async function dbDelete(table, id) {
+  let snapshot = null, existed = true;
+  if (!ACTIVITY_SKIP_TABLES.has(table)) {
+    try { const r = await dbSelect(table, { id:`eq.${id}`, limit:"1" }); snapshot = (r && r[0]) || null; existed = !!snapshot; }
+    catch (e) { /* couldn't read it first — still log the delete below */ }
+  }
+  const out = await _dbDelete(table, id);
+  if (existed) await logActivity({ table, action:"delete", recordId: id,
+    description: activityDescribe(table, "delete", activityLabel(snapshot)),
+    details: { deleted: snapshot } });
+  return out;
+}
+async function dbDeleteWhere(table, filter) {
+  const out = await _dbDeleteWhere(table, filter);
+  await logActivity({ table, action:"delete",
+    recordId: Object.entries(filter || {}).map(([k, v]) => `${k}=${v}`).join(","),
+    description: activityDescribe(table, "delete", "matching records"),
+    details: { filter } });
+  return out;
+}
+
+const ACTIVITY_MODULES = [
+  { id:"students",  label:"Students",          tables:["students"] },
+  { id:"staff",     label:"Staff & accounts",  tables:["profiles","teachers","teacher_profiles","teacher_qualifications","teacher_documents","teacher_evaluations","teacher_identities","account_change_requests"] },
+  { id:"attendance",label:"Attendance",        tables:["attendance","staff_attendance"] },
+  { id:"fees",      label:"Fees",              tables:["fee_structures","fee_payments","fee_reminders"] },
+  { id:"exams",     label:"Exams & results",   tables:["exams","exam_types","exam_results","report_cards","grades"] },
+  { id:"academic",  label:"Academic setup",    tables:["terms","classes","subjects","class_subjects"] },
+  { id:"inventory", label:"Inventory",         tables:["inventory_items","asset_maintenance"] },
+  { id:"library",   label:"Library",           tables:["library_books","library_loans"] },
+  { id:"comms",     label:"Communication",     tables:["school_communications","school_meetings"] },
+  { id:"settings",  label:"School settings",   tables:["school_settings","schools"] },
+  { id:"other",     label:"Other",             tables:null },
+];
+const ACTIVITY_ACTIONS = [
+  ["insert","Added"],["update","Updated"],["upsert","Saved"],["trash","Moved to trash"],["restore","Restored"],["delete","Permanently deleted"],
+  ["approve","Registration approved"],["reject","Registration rejected"],["transfer_ownership","Ownership transferred"],
+  ["link_child","Parent linked to child"],["upgrade","School upgrade"],["finalize","Enrollment finalized"],
+];
+function activityModuleOf(table) {
+  const m = ACTIVITY_MODULES.find(x => x.tables && x.tables.includes(table));
+  return m ? m.label : "Other";
+}
+function activityActionLabel(a) { const f = ACTIVITY_ACTIONS.find(x => x[0] === a); return f ? f[1] : a; }
+function activityQueryParams(f) {
+  const p = { order:"created_at.desc" };
+  const m = ACTIVITY_MODULES.find(x => x.id === f.module);
+  if (m) p.table_name = m.tables ? `in.(${m.tables.join(",")})` : `not.in.(${ACTIVITY_MODULES.flatMap(x => x.tables || []).join(",")})`;
+  if (f.action) p.action = `eq.${f.action}`;
+  const conds = [];
+  if (f.from) conds.push(`created_at.gte.${new Date(f.from + "T00:00:00").toISOString()}`);
+  if (f.to)   conds.push(`created_at.lte.${new Date(f.to + "T23:59:59.999").toISOString()}`);
+  if (conds.length) p.and = `(${conds.join(",")})`;
+  return p;
+}
+async function fetchActivityRows(f, max, startOffset) {
+  const out = [];
+  let offset = startOffset || 0;
+  while (out.length < max) {
+    const want = Math.min(1000, max - out.length);
+    const rows = await dbSelect("activity_log", Object.assign(activityQueryParams(f), { limit:String(want), offset:String(offset) }));
+    out.push(...rows);
+    offset += rows.length;
+    if (rows.length < want) break;
+  }
+  return out;
+}
+function activityMatches(r, q) {
+  if (!q) return true;
+  q = q.toLowerCase();
+  const hay = [r.description, r.actor_name, r.actor_role, r.table_name, activityModuleOf(r.table_name), activityActionLabel(r.action), r.record_id, r.details ? JSON.stringify(r.details) : ""];
+  return hay.some(v => String(v || "").toLowerCase().includes(q));
+}
+function csvCell(v) {
+  if (v === null || v === undefined) return "";
+  let s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // stop spreadsheet formula injection
+  return `"${s.replace(/"/g, '""')}"`;
+}
+function activityToCsv(rows) {
+  const head = ["Time","Who","Role","Module","Table","Action","Record ID","Description","Details"];
+  const lines = [head.map(csvCell).join(",")];
+  rows.forEach(r => lines.push([
+    new Date(r.created_at).toLocaleString(), r.actor_name, r.actor_role, activityModuleOf(r.table_name), r.table_name,
+    activityActionLabel(r.action), r.record_id, r.description, r.details,
+  ].map(csvCell).join(",")));
+  return lines.join("\r\n");
+}
+function downloadTextFile(name, text, mime) {
+  const blob = new Blob(["\ufeff" + text], { type: mime || "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function renderActivityHistory(body) {
+  if (!profile || profile.role !== "admin") { body.innerHTML = emptyState("Only the school admin can view History."); return; }
+  const PAGE = 300;
+  const state = { module:"", action:"", from:"", to:"", q:"", rows:[], more:false, selected:new Map() };
+  body.innerHTML = `
+    <h3 style="color:var(--navy);margin-bottom:4px;">History</h3>
+    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;">A permanent record of changes made in your school. Entries can't be edited or deleted.</p>
+    <div class="card">
+      <div class="grid2">
+        <div class="field"><label>Module</label><select id="actModule"><option value="">All modules</option>${ACTIVITY_MODULES.map(m => `<option value="${m.id}">${m.label}</option>`).join("")}</select></div>
+        <div class="field"><label>Action</label><select id="actAction"><option value="">All actions</option>${ACTIVITY_ACTIONS.map(a => `<option value="${a[0]}">${a[1]}</option>`).join("")}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>From</label><input type="date" id="actFrom" /></div>
+        <div class="field"><label>To</label><input type="date" id="actTo" /></div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Search</label><input id="actQ" placeholder="Name, person, keyword…" /></div>
+    </div>
+    <div class="card" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
+      <div id="actCount" style="font-size:13px;color:var(--ink-soft);font-weight:600;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-ghost" id="actSelAll">Select all shown</button>
+        <button class="btn btn-ghost" id="actSelNone">Clear</button>
+        <button class="btn btn-ghost" id="actRefresh">Refresh</button>
+        <button class="btn btn-primary" id="actCsv"></button>
+      </div>
+    </div>
+    <div class="card" id="actList"><div class="center-loading">Loading…</div></div>
+    <div style="text-align:center;margin:8px 0 16px;"><button class="btn btn-ghost" id="actMore" style="display:none;">Load more</button></div>`;
+  const $ = (id) => body.querySelector("#" + id);
+
+  const shown = () => state.rows.filter(r => activityMatches(r, state.q));
+  const updateCsvLabel = () => { $("actCsv").textContent = state.selected.size ? `Download CSV (${state.selected.size} selected)` : "Download CSV (all filtered)"; };
+
+  function paint() {
+    const list = $("actList");
+    const rows = shown();
+    $("actCount").textContent = `${rows.length} entr${rows.length === 1 ? "y" : "ies"} shown`;
+    updateCsvLabel();
+    $("actMore").style.display = state.more ? "" : "none";
+    if (!rows.length) { list.innerHTML = emptyState("No history for this filter yet."); return; }
+    list.innerHTML = "";
+    rows.forEach(r => {
+      const row = el(`<div class="list-row">
+        <input type="checkbox" class="actChk" style="margin-right:10px;flex-shrink:0;width:18px;height:18px;" ${state.selected.has(r.id) ? "checked" : ""} />
+        <div class="list-main">
+          <div class="list-title">${reqEsc(r.description || activityActionLabel(r.action))}</div>
+          <div class="list-sub">${reqEsc(r.actor_name || "Unknown")}${r.actor_role ? " (" + reqEsc(r.actor_role) + ")" : ""} · ${reqEsc(new Date(r.created_at).toLocaleString())} · ${reqEsc(activityModuleOf(r.table_name))}</div>
+        </div>
+        ${ic.chevronRight}</div>`);
+      const chk = row.querySelector(".actChk");
+      chk.onclick = (e) => { e.stopPropagation(); if (chk.checked) state.selected.set(r.id, r); else state.selected.delete(r.id); updateCsvLabel(); };
+      row.onclick = () => openViewModal("Activity details", [
+        ["When", reqEsc(new Date(r.created_at).toLocaleString())],
+        ["Who", reqEsc((r.actor_name || "Unknown") + (r.actor_role ? " (" + r.actor_role + ")" : ""))],
+        ["Module", reqEsc(activityModuleOf(r.table_name))],
+        ["Action", reqEsc(activityActionLabel(r.action))],
+        ["What", reqEsc(r.description)],
+        ["Record ID", reqEsc(r.record_id)],
+        ["Details", r.details ? `<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;">${reqEsc(JSON.stringify(r.details, null, 2))}</pre>` : ""],
+      ], null);
+      list.appendChild(row);
+    });
+  }
+
+  async function load(append) {
+    try {
+      if (!append) { state.rows = []; $("actList").innerHTML = `<div class="center-loading">Loading…</div>`; }
+      const got = await fetchActivityRows(state, PAGE, append ? state.rows.length : 0);
+      state.rows = append ? state.rows.concat(got) : got;
+      state.more = got.length === PAGE;
+      paint();
+    } catch (e) {
+      $("actList").innerHTML = `<div class="err">${reqEsc(e.message || "Couldn't load History.")}</div>`;
+    }
+  }
+
+  const onFilter = () => { state.module = $("actModule").value; state.action = $("actAction").value; state.from = $("actFrom").value; state.to = $("actTo").value; load(false); };
+  ["actModule","actAction","actFrom","actTo"].forEach(id => { $(id).onchange = onFilter; });
+  $("actQ").oninput = () => { state.q = $("actQ").value.trim(); paint(); };
+  $("actMore").onclick = () => load(true);
+  $("actRefresh").onclick = () => load(false);
+  $("actSelAll").onclick = () => { shown().forEach(r => state.selected.set(r.id, r)); paint(); };
+  $("actSelNone").onclick = () => { state.selected.clear(); paint(); };
+  $("actCsv").onclick = async () => {
+    const btn = $("actCsv"); const old = btn.textContent; btn.disabled = true; btn.textContent = "Preparing…";
+    try {
+      let rows;
+      if (state.selected.size) rows = [...state.selected.values()].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      else rows = (await fetchActivityRows(state, 20000)).filter(r => activityMatches(r, state.q));
+      if (!rows.length) { toast("Nothing to download for this filter."); return; }
+      downloadTextFile(`history-${new Date().toISOString().slice(0, 10)}.csv`, activityToCsv(rows));
+      toast(`Downloaded ${rows.length} entr${rows.length === 1 ? "y" : "ies"}.`, false);
+    } catch (e) { toast(e.message || "Download failed."); }
+    finally { btn.disabled = false; btn.textContent = old; updateCsvLabel(); }
+  };
+  updateCsvLabel();
+  await load(false);
+}
+/* ================= end activity log ================= */
 
 let __activeRefresh = null;
 function setActiveRefresh(fn) { __activeRefresh = fn; }
@@ -2616,6 +2894,8 @@ async function completeSchoolUpgrade(fields, password) {
     p_motto: fields.motto || null, p_village: fields.village || null, p_subcounty: fields.subcounty || null,
     p_district: fields.district || null, p_size_range: fields.sizeRange || null,
   }) });
+  await logActivity({ table:"schools", action:"upgrade", recordId: CURRENT_SCHOOL_ID, description:"Completed school upgrade",
+    details:{ motto: fields.motto, village: fields.village, subcounty: fields.subcounty, district: fields.district, size_range: fields.sizeRange } });
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
@@ -2648,6 +2928,8 @@ async function linkParentChild(parentId, sin, student_name) {
   const rows = await sb(`/rest/v1/rpc/link_parent_child`, { method:"POST", body: JSON.stringify({
     p_parent_id: parentId, p_sin: normalizeSIN(sin), p_student_name: student_name,
   }) });
+  await logActivity({ table:"profiles", action:"link_child", recordId: parentId, description:`Linked parent to child${student_name ? ": " + student_name : ""}`,
+    details:{ parent_id: parentId, student_name } });
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
@@ -2655,12 +2937,14 @@ async function approveRegistration(profileId, adminPassword) {
   const rows = await sb(`/rest/v1/rpc/approve_registration`, { method:"POST", body: JSON.stringify({
     p_admin_id: profile.id, p_profile_id: profileId, p_admin_password: adminPassword,
   }) });
+  await logActivity({ table:"profiles", action:"approve", recordId: profileId, description:"Approved a registration", details:{ profile_id: profileId } });
   return Array.isArray(rows) ? rows[0] : rows;
 }
 async function rejectRegistration(profileId, adminPassword) {
   const rows = await sb(`/rest/v1/rpc/reject_registration`, { method:"POST", body: JSON.stringify({
     p_admin_id: profile.id, p_profile_id: profileId, p_admin_password: adminPassword,
   }) });
+  await logActivity({ table:"profiles", action:"reject", recordId: profileId, description:"Rejected a registration", details:{ profile_id: profileId } });
   return Array.isArray(rows) ? rows[0] : rows;
 }
 function promptAdminPassword(title) {
@@ -2690,6 +2974,7 @@ async function transferOwnership(newOwnerId, actorPassword) {
   await sb(`/rest/v1/rpc/transfer_ownership`, { method:"POST", body: JSON.stringify({
     p_actor_username: profile.username, p_actor_password: actorPassword, p_new_owner_id: newOwnerId,
   }) });
+  await logActivity({ table:"schools", action:"transfer_ownership", recordId: newOwnerId, description:"Transferred school ownership", details:{ new_owner_id: newOwnerId } });
 }
 
 function el(html) { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstChild; }
@@ -6232,7 +6517,11 @@ async function sinRpc(name, args) {
 
 async function schoolCheckStudent(payload) { return sinRpc("school_check_student", { p_payload: payload }); }
 
-async function schoolFinalizeStudent(studentId) { return sinRpc("school_finalize_student", { p_student: studentId }); }
+async function schoolFinalizeStudent(studentId) {
+  const res = await sinRpc("school_finalize_student", { p_student: studentId });
+  await logActivity({ table:"students", action:"finalize", recordId: studentId, description:"Finalized student enrollment / SIN", details:{ student_id: studentId } });
+  return res;
+}
 
 let sinSyncBusy = false;
 async function syncPendingSins() {
@@ -9857,6 +10146,7 @@ const SETTINGS_MENU_ITEMS = [
   { id:"school",   label:"School settings",   desc:"Branding, mission, contact, stamps, receipts, preferences", icon:ic.settings, color:"var(--purple)",   tint:"var(--purple-tint)" },
   { id:"users",    label:"Account",           desc:"Your profile, password, staff &amp; roles", icon:ic.users,    color:"var(--navy-2)",   tint:"var(--slate-tint)" },
   { id:"trash",    label:"Trash",             desc:"Restore or permanently delete items", icon:ic.trash,    color:"var(--slate)",     tint:"var(--slate-tint)" },
+  { id:"history",  label:"History",           desc:"Permanent record of who changed what, and when", icon:ic.clock.replace('width="15" height="15"','width="19" height="19"'), color:"var(--navy-2)", tint:"var(--slate-tint)", adminOnly:true },
 ];
 async function renderSettings(container, sub=null) {
   setActiveRefresh(() => renderSettings(container, sub));
@@ -9868,6 +10158,7 @@ async function renderSettings(container, sub=null) {
     `;
     const list = document.getElementById("settingsMenu");
     SETTINGS_MENU_ITEMS.forEach(it => {
+      if (it.adminOnly && profile?.role !== "admin") return;
       const row = el(`<div class="list-row">
         <div class="avatar" style="background:${it.tint};color:${it.color};">${it.icon}</div>
         <div class="list-main"><div class="list-title">${it.label}</div><div class="list-sub">${it.desc}</div></div>
@@ -9883,6 +10174,11 @@ async function renderSettings(container, sub=null) {
   if (sub === "academic") return renderAcademic(body);
   if (sub === "users") return renderUsers(body);
   if (sub === "trash") return renderTrash(body);
+  if (sub === "history") {
+    setActiveRefresh(null); // don't let a background refresh wipe the filters
+    if (profile?.role !== "admin") { body.innerHTML = emptyState("Only the school admin can view History."); return; }
+    return renderActivityHistory(body);
+  }
   return renderSchoolSettingsPanel(body);
 }
 async function renderSchoolSettingsPanel(container) {
