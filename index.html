@@ -1327,8 +1327,21 @@ async function checkForNotifications() {
 function notifEscapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+// type: "feedback" notifications (pushed by TransApple asking for a response) get their own
+// modal — a response box plus Submit — instead of the plain Open/Remind-later modal below.
+// Submitting calls submit_school_feedback, which records the response and marks this
+// notification (and any duplicate rows for the same request/user) read for good, so it can
+// never pop again. Every other type (activity, mother_announcement, app_update, ...) keeps the
+// exact same Open / Remind-me-later flow as before.
+async function submitFeedbackResponse(feedbackRequestId, responseText) {
+  return sb(`/rest/v1/rpc/submit_school_feedback`, {
+    method: "POST",
+    body: JSON.stringify({ p_feedback_request_id: feedbackRequestId, p_response: responseText }),
+  });
+}
 function showNotificationPopup(notif) {
   __notifPopupShowing = true;
+  if (notif.type === "feedback") { showFeedbackPopup(notif); return; }
   let opened = false;
   const body = notif.body || "";
   const preview = body.length > 140 ? body.slice(0, 140) + "…" : body;
@@ -1366,6 +1379,46 @@ function showNotificationPopup(notif) {
     }
     closePopup();
     try { await dbUpdate("notifications", notif.id, { is_read: true }); } catch (e) { /* best-effort */ }
+  };
+}
+function showFeedbackPopup(notif) {
+  const body = notif.body || "";
+  const overlay = el(`<div class="overlay">
+    <div class="modal notif-modal">
+      <h3>${notifEscapeHtml(notif.title || "Feedback requested")}</h3>
+      <div class="notif-full" style="max-height:35vh;overflow-y:auto;white-space:pre-wrap;">${notifEscapeHtml(body)}</div>
+      <div class="field" style="margin-top:10px;">
+        <textarea id="feedbackResponseInput" rows="4" placeholder="Type your response…" style="width:100%;resize:vertical;"></textarea>
+      </div>
+      <div class="notif-feedback-msg" style="min-height:18px;"></div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" id="notifLaterBtn">Remind me later</button>
+        <button class="btn btn-primary" id="feedbackSubmitBtn">Submit</button>
+      </div>
+    </div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const closePopup = () => { overlay.remove(); __notifPopupShowing = false; checkForNotifications(); };
+  const msgEl = overlay.querySelector(".notif-feedback-msg");
+  overlay.querySelector("#notifLaterBtn").onclick = async () => {
+    closePopup();
+    try {
+      const snoozeUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await dbUpdate("notifications", notif.id, { snooze_until: snoozeUntil });
+    } catch (e) { /* best-effort */ }
+  };
+  const submitBtn = overlay.querySelector("#feedbackSubmitBtn");
+  submitBtn.onclick = async () => {
+    const text = (overlay.querySelector("#feedbackResponseInput").value || "").trim();
+    if (!text) { msgEl.innerHTML = `<div class="err">Please enter a response before submitting.</div>`; return; }
+    submitBtn.disabled = true;
+    try {
+      await submitFeedbackResponse(notif.feedback_request_id, text);
+      closePopup();
+    } catch (e) {
+      submitBtn.disabled = false;
+      msgEl.innerHTML = `<div class="err">${notifEscapeHtml(e.message || "Couldn't submit — try again.")}</div>`;
+    }
   };
 }
 
@@ -1674,13 +1727,15 @@ Deno.serve(async (req) => {
   let body = "";
   let query = supabase.from("push_subscriptions_staff").select("*");
 
-  if (table === "mother_announcements") {
-    title = record.title || "Announcement";
-    body = record.body || "";
-    // target_all -> every device. Otherwise only devices whose school_id is
-    // in target_school_ids. Department narrows it further, except
-    // Administration devices always get every department-targeted message.
-    if (!record.target_all && Array.isArray(record.target_school_ids)) {
+  if (table === "mother_announcements" || table === "platform_changelog" || table === "mother_feedback_requests") {
+    title = record.title || (table === "platform_changelog" ? "App update" : table === "mother_feedback_requests" ? "Feedback requested" : "Announcement");
+    body = record.body || record.description || "";
+    // target_all -> every device (platform_changelog has no target_all column and always
+    // means "every school"). Otherwise only devices whose school_id is in target_school_ids.
+    // Department narrows it further, except Administration devices always get every
+    // department-targeted message.
+    const targetAll = table === "platform_changelog" ? true : !!record.target_all;
+    if (!targetAll && Array.isArray(record.target_school_ids)) {
       query = query.in("school_id", record.target_school_ids);
     }
   } else if (table === "parent_messages") {
@@ -1696,15 +1751,16 @@ Deno.serve(async (req) => {
   const { data: subs, error } = await query;
   if (error || !subs) return new Response("no subscriptions", { status: 200 });
 
-  // Department filter for department-targeted mother_announcements happens
-  // here (client-side, after the school filter above) so Administration
-  // devices — regardless of the target department — still get it.
-  const targetDept = table === "mother_announcements" ? record.target_department : null;
+  // Department filter for department-targeted mother_announcements / platform_changelog /
+  // mother_feedback_requests happens here (client-side, after the school filter above) so
+  // Administration devices — regardless of the target departments — still get it.
+  const isMotherPush = table === "mother_announcements" || table === "platform_changelog" || table === "mother_feedback_requests";
+  const targetDepts: string[] | null = isMotherPush && Array.isArray(record.target_departments) ? record.target_departments : null;
   const filtered = subs.filter((s: any) => {
-    if (table !== "mother_announcements") return true;
-    if (!targetDept || targetDept === "all") return true;
+    if (!isMotherPush) return true;
+    if (!targetDepts || !targetDepts.length) return true;
     if (s.department === "administration") return true;
-    return s.department === targetDept;
+    return targetDepts.includes(s.department);
   });
 
   const payloadBody = JSON.stringify({ title, body });
@@ -4350,9 +4406,10 @@ function markBellDismissed(id) {
   try { localStorage.setItem(bellDismissKey(), JSON.stringify([...dismissed])); } catch (e) {}
 }
 function staffSeesAnnouncement(a, dept) {
-  if (!a.target_department || a.target_department === "all") return true;
+  const targets = a.target_departments;
+  if (!targets || !targets.length) return true; // no departments picked = all departments
   if (dept === "administration") return true;
-  return a.target_department === dept;
+  return targets.includes(dept);
 }
 async function fetchStaffAnnouncements(limit = 30) {
   if (!CURRENT_SCHOOL_ID) return [];
