@@ -363,6 +363,8 @@
   .modal{background:#fff;width:100%;max-width:480px;border-radius:18px;padding:22px;max-height:88vh;overflow-y:auto;}
   .modal h3{font-size:17px;color:var(--navy);margin-bottom:16px;}
   .modal-close{float:right;background:none;border:none;font-size:20px;color:var(--ink-soft);}
+  .notif-modal{max-width:420px;}
+  .notif-modal .notif-preview,.notif-modal .notif-full{font-size:14px;line-height:1.5;color:var(--ink,#1c2438);margin-bottom:18px;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .form-actions{display:flex;gap:10px;margin-top:6px;}
   .form-actions .btn{flex:1;}
@@ -1291,6 +1293,81 @@ function startSchoolSync() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !isUserEditing()) tick(); });
 }
 function stopSchoolSync() { if (__schoolSyncTimer) { clearInterval(__schoolSyncTimer); __schoolSyncTimer = null; } }
+
+// ===================== NOTIFICATION POPUPS (fed by fn_broadcast_notification) =====================
+// Polls the signed-in staff member's own notifications every 30s while logged in. Shows at most one
+// popup at a time and never interrupts an in-progress workflow (an open modal/sheet). "Remind me
+// later" snoozes for 10 minutes server-side (survives navigation/reload); "Open" reveals the full
+// message and, on a second click, marks it read for good.
+let __notifPollTimer = null;
+let __notifPopupShowing = false;
+function startNotifPolling() {
+  stopNotifPolling();
+  const tick = () => checkForNotifications();
+  tick();
+  __notifPollTimer = setInterval(tick, 30000);
+}
+function stopNotifPolling() { if (__notifPollTimer) { clearInterval(__notifPollTimer); __notifPollTimer = null; } }
+async function checkForNotifications() {
+  if (!auth || !profile) return;
+  if (__notifPopupShowing) return; // one at a time
+  if (document.querySelector(".overlay")) return; // don't interrupt an open modal/sheet — next tick will retry
+  try {
+    const nowIso = new Date().toISOString();
+    const rows = await dbSelect("notifications", {
+      user_id: `eq.${profile.id}`,
+      is_read: "eq.false",
+      or: `(snooze_until.is.null,snooze_until.lte.${nowIso})`,
+      order: "created_at.asc",
+      limit: 1,
+    });
+    if (rows && rows.length) showNotificationPopup(rows[0]);
+  } catch (e) { /* best-effort — try again on next tick */ }
+}
+function notifEscapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function showNotificationPopup(notif) {
+  __notifPopupShowing = true;
+  let opened = false;
+  const body = notif.body || "";
+  const preview = body.length > 140 ? body.slice(0, 140) + "…" : body;
+  const overlay = el(`<div class="overlay">
+    <div class="modal notif-modal">
+      <h3>${notifEscapeHtml(notif.title || "Notification")}</h3>
+      <div class="notif-preview">${notifEscapeHtml(preview)}</div>
+      <div class="notif-full" style="display:none;max-height:50vh;overflow-y:auto;white-space:pre-wrap;">${notifEscapeHtml(body)}</div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" id="notifLaterBtn">Remind me later</button>
+        <button class="btn btn-primary" id="notifOpenBtn">Open</button>
+      </div>
+    </div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const closePopup = () => { overlay.remove(); __notifPopupShowing = false; checkForNotifications(); };
+  const laterBtn = overlay.querySelector("#notifLaterBtn");
+  const openBtn = overlay.querySelector("#notifOpenBtn");
+  laterBtn.onclick = async () => {
+    closePopup();
+    try {
+      const snoozeUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await dbUpdate("notifications", notif.id, { snooze_until: snoozeUntil });
+    } catch (e) { /* best-effort */ }
+  };
+  openBtn.onclick = async () => {
+    if (!opened) {
+      opened = true;
+      overlay.querySelector(".notif-preview").style.display = "none";
+      overlay.querySelector(".notif-full").style.display = "block";
+      laterBtn.style.display = "none";
+      openBtn.textContent = "Mark as read";
+      try { await dbUpdate("notifications", notif.id, { opened_at: new Date().toISOString() }); } catch (e) { /* best-effort */ }
+      return;
+    }
+    closePopup();
+    try { await dbUpdate("notifications", notif.id, { is_read: true }); } catch (e) { /* best-effort */ }
+  };
+}
 
 function schoolStatusInfo(status) {
   switch (status) {
@@ -2521,7 +2598,7 @@ async function _dbDeleteWhere(table, filter) {
 // permanent: the table's RLS policies (deployed live) allow SELECT and INSERT only — there are
 // no UPDATE/DELETE policies, so the database itself refuses to alter or remove entries.
 // Visible to School Super Admins / Administrators only (Settings → History).
-const ACTIVITY_LOG_EXCLUDED_TABLES = new Set(["activity_log", "push_subscriptions_staff"]);
+const ACTIVITY_LOG_EXCLUDED_TABLES = new Set(["activity_log", "push_subscriptions_staff", "notifications"]);
 const ACTIVITY_LOG_SENSITIVE_FIELDS = new Set(["password_hash","pin","password","session_token"]);
 const ACTIVITY_LOG_TABLE_LABELS = {
   students:"Students", profiles:"Staff Accounts", attendance_records:"Attendance",
@@ -2539,17 +2616,42 @@ const ACTIVITY_LOG_TABLE_LABELS = {
 function activityLogLabel(table) {
   return ACTIVITY_LOG_TABLE_LABELS[table] || String(table || "").replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase());
 }
-// Short, readable stand-in for a record's raw database UUID, e.g. "ST1758802451".
-// Built from the module label's initials + a deterministic number derived from the real id,
+// Short, readable stand-in for a record's raw database UUID, e.g. "TA1758802451".
+// Always starts with "TA", followed by a deterministic number derived from the real id,
 // so the same record always shows the same short code without needing to store one.
 function friendlyRecordId(table, recordId) {
   if (recordId == null || recordId === "") return "";
-  const words = activityLogLabel(table).split(/\s+/).filter(Boolean);
-  const prefix = (words.length > 1 ? words[0][0] + words[1][0] : String(table||"").slice(0,2)).toUpperCase();
   const str = String(recordId);
   let hash = 0;
   for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-  return `${prefix}${String(hash).padStart(10,"0").slice(-10)}`;
+  return `TA${String(hash).padStart(10,"0").slice(-10)}`;
+}
+// Some saved fields are foreign keys (student_id, term_id, received_by, ...) that store a raw
+// database UUID. For the activity detail screen we look the real record up and show something
+// a person can actually read (the student's SIN, the term's name, the staff member's name)
+// instead of the UUID.
+const ACTIVITY_FK_RESOLVERS = {
+  student_id: { table:"students", select:"sin", label:"Student SIN" },
+  term_id: { table:"terms", select:"name", label:"Term" },
+  received_by: { table:"profiles", select:"full_name", label:"Received By" },
+  marked_by: { table:"profiles", select:"full_name", label:"Marked By" },
+  actor_id: { table:"profiles", select:"full_name", label:"Staff Member" },
+  teacher_id: { table:"teachers", select:"full_name", label:"Teacher" },
+  linked_teacher_id: { table:"teachers", select:"full_name", label:"Teacher" },
+  class_teacher_id: { table:"teachers", select:"full_name", label:"Class Teacher" },
+  class_id: { table:"classes", select:"name", label:"Class" },
+  subject_id: { table:"subjects", select:"name", label:"Subject" },
+  exam_id: { table:"exams", select:"name", label:"Exam" },
+  exam_type_id: { table:"exam_types", select:"name", label:"Exam Type" },
+};
+async function resolveActivityFK(field, value) {
+  const cfg = ACTIVITY_FK_RESOLVERS[field];
+  if (!cfg || value == null || value === "") return null;
+  try {
+    const rows = await dbSelect(cfg.table, { id:`eq.${value}`, select:cfg.select });
+    const found = rows && rows[0] && rows[0][cfg.select];
+    return found ? { label: cfg.label, value: found } : null;
+  } catch (e) { return null; }
 }
 // Pick a human name/title out of a saved record's fields, for a readable log line
 // ("Added Students — Jane Doe") instead of a bare table name.
@@ -2565,12 +2667,18 @@ function activityRecordName(details) {
 // Turn a saved record's raw field/value pairs into readable "Label: value" rows for the
 // activity detail screen, instead of a wall of raw JSON.
 const ACTIVITY_HIDDEN_FIELDS = new Set(["id","school_id","created_by","updated_by"]);
-function humanizeDetails(details) {
+async function humanizeDetails(details) {
   const row = Array.isArray(details) ? details[0] : details;
   if (!row || typeof row !== "object") return [];
-  return Object.keys(row).filter(k => !ACTIVITY_HIDDEN_FIELDS.has(k) && !ACTIVITY_LOG_SENSITIVE_FIELDS.has(k)).map(key => {
+  const keys = Object.keys(row).filter(k => !ACTIVITY_HIDDEN_FIELDS.has(k) && !ACTIVITY_LOG_SENSITIVE_FIELDS.has(k));
+  const out = [];
+  for (const key of keys) {
     let value = row[key];
-    if (value === null || value === undefined || value === "") return null;
+    if (value === null || value === undefined || value === "") continue;
+    if (ACTIVITY_FK_RESOLVERS[key]) {
+      const resolved = await resolveActivityFK(key, value);
+      if (resolved) { out.push([resolved.label, resolved.value]); continue; }
+    }
     if (typeof value === "boolean") value = value ? "Yes" : "No";
     else if (typeof value === "object") value = JSON.stringify(value);
     else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
@@ -2578,8 +2686,9 @@ function humanizeDetails(details) {
       value = isNaN(d.getTime()) ? value : d.toLocaleString();
     }
     const label = key.replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase());
-    return [label, String(value)];
-  }).filter(Boolean);
+    out.push([label, String(value)]);
+  }
+  return out;
 }
 function activityScrub(body) {
   if (!body || typeof body !== "object") return body;
@@ -2609,6 +2718,23 @@ function logActivity(table, action, recordId, details) {
     description, details: details !== undefined ? JSON.stringify(activityScrub(details)) : null,
   }, activityActor());
   _dbInsert("activity_log", payload).catch(e => console.error("activity log failed", e));
+  broadcastActivityNotification(table, description);
+}
+
+// Fans this activity out to admins + same-department staff via fn_broadcast_notification.
+// The database function itself withholds anything from the parents department and anything
+// touching the private one-to-one message tables, so this call is safe to fire unconditionally
+// for every logged table; it's still fire-and-forget so a broadcast hiccup never blocks a save.
+function broadcastActivityNotification(table, description) {
+  if (!profile) return; // no signed-in staff member (or a parent/mother session) — nothing to attribute this to
+  sb(`/rest/v1/rpc/fn_broadcast_notification`, {
+    method: "POST",
+    body: JSON.stringify({
+      p_title: `${activityLogLabel(table)} update`,
+      p_body: description,
+      p_source_table: table,
+    }),
+  }).catch(e => console.error("notification broadcast failed", e));
 }
 async function dbInsert(table, body) {
   const result = await _dbInsert(table, body);
@@ -2718,6 +2844,7 @@ async function tryRestoreRememberedSession() {
     markDeviceSeen();
     pinLocked = false;
     startSchoolSync();
+    startNotifPolling();
     primeSchoolCache();
     return true;
   } catch (e) {
@@ -2806,7 +2933,7 @@ function promptAdminPassword(title) {
 }
 function logout() {
   const token = SESSION_TOKEN;
-  stopSchoolSync(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null;
+  stopSchoolSync(); stopNotifPolling(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null;
   clearRememberedSession(); persistSessionToken(null); pinLocked = false; showSupportPortal = false; render();
   if (token) sb(`/rest/v1/rpc/revoke_session`, { method:"POST", body: JSON.stringify({ p_token: token }) }).catch(()=>{});
 }
@@ -3437,6 +3564,7 @@ async function authCompleteLogin(row, remember) {
   pinLocked = false;
   await loadSchoolSettings(); // brand colour / logo / ID prefixes now that a session exists
   startSchoolSync();
+  startNotifPolling();
   primeSchoolCache();
   tab = "dashboard"; pendingSubTab = null; authView = "login";
   render();
@@ -10550,11 +10678,11 @@ async function renderActivityLog(container) {
     });
     return lines.join("\r\n");
   }
-  function showDetail(r) {
+  async function showDetail(r) {
     const dt = new Date(r.created_at);
     let changedRows = [];
     if (r.details) {
-      try { changedRows = humanizeDetails(JSON.parse(r.details)); } catch(e) { changedRows = []; }
+      try { changedRows = await humanizeDetails(JSON.parse(r.details)); } catch(e) { changedRows = []; }
     }
     const changedHtml = changedRows.length
       ? `<div style="display:flex;flex-direction:column;gap:6px;background:var(--slate-tint);padding:10px;border-radius:8px;max-height:280px;overflow:auto;">
