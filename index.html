@@ -2539,6 +2539,48 @@ const ACTIVITY_LOG_TABLE_LABELS = {
 function activityLogLabel(table) {
   return ACTIVITY_LOG_TABLE_LABELS[table] || String(table || "").replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase());
 }
+// Short, readable stand-in for a record's raw database UUID, e.g. "ST1758802451".
+// Built from the module label's initials + a deterministic number derived from the real id,
+// so the same record always shows the same short code without needing to store one.
+function friendlyRecordId(table, recordId) {
+  if (recordId == null || recordId === "") return "";
+  const words = activityLogLabel(table).split(/\s+/).filter(Boolean);
+  const prefix = (words.length > 1 ? words[0][0] + words[1][0] : String(table||"").slice(0,2)).toUpperCase();
+  const str = String(recordId);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return `${prefix}${String(hash).padStart(10,"0").slice(-10)}`;
+}
+// Pick a human name/title out of a saved record's fields, for a readable log line
+// ("Added Students — Jane Doe") instead of a bare table name.
+const ACTIVITY_NAME_FIELDS = ["full_name","name","title","subject","book_title","asset_name","item_name","message","label"];
+function activityRecordName(details) {
+  const row = Array.isArray(details) ? details[0] : details;
+  if (!row || typeof row !== "object") return "";
+  for (const key of ACTIVITY_NAME_FIELDS) {
+    if (row[key] && typeof row[key] === "string") return row[key].length > 60 ? row[key].slice(0,57)+"…" : row[key];
+  }
+  return "";
+}
+// Turn a saved record's raw field/value pairs into readable "Label: value" rows for the
+// activity detail screen, instead of a wall of raw JSON.
+const ACTIVITY_HIDDEN_FIELDS = new Set(["id","school_id","created_by","updated_by"]);
+function humanizeDetails(details) {
+  const row = Array.isArray(details) ? details[0] : details;
+  if (!row || typeof row !== "object") return [];
+  return Object.keys(row).filter(k => !ACTIVITY_HIDDEN_FIELDS.has(k) && !ACTIVITY_LOG_SENSITIVE_FIELDS.has(k)).map(key => {
+    let value = row[key];
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "boolean") value = value ? "Yes" : "No";
+    else if (typeof value === "object") value = JSON.stringify(value);
+    else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+      const d = new Date(value);
+      value = isNaN(d.getTime()) ? value : d.toLocaleString();
+    }
+    const label = key.replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase());
+    return [label, String(value)];
+  }).filter(Boolean);
+}
 function activityScrub(body) {
   if (!body || typeof body !== "object") return body;
   const clean = (row) => {
@@ -2559,7 +2601,9 @@ function activityActor() {
 function logActivity(table, action, recordId, details) {
   if (!table || ACTIVITY_LOG_EXCLUDED_TABLES.has(table)) return;
   const verb = { insert:"Added", update:"Updated", upsert:"Saved", delete:"Deleted" }[action] || action;
-  const description = `${verb} ${activityLogLabel(table)}${recordId ? ` (#${String(recordId).slice(0,8)})` : ""}`;
+  const friendlyId = friendlyRecordId(table, recordId);
+  const name = activityRecordName(details);
+  const description = `${verb} ${activityLogLabel(table)}${name ? ` — ${name}` : ""}${friendlyId ? ` (${friendlyId})` : ""}`;
   const payload = Object.assign({
     table_name: table, action, record_id: recordId != null ? String(recordId) : null,
     description, details: details !== undefined ? JSON.stringify(activityScrub(details)) : null,
@@ -10501,27 +10545,31 @@ async function renderActivityLog(container) {
         isNaN(dt.getTime()) ? "" : dt.toLocaleDateString(),
         isNaN(dt.getTime()) ? "" : dt.toLocaleTimeString(),
         r.actor_name || "", r.actor_role || "", ACTIVITY_ACTION_LABELS[r.action] || r.action || "",
-        activityLogLabel(r.table_name), r.record_id || "", r.description || "",
+        activityLogLabel(r.table_name), friendlyRecordId(r.table_name, r.record_id), r.description || "",
       ].map(csvCell).join(","));
     });
     return lines.join("\r\n");
   }
   function showDetail(r) {
     const dt = new Date(r.created_at);
-    let detailsHtml = "";
+    let changedRows = [];
     if (r.details) {
-      try { detailsHtml = `<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--slate-tint);padding:10px;border-radius:8px;max-height:240px;overflow:auto;">${JSON.stringify(JSON.parse(r.details), null, 2)}</pre>`; }
-      catch(e) { detailsHtml = ""; }
+      try { changedRows = humanizeDetails(JSON.parse(r.details)); } catch(e) { changedRows = []; }
     }
+    const changedHtml = changedRows.length
+      ? `<div style="display:flex;flex-direction:column;gap:6px;background:var(--slate-tint);padding:10px;border-radius:8px;max-height:280px;overflow:auto;">
+          ${changedRows.map(([label,value]) => `<div style="font-size:13px;"><span style="color:var(--ink-soft);">${label}:</span> ${value}</div>`).join("")}
+        </div>`
+      : null;
     openViewModal("Activity Detail", [
       ["When", isNaN(dt.getTime()) ? r.created_at : dt.toLocaleString()],
       ["User", r.actor_name],
       ["Role", r.actor_role],
       ["Action", ACTIVITY_ACTION_LABELS[r.action] || r.action],
       ["Module", activityLogLabel(r.table_name)],
-      ["Record ID", r.record_id],
+      ["Record ID", friendlyRecordId(r.table_name, r.record_id)],
       ["Description", r.description],
-      ["Details", detailsHtml || null],
+      ["What changed", changedHtml],
     ]);
   }
 
