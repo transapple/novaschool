@@ -198,16 +198,18 @@
   /* ---------- CHAT WITH PARENT ---------- */
   .chat-icon-btn{border:none;background:var(--teal-tint);color:var(--teal-dark);width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:4px;}
   .chat-icon-btn:hover{background:var(--teal);color:#fff;}
-  .chat-modal{display:flex;flex-direction:column;max-height:82vh;}
-  .chat-log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:8px;padding:6px 2px;margin:10px 0;min-height:180px;max-height:50vh;}
+  .chat-modal{display:flex;flex-direction:column;max-height:82vh;overflow:hidden;}
+  .chat-log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:8px;padding:6px 2px;margin:10px 0;min-height:60px;max-height:50vh;}
   .chat-bubble{max-width:78%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.4;word-wrap:break-word;}
   .chat-bubble.chat-in{align-self:flex-start;background:var(--card-alt);color:var(--ink);border-bottom-left-radius:4px;}
   .chat-bubble.chat-out{align-self:flex-end;background:var(--teal);color:#fff;border-bottom-right-radius:4px;}
   .chat-bubble .chat-meta{font-size:10.5px;opacity:.7;margin-top:3px;}
-  .chat-input-row{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:10px;}
-  .chat-input-row textarea{flex:1;resize:none;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;background:#FAFBFD;outline:none;max-height:90px;}
+  .chat-input-row{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:10px;flex-shrink:0;}
+  .chat-input-row textarea{flex:1;min-width:0;display:block;resize:none;padding:11px 16px;border:1.5px solid var(--line);border-radius:23px;font-size:16px;line-height:1.35;background:#FAFBFD;outline:none;min-height:46px;max-height:140px;overflow-y:auto;}
   .chat-input-row textarea:focus{border-color:var(--teal);background:#fff;}
-  .chat-input-row .btn{flex-shrink:0;}
+  .chat-send-btn{flex-shrink:0;width:46px;height:46px;border-radius:50%;border:none;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .1s;}
+  .chat-send-btn:active{transform:scale(.94);}
+  .chat-send-btn svg{width:20px;height:20px;}
   .dc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .dc-title{font-size:14.5px;font-weight:800;color:var(--navy);}
   .dc-nav{background:var(--teal-tint);color:var(--teal-dark);border:none;width:30px;height:30px;border-radius:9px;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1;}
@@ -501,7 +503,7 @@
   html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
   input,textarea,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;-webkit-touch-callout:default;}
 
-  /* ================= AiO ai — Chat ================= */
+  /* ================= My School ai — Chat ================= */
   /* Re-themed to the app's real palette (--card/--card-alt/--line/--teal/--ink)
      instead of the standalone prototype's dark --panel/--accent variables. */
   .nav-item-ai{background:linear-gradient(135deg,var(--teal-tint),rgba(46,158,124,.14));border:1px solid rgba(46,158,124,.22);}
@@ -581,14 +583,14 @@
   .aio-quick-prompts.hide{display:none;}
   .aio-qp-chip{flex-shrink:0;background:var(--card-alt);border:1px solid var(--line);color:var(--ink-soft);border-radius:999px;padding:6px 12px;font-size:11.5px;white-space:nowrap;}
   .aio-qp-chip:hover{color:var(--teal-dark);border-color:var(--teal);}
-  .aio-input-row{display:flex;align-items:flex-end;gap:8px;background:var(--card-alt);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;}
+  .aio-input-row{display:flex;align-items:flex-end;gap:8px;background:var(--card-alt);border:1px solid var(--line);border-radius:26px;padding:6px 6px 6px 16px;}
   .aio-input-row:focus-within{border-color:var(--teal);}
-  .aio-input-row textarea{flex:1;background:none;border:none;outline:none;resize:none;color:var(--ink);font-family:inherit;font-size:13.5px;line-height:1.4;max-height:120px;padding:6px 0;}
+  .aio-input-row textarea{flex:1;background:none;border:none;outline:none;resize:none;color:var(--ink);font-family:inherit;font-size:16px;line-height:1.4;min-height:40px;max-height:160px;padding:9px 0;overflow-y:auto;min-width:0;}
   .aio-input-row textarea::placeholder{color:var(--ink-soft);}
-  .aio-send-btn{width:34px;height:34px;border-radius:9px;flex-shrink:0;border:none;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .15s ease;}
+  .aio-send-btn{width:40px;height:40px;border-radius:50%;flex-shrink:0;border:none;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .15s ease;}
   .aio-send-btn:hover{filter:brightness(1.06);}
   .aio-send-btn:disabled{opacity:.4;cursor:default;}
-  .aio-send-btn svg{width:15px;height:15px;}
+  .aio-send-btn svg{width:18px;height:18px;}
   .aio-disclaimer{margin-top:9px;font-size:10.5px;color:var(--ink-soft);text-align:center;}
 
   @media (max-width:900px){
@@ -1155,7 +1157,7 @@ async function advanceIdSeq(kind) {
 }
 function mastheadHtml() {
   const s = schoolSettings || {};
-  const name = s.school_name || "AiO School";
+  const name = s.school_name || "My School";
   const canEdit = hasFullAccess(profile);
   const isParent = profile?.role === "parent" || profile?.department === "parents";
   return `<div class="masthead"${canEdit ? ' id="mastheadClickable" style="cursor:pointer;" title="Edit school profile"' : ""}>
@@ -1169,7 +1171,7 @@ function mastheadHtml() {
 }
 function sidebarBrandHtml() {
   const s = schoolSettings || {};
-  const name = s.school_name || "AiO School";
+  const name = s.school_name || "My School";
   const sub = s.motto || "School Manager";
   const logoSrc = s.logo_url || APP_LOGO_DATA_URI;
   return `<div class="brand-badge"><img src="${logoSrc}" alt="${name} logo" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/></div>
@@ -1178,7 +1180,7 @@ function sidebarBrandHtml() {
 
 const NAV = [
   {id:"dashboard", label:"Home", icon:ic.home},
-  {id:"aio-ai", label:"AiO ai", icon:ic.sparkle},
+  {id:"aio-ai", label:"My School ai", icon:ic.sparkle},
   {id:"students", label:"Students", icon:ic.student},
   {id:"attendance", label:"Attendance", icon:ic.attendance},
   {id:"fees", label:"Fees", icon:ic.fees},
@@ -3528,7 +3530,7 @@ function authWireRules(passId, boxId) {
 // App logo, centered and circular, same treatment as the TransApple and Digital Students login cards.
 // Always the app's own logo (the school's uploaded logo only appears after login, in the masthead).
 function authLogoHtml(small) {
-  return `<img class="auth-logo${small ? " sm" : ""}" src="${APP_LOGO_DATA_URI}" alt="AiO School Manager" />`;
+  return `<img class="auth-logo${small ? " sm" : ""}" src="${APP_LOGO_DATA_URI}" alt="My School Manager" />`;
 }
 function renderAuth() {
   if (authView === "create") { renderAuthCreate(); return; }
@@ -3545,7 +3547,7 @@ function renderAuthLogin() {
   const remembered = !!saved.remember;
   authPaint(`
     ${authLogoHtml(false)}
-    <div class="auth-brand">AiO <span>School Manager</span></div>
+    <div class="auth-brand">My School <span>Manager</span></div>
     <h2 class="auth-title">Welcome back</h2>
     <div class="auth-sub">Log in to your school workspace.</div>
     <div id="authMsg">${notice ? `<div class="${notice.kind === "ok" ? "msg-ok" : "err"}">${authEsc(notice.text)}</div>` : ""}</div>
@@ -4314,7 +4316,7 @@ async function openChatThread(other, student, onClose) {
     <div class="chat-log" id="chatLog"><div class="center-loading">Loading…</div></div>
     <div class="chat-input-row">
       <textarea id="chatInput" rows="1"></textarea>
-      <button class="btn btn-primary" id="chatSendBtn">Send</button>
+      <button type="button" class="chat-send-btn" id="chatSendBtn" aria-label="Send message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
     </div>
   </div></div>`);
   document.body.appendChild(overlay);
@@ -4324,6 +4326,15 @@ async function openChatThread(other, student, onClose) {
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
   const log = overlay.querySelector("#chatLog");
+  const chatInputEl = overlay.querySelector("#chatInput");
+  const autoGrowChatInput = () => {
+    const wasAtBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    chatInputEl.style.height = "auto";
+    const border = chatInputEl.offsetHeight - chatInputEl.clientHeight;
+    chatInputEl.style.height = Math.min(chatInputEl.scrollHeight + border, 140) + "px";
+    if (wasAtBottom) log.scrollTop = log.scrollHeight;
+  };
+  chatInputEl.addEventListener("input", autoGrowChatInput);
   async function load() {
     try {
       const msgs = await dbSelect("private_messages", { parent_id:`eq.${parentId}`, recipient_id:`eq.${staffId}`, order:"created_at.asc", limit:"200" });
@@ -4349,6 +4360,8 @@ async function openChatThread(other, student, onClose) {
     const message = input.value.trim();
     if (!message) return;
     input.value = "";
+    autoGrowChatInput();
+    input.focus();
     await dbInsert("private_messages", {
       parent_id: parentId, parent_name: parentName,
       recipient_id: staffId, recipient_name: staffName,
@@ -5055,7 +5068,7 @@ async function openReceiptModal(payment, student) {
       </div>`}
       <div class="receipt-head">
         ${s.logo_url ? `<img src="${s.logo_url}" alt="" class="receipt-logo"/>` : ""}
-        <div class="receipt-school">${s.school_name || "AiO School"}</div>
+        <div class="receipt-school">${s.school_name || "My School"}</div>
         <div class="receipt-sub">${[s.address, s.phone, s.email].filter(Boolean).join(" · ")}</div>
         <div class="receipt-title">Official Payment Receipt</div>
       </div>
@@ -5102,7 +5115,7 @@ async function renderParentContact(container) {
   const s = schoolSettings || {};
   container.innerHTML = `
     <div class="card">
-      <h3 style="color:var(--navy);margin-bottom:12px;">${s.school_name || "AiO School"}</h3>
+      <h3 style="color:var(--navy);margin-bottom:12px;">${s.school_name || "My School"}</h3>
       ${s.address ? `<div class="view-row"><div class="vlabel">Address</div><div class="vvalue">${s.address}</div></div>` : ""}
       ${s.phone ? `<div class="view-row"><div class="vlabel">Phone</div><div class="vvalue">${s.phone}</div></div>` : ""}
       ${s.email ? `<div class="view-row"><div class="vlabel">Email</div><div class="vvalue">${s.email}</div></div>` : ""}
@@ -6833,7 +6846,7 @@ async function renderTeachers(container, opts={}) {
     </div>`);
     const view = () => openViewModal(t.full_name, [
       ["Photo", t.photo_url ? `<img src="${t.photo_url}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;"/>` : ""],
-      ["AiO Teacher ID", t.nova_teacher_id],
+      ["My School Teacher ID", t.nova_teacher_id],
       ["Staff no.", t.staff_no], ["Phone", t.phone], ["Email", t.email], ["Gender", t.gender], ["Grade", t.grade],
       ["Specialty", t.specialty], ["Qualification", t.qualification],
       ["Village", t.village], ["Subcounty", t.subcounty], ["District", t.district],
@@ -6866,7 +6879,7 @@ function openTeacherModal(container, t) {
       <div class="field"><label>Staff no.</label><input id="f_staffno" readonly value="${t?.staff_no || (isEdit ? '' : nextIdFor('teacher', initialGender))}"/></div>
       <div class="field"><label>Full name</label><input id="f_name" required value="${t?.full_name||''}"/></div>
     </div>
-    ${isEdit ? `<div class="field"><label>AiO Teacher ID</label><input readonly value="${t?.nova_teacher_id||'—'}" style="opacity:.75;"/></div>` : `
+    ${isEdit ? `<div class="field"><label>My School Teacher ID</label><input readonly value="${t?.nova_teacher_id||'—'}" style="opacity:.75;"/></div>` : `
     <div class="grid2">
       <div class="field"><label>National ID No. (NIN)</label><input id="f_nin"/></div>
       ${dobFieldHtml("f_dob", "")}
@@ -6955,7 +6968,7 @@ function openTeacherModal(container, t) {
       const matches = await searchTeacherIdentities(query);
       if (!matches.length) { matchBox.innerHTML = ""; return; }
       matchBox.innerHTML = `<div class="field" style="background:var(--amber-tint);border-radius:10px;padding:8px 10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--amber-dark);margin-bottom:4px;">Possible existing AiO ID — is this the same teacher?</div>
+        <div style="font-size:12px;font-weight:700;color:var(--amber-dark);margin-bottom:4px;">Possible existing My School ID — is this the same teacher?</div>
         ${matches.map(m=>`<div class="list-row" data-nova="${m.nova_id}" style="padding:6px 0;">
           <div class="list-main"><div class="list-title" style="font-size:13px;">${m.full_name} · ${m.nova_id}</div>
           <div class="list-sub">${m.schools || 'No other school on file'}</div></div>
@@ -6966,7 +6979,7 @@ function openTeacherModal(container, t) {
           linkedIdentity = matches[i];
           nameInput.value = matches[i].full_name;
           matchBox.innerHTML = `<div class="field" style="background:var(--teal-tint);border-radius:10px;padding:8px 10px;font-size:12.5px;color:var(--teal-dark);font-weight:700;">
-            Linked to existing AiO ID ${matches[i].nova_id} — no duplicate will be created.
+            Linked to existing My School ID ${matches[i].nova_id} — no duplicate will be created.
           </div>`;
         };
       });
@@ -6976,7 +6989,7 @@ function openTeacherModal(container, t) {
   }
 }
 
-const NOVA_TEACHER_IDENTITY_SQL = `-- AiO Teacher Identity: run once in Supabase -> SQL Editor, before TEACHER_PROFILE_SQL.
+const NOVA_TEACHER_IDENTITY_SQL = `-- My School Teacher Identity: run once in Supabase -> SQL Editor, before TEACHER_PROFILE_SQL.
 
 create table if not exists teacher_identities (
   id uuid primary key default gen_random_uuid(),
@@ -7007,9 +7020,9 @@ alter table teachers add column if not exists nova_teacher_id text;
 alter table teachers add column if not exists email text;
 create index if not exists teachers_identity_idx on teachers (teacher_identity_id);
 
--- The ONLY place an AiO ID is ever generated. Matches an existing person by
+-- The ONLY place a My School ID is ever generated. Matches an existing person by
 -- National ID first (most reliable), then by exact name + date of birth, and
--- reuses their AiO ID instead of creating a new one — this is what stops a
+-- reuses their My School ID instead of creating a new one — this is what stops a
 -- teacher getting a duplicate identity just for joining another school.
 drop function if exists find_or_create_teacher_identity(text, text, date, text, text);
 create function find_or_create_teacher_identity(
@@ -7047,7 +7060,7 @@ end;
 $find_or_create_teacher_identity$;
 grant execute on function find_or_create_teacher_identity(text,text,date,text,text) to anon, authenticated;
 
--- Powers the "check for an existing AiO ID" search in the Add Staff form —
+-- Powers the "check for an existing My School ID" search in the Add Staff form —
 -- matches by name, National ID, or phone across ALL schools, so an admin can
 -- catch a likely duplicate (e.g. a typo'd National ID) before saving.
 drop function if exists search_teacher_identities(text);
@@ -7070,7 +7083,7 @@ language sql stable as $search_teacher_identities$
 $search_teacher_identities$;
 grant execute on function search_teacher_identities(text) to anon, authenticated;
 
--- One-time migration: every existing Staff row predates AiO IDs, so give
+-- One-time migration: every existing Staff row predates My School IDs, so give
 -- each one its own identity. Each becomes its own person for now — there's
 -- no reliable field on file yet (no National ID captured historically) to
 -- safely tell whether two existing rows across schools are the same human,
@@ -7427,7 +7440,7 @@ async function renderTeacherProfileOverview(body, container, teacher) {
   `;
   const personalCard = document.getElementById("tpPersonalCard");
   const personalRows = [
-    ["AiO Teacher ID", teacher.nova_teacher_id],
+    ["My School Teacher ID", teacher.nova_teacher_id],
     ["Phone", teacher.phone], ["Email", teacher.email],
     ["National ID No.", identity?.national_id_no], ["Date of birth", identity?.date_of_birth],
   ].filter(([,v]) => v !== undefined && v !== null && v !== "");
@@ -7456,7 +7469,7 @@ async function renderTeacherProfileOverview(body, container, teacher) {
 
 function openPersonalDetailsModal(body, container, teacher, identity) {
   openModal("Edit personal info", `
-    <div class="view-row" style="margin-bottom:6px;"><div class="vlabel">AiO Teacher ID</div><div class="vvalue">${teacher.nova_teacher_id||'—'}</div></div>
+    <div class="view-row" style="margin-bottom:6px;"><div class="vlabel">My School Teacher ID</div><div class="vvalue">${teacher.nova_teacher_id||'—'}</div></div>
     <div class="grid2">
       <div class="field"><label>Phone</label><input id="f_phone" value="${teacher.phone||''}"/></div>
       <div class="field"><label>Email</label><input id="f_email" type="email" value="${teacher.email||''}"/></div>
@@ -9000,7 +9013,7 @@ function reportCardHeaderHtml(s, tplColor, examLbl) {
     <div style="border:2px solid ${tplColor};border-radius:10px;padding:16px;">
     <div style="text-align:center;border-bottom:3px solid ${tplColor};padding-bottom:10px;margin-bottom:14px;">
       ${s.logo_url ? `<img src="${s.logo_url}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:50%;margin-bottom:6px;"/>` : ""}
-      <h2 style="color:${tplColor};margin:0;letter-spacing:.5px;">${(s.school_name || "AiO School").toUpperCase()}</h2>
+      <h2 style="color:${tplColor};margin:0;letter-spacing:.5px;">${(s.school_name || "My School").toUpperCase()}</h2>
       <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
         ${[s.address, s.phone ? ('Tel: '+s.phone) : '', s.email].filter(Boolean).join(' · ')}
       </div>
@@ -9188,7 +9201,7 @@ function aioRenderQuickPrompts() {
 
 function aioRenderHistory() {
   if (!aioConversations.length) {
-    aioHistoryListEl.innerHTML = `<div class="aio-history-empty">No conversations yet. Start by asking AiO ai a question.</div>`;
+    aioHistoryListEl.innerHTML = `<div class="aio-history-empty">No conversations yet. Start by asking My School ai a question.</div>`;
     return;
   }
   aioHistoryListEl.innerHTML = aioConversations.map(c => {
@@ -9208,7 +9221,7 @@ function aioRenderEmptyState() {
   aioMessagesEl.innerHTML = `
     <div class="aio-empty">
       <div class="aio-avatar">${ic.sparkle}</div>
-      <h3>Ask AiO ai anything</h3>
+      <h3>Ask My School ai anything</h3>
       <p>Hello, ${aioEscapeHtml(schoolName)}!</p>
       <div class="aio-suggestions">
         ${AIO_SUGGESTIONS.map(q => `
@@ -9282,7 +9295,7 @@ function aioShowErrorBubble(forQuery, errorMessage) {
     <div class="aio-msg-mark">${ic.sparkle}</div>
     <div class="aio-msg-bubble">
       <div class="aio-error-head">${AIO_WARN_ICON}Couldn't get a response</div>
-      <div>${aioEscapeHtml(errorMessage || "AiO ai had trouble answering just now. Give it another try.")}</div>
+      <div>${aioEscapeHtml(errorMessage || "My School ai had trouble answering just now. Give it another try.")}</div>
       <button type="button" class="aio-retry-btn">${AIO_RETRY_ICON}Retry</button>
     </div>`;
   elx.querySelector(".aio-retry-btn").addEventListener("click", () => {
@@ -9309,7 +9322,7 @@ async function aioLoadConversationList() {
       messages: null
     }));
   } catch (e) {
-    console.warn("Could not load AiO ai conversation history:", e && e.message ? e.message : e);
+    console.warn("Could not load My School ai conversation history:", e && e.message ? e.message : e);
     aioConversations = [];
   }
   aioRenderHistory();
@@ -9361,7 +9374,7 @@ async function aioAskBackend(message, conversationId) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data && data.message ? data.message : "AiO ai is temporarily unavailable.");
+    throw new Error(data && data.message ? data.message : "My School ai is temporarily unavailable.");
   }
   return data; // { conversation_id, reply }
 }
@@ -9381,7 +9394,7 @@ async function aioAnswerQuery(conv, text) {
     aioRenderHistory();
   } catch (err) {
     aioHideThinking();
-    console.warn("AiO ai answer failed:", err && err.message ? err.message : err);
+    console.warn("My School ai answer failed:", err && err.message ? err.message : err);
     aioShowErrorBubble(text, err && err.message);
   } finally {
     aioBusy = false;
@@ -9430,7 +9443,7 @@ function aioWireEvents() {
   });
   aioInput.addEventListener("input", () => {
     aioInput.style.height = "auto";
-    aioInput.style.height = Math.min(aioInput.scrollHeight, 120) + "px";
+    aioInput.style.height = Math.min(aioInput.scrollHeight, 160) + "px";
   });
   aioMessagesEl.addEventListener("click", (e) => {
     const chip = e.target.closest("[data-aio-prompt]");
@@ -9512,7 +9525,7 @@ async function renderAioAi(container) {
               <textarea id="aioInput" rows="1"></textarea>
               <button type="submit" class="aio-send-btn" id="aioSendBtn" aria-label="Send message">${AIO_SEND_ICON}</button>
             </form>
-            <div class="aio-disclaimer">AiO ai can make mistakes. Please verify important information.</div>
+            <div class="aio-disclaimer">My School ai can make mistakes. Please verify important information.</div>
           </div>
         </div>
       </div>
@@ -10324,7 +10337,7 @@ async function renderSchoolSettingsPanel(container) {
           <div class="settings-card-head"><div class="ic" style="background:var(--teal-tint);color:var(--teal-dark);">${ic.settings}</div><div><h3 style="color:var(--navy);">Brand &amp; identity</h3><p>Your logo, name and motto appear in the header.</p></div></div>
           <div class="row" style="align-items:flex-start;gap:16px;margin-bottom:16px;">
             <div class="logo-upload" id="logoUpload" title="Tap to change logo">
-              ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"AiO School")}</span>`}
+              ${logoDataUrl ? `<img id="logoPreviewImg" src="${logoDataUrl}"/>` : `<span id="logoPreviewImg">${initials(s.school_name||"My School")}</span>`}
               <div class="cam">${ic.camera} Change</div>
             </div>
             <input type="file" id="logoFile" accept="image/*" style="display:none;"/>
@@ -10335,14 +10348,14 @@ async function renderSchoolSettingsPanel(container) {
           </div>
           <div class="field" style="margin-bottom:6px;"><label>Live header preview</label></div>
           <div class="header-preview"><div class="hp-inner" id="hpInner">
-            <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"AiO School")}</div>
-            <div><div class="hp-name" id="hpName">${s.school_name||"AiO School"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
+            <div class="hp-logo" id="hpLogo">${logoDataUrl ? `<img src="${logoDataUrl}"/>` : initials(s.school_name||"My School")}</div>
+            <div><div class="hp-name" id="hpName">${s.school_name||"My School"}</div>${s.motto ? `<div class="hp-motto" id="hpMotto">${s.motto}</div>` : `<div class="hp-motto" id="hpMotto" style="display:none;"></div>`}</div>
           </div></div>
         </div>
         ${saveFieldsButtonHtml()}
       `;
       function updatePreview() {
-        const name = val(body,"f_sname") || "AiO School";
+        const name = val(body,"f_sname") || "My School";
         const motto = val(body,"f_motto");
         document.getElementById("hpName").textContent = name;
         const hpLogo = document.getElementById("hpLogo");
