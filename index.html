@@ -753,6 +753,385 @@
 </script>
 
 <script>
+/* NOVA offline service (Stage 1: standalone core, not yet wired into index.html)
+
+   What it does
+   - Draft queue: every write made while offline is stored on the device (IndexedDB) as a draft.
+   - Read cache: the last real Supabase result of each read is kept, so pages still open offline.
+   - Overlay: applies pending drafts on top of real rows, for the "Draft view". The normal view
+     always shows real Supabase data only.
+   - Sync engine: when back online, drafts are sent to Supabase in the order they were made,
+     using an executor supplied by the app (so auth, school scoping and audit logging stay in
+     the app's existing data layer).
+
+   Never destructive: a failed draft is kept and marked "failed" (never silently dropped), and
+   nothing is deleted from Supabase unless the user's own delete draft says so. */
+(function (global) {
+  "use strict";
+
+  var DB_NAME = "nova-offline";
+  var DB_VER = 1;
+  // Tables whose id is assigned by the database (identity). Offline inserts become upserts on
+  // the natural unique key, which also makes a retried sync safe.
+  var UPSERT_KEYS = { attendance: "student_id,date", staff_attendance: "teacher_id,date" };
+
+  var dbp = null;
+  var listeners = [];
+  var syncing = false;
+  var cfg = { exec: null, schoolId: function () { return null; } };
+  var timer = null;
+
+  // ---------- IndexedDB helpers ----------
+  function open() {
+    if (dbp) return dbp;
+    dbp = new Promise(function (resolve, reject) {
+      if (!global.indexedDB) { reject(new Error("IndexedDB not available")); return; }
+      var r = global.indexedDB.open(DB_NAME, DB_VER);
+      r.onupgradeneeded = function () {
+        var db = r.result;
+        if (!db.objectStoreNames.contains("drafts")) {
+          var s = db.createObjectStore("drafts", { keyPath: "seq", autoIncrement: true });
+          s.createIndex("schoolId", "schoolId", { unique: false });
+        }
+        if (!db.objectStoreNames.contains("readcache")) db.createObjectStore("readcache", { keyPath: "key" });
+      };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+    dbp.catch(function () { dbp = null; });
+    return dbp;
+  }
+  function run(store, mode, fn) {
+    return open().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var t = db.transaction(store, mode);
+        var out;
+        var req = fn(t.objectStore(store));
+        if (req && typeof req === "object" && "onsuccess" in req) req.onsuccess = function () { out = req.result; };
+        t.oncomplete = function () { resolve(out); };
+        t.onerror = t.onabort = function () { reject(t.error || new Error("IndexedDB error")); };
+      });
+    });
+  }
+
+  // ---------- small utils ----------
+  function uuid() {
+    if (global.crypto && global.crypto.randomUUID) return global.crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      return (c === "x" ? r : (r & 3) | 8).toString(16);
+    });
+  }
+  function isOnline() { return typeof navigator === "undefined" || navigator.onLine !== false; }
+  function isNetworkError(e) {
+    if (!isOnline()) return true;
+    var m = String((e && e.message) || e || "");
+    return /couldn'?t connect|failed to fetch|networkerror|network request|load failed|timeout|abort/i.test(m);
+  }
+  function rowsOf(body) { return Array.isArray(body) ? body : (body ? [body] : []); }
+  function keyFields(table) { return UPSERT_KEYS[table] ? UPSERT_KEYS[table].split(",") : null; }
+  function sameRow(table, a, b) {
+    if (a.id !== undefined && b.id !== undefined && a.id !== null) return String(a.id) === String(b.id);
+    var kf = keyFields(table);
+    return !!kf && kf.every(function (k) { return a[k] !== undefined && String(a[k]) === String(b[k]); });
+  }
+  function matchesFilter(row, filter) {
+    return Object.keys(filter || {}).every(function (k) { return String(row[k]) === String(filter[k]); });
+  }
+
+  // ---------- events ----------
+  function subscribe(fn) {
+    listeners.push(fn);
+    return function () { listeners = listeners.filter(function (f) { return f !== fn; }); };
+  }
+  function notify() {
+    getStatus().then(function (s) {
+      listeners.slice().forEach(function (f) { try { f(s); } catch (e) { /* listener errors never break sync */ } });
+    }).catch(function () {});
+  }
+
+  // ---------- draft queue ----------
+  function listDrafts(schoolId, table) {
+    return run("drafts", "readonly", function (s) { return s.getAll(); }).then(function (all) {
+      return (all || []).filter(function (d) {
+        return (!schoolId || d.schoolId === schoolId) && (!table || d.table === table);
+      }).sort(function (a, b) { return a.seq - b.seq; });
+    });
+  }
+  function putDraft(d) { return run("drafts", "readwrite", function (s) { return s.put(d); }); }
+  function removeDraft(seq) { return run("drafts", "readwrite", function (s) { return s.delete(seq); }); }
+
+  // queueWrite({schoolId, table, op: insert|update|upsert|delete|deleteWhere, id, body, filter, onConflict, label})
+  // Returns the stored draft. For inserts the returned draft.body carries the id created on the device.
+  function queueWrite(w) {
+    var op = w.op, body = w.body, onConflict = w.onConflict, recordId = w.id != null ? String(w.id) : null;
+    if (op === "insert") {
+      if (UPSERT_KEYS[w.table]) { op = "upsert"; onConflict = UPSERT_KEYS[w.table]; }
+      else {
+        body = Array.isArray(body)
+          ? body.map(function (r) { return Object.assign({ id: uuid() }, r); })
+          : Object.assign({ id: uuid() }, body);
+        if (!Array.isArray(body)) recordId = String(body.id);
+      }
+    } else if (op === "upsert" && body && !Array.isArray(body) && body.id != null) {
+      recordId = String(body.id);
+    }
+    return listDrafts(w.schoolId, w.table).then(function (existing) {
+      var pendingSame = recordId && existing.filter(function (d) {
+        return d.status === "pending" && d.recordId === recordId;
+      });
+      var last = pendingSame && pendingSame[pendingSame.length - 1];
+      // Merge an edit into an earlier not-yet-synced draft of the same record.
+      if (op === "update" && last && last.op !== "delete" && !Array.isArray(last.body)) {
+        last.body = Object.assign({}, last.body, body);
+        return putDraft(last).then(function () { notify(); return last; });
+      }
+      // Deleting a record that only ever existed as a draft: it never reached Supabase, so drop it.
+      if (op === "delete" && last && last.op === "insert") {
+        return Promise.all(pendingSame.map(function (d) { return removeDraft(d.seq); })).then(function () {
+          notify(); return null;
+        });
+      }
+      var draft = {
+        schoolId: w.schoolId, table: w.table, op: op, recordId: recordId, body: body || null,
+        filter: w.filter || null, onConflict: onConflict || null, label: w.label || null,
+        status: "pending", error: null, createdAt: new Date().toISOString()
+      };
+      return run("drafts", "readwrite", function (s) { return s.add(draft); }).then(function (seq) {
+        draft.seq = seq; notify(); return draft;
+      });
+    });
+  }
+
+  // ---------- read cache + overlay ----------
+  // readThrough: real Supabase result when reachable (and cached); last cached result when offline.
+  function readThrough(schoolId, key, fetcher) {
+    var ck = (schoolId || "") + "|" + key;
+    return Promise.resolve().then(fetcher).then(function (data) {
+      run("readcache", "readwrite", function (s) { return s.put({ key: ck, data: data, ts: Date.now() }); }).catch(function () {});
+      return { data: data, stale: false, ts: Date.now() };
+    }, function (err) {
+      if (!isNetworkError(err)) throw err;
+      return run("readcache", "readonly", function (s) { return s.get(ck); }).then(function (hit) {
+        if (!hit) throw err;
+        return { data: hit.data, stale: true, ts: hit.ts };
+      });
+    });
+  }
+
+  // overlay: real rows + pending drafts = what the Draft view shows. Input rows are not mutated.
+  function overlay(schoolId, table, rows) {
+    return listDrafts(schoolId, table).then(function (drafts) {
+      var out = (rows || []).map(function (r) { return Object.assign({}, r); });
+      drafts.forEach(function (d) {
+        if (d.op === "insert" || d.op === "upsert") {
+          rowsOf(d.body).forEach(function (nr) {
+            var i = out.findIndex(function (r) { return sameRow(d.table, r, nr); });
+            if (i >= 0) out[i] = Object.assign({}, out[i], nr, { _draft: true });
+            else out.push(Object.assign({}, nr, { _draft: true }));
+          });
+        } else if (d.op === "update") {
+          var i2 = out.findIndex(function (r) { return String(r.id) === d.recordId; });
+          if (i2 >= 0) {
+            var merged = Object.assign({}, out[i2], d.body, { _draft: true });
+            if (merged.deleted_at) out.splice(i2, 1); else out[i2] = merged;
+          }
+        } else if (d.op === "delete") {
+          out = out.filter(function (r) { return String(r.id) !== d.recordId; });
+        } else if (d.op === "deleteWhere") {
+          out = out.filter(function (r) { return !matchesFilter(r, d.filter); });
+        }
+      });
+      return out;
+    });
+  }
+
+  // ---------- sync engine ----------
+  function sync() {
+    if (syncing || !cfg.exec || !isOnline()) return Promise.resolve({ skipped: true });
+    syncing = true; notify();
+    var summary = { done: 0, failed: 0, remaining: 0, stoppedOffline: false };
+    var blocked = {};
+    return listDrafts(cfg.schoolId(), null).then(function (all) {
+      var queue = all.filter(function (d) { return d.status === "pending"; });
+      var chain = Promise.resolve();
+      queue.forEach(function (d) {
+        chain = chain.then(function () {
+          if (summary.stoppedOffline) return;
+          var bk = d.table + ":" + (d.recordId || "");
+          if (d.recordId && blocked[bk]) return; // an earlier draft of this record failed; keep order
+          return Promise.resolve().then(function () { return cfg.exec(d); }).then(function () {
+            summary.done++;
+            return removeDraft(d.seq);
+          }, function (err) {
+            var msg = String((err && err.message) || err);
+            if (isNetworkError(err)) { summary.stoppedOffline = true; return; }
+            // A retried insert that already landed is a success, not an error.
+            if ((d.op === "insert" || d.op === "upsert") && /duplicate key|already exists/i.test(msg)) {
+              summary.done++; return removeDraft(d.seq);
+            }
+            summary.failed++;
+            if (d.recordId) blocked[bk] = true;
+            d.status = "failed"; d.error = msg;
+            return putDraft(d);
+          });
+        });
+      });
+      return chain;
+    }).then(function () {
+      return listDrafts(cfg.schoolId(), null);
+    }).then(function (left) {
+      summary.remaining = left.filter(function (d) { return d.status === "pending"; }).length;
+      syncing = false; notify(); return summary;
+    }, function (e) { syncing = false; notify(); throw e; });
+  }
+
+  function retry(seq) {
+    return run("drafts", "readonly", function (s) { return s.get(seq); }).then(function (d) {
+      if (!d) return null;
+      d.status = "pending"; d.error = null;
+      return putDraft(d).then(function () { notify(); return sync(); });
+    });
+  }
+  function discard(seq) { return removeDraft(seq).then(notify); }
+
+  function getStatus() {
+    return listDrafts(cfg.schoolId(), null).then(function (all) {
+      return {
+        online: isOnline(), syncing: syncing,
+        pending: all.filter(function (d) { return d.status === "pending"; }).length,
+        failed: all.filter(function (d) { return d.status === "failed"; }).length
+      };
+    });
+  }
+
+  // start({ exec(draft) -> Promise, schoolId() -> uuid })
+  function start(opts) {
+    cfg.exec = opts.exec;
+    if (opts.schoolId) cfg.schoolId = opts.schoolId;
+    if (global.addEventListener) {
+      global.addEventListener("online", function () { notify(); sync().catch(function () {}); });
+      global.addEventListener("offline", notify);
+    }
+    if (!timer) timer = setInterval(function () { if (isOnline()) sync().catch(function () {}); }, 30000);
+    return open().then(function () { notify(); return sync().catch(function () {}); });
+  }
+
+  // ---------- offline sign-in (Stage 3) ----------
+  // After a successful ONLINE sign-in with "Remember me" ticked, the device keeps a salted PBKDF2
+  // hash of the password (never the password itself) plus a snapshot of the profile and school.
+  // Offline, the password typed is hashed the same way and compared; nothing is skipped or
+  // trusted without it. Access lasts 14 days from the last time the server confirmed the user.
+  // The server still decides everything when drafts upload.
+  var AUTH_DB = "nova-offline-auth", AUTH_STORE = "creds", AUTH_ITER = 250000;
+  var OFFLINE_MAX_MS = 14 * 24 * 3600 * 1000, MAX_FAILS = 5, LOCK_MS = 5 * 60 * 1000;
+  var MSG_NOCRED = "No connection. Sign in online once on this device with \"Remember me\" ticked to use the app offline.";
+  var MSG_EXPIRED = "Offline access has expired. Connect to the internet and sign in again.";
+  var adbp = null;
+  function authOpen() {
+    if (adbp) return adbp;
+    adbp = new Promise(function (resolve, reject) {
+      if (!global.indexedDB) { reject(new Error("IndexedDB not available")); return; }
+      var r = global.indexedDB.open(AUTH_DB, 1);
+      r.onupgradeneeded = function () {
+        if (!r.result.objectStoreNames.contains(AUTH_STORE)) r.result.createObjectStore(AUTH_STORE, { keyPath: "username" });
+      };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+    adbp.catch(function () { adbp = null; });
+    return adbp;
+  }
+  function arun(mode, fn) {
+    return authOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var t = db.transaction(AUTH_STORE, mode), out;
+        var req = fn(t.objectStore(AUTH_STORE));
+        if (req && typeof req === "object" && "onsuccess" in req) req.onsuccess = function () { out = req.result; };
+        t.oncomplete = function () { resolve(out); };
+        t.onerror = t.onabort = function () { reject(t.error || new Error("IndexedDB error")); };
+      });
+    });
+  }
+  function ukey(u) { return String(u || "").trim().toLowerCase(); }
+  function b64(buf) { var b = new Uint8Array(buf), s = ""; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+  function unb64(str) { var s = atob(str), b = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+  function canHash() { return !!(global.crypto && global.crypto.subtle && global.TextEncoder); }
+  function derive(password, salt, iter) {
+    return global.crypto.subtle.importKey("raw", new TextEncoder().encode(String(password)), "PBKDF2", false, ["deriveBits"])
+      .then(function (k) { return global.crypto.subtle.deriveBits({ name: "PBKDF2", salt: salt, iterations: iter, hash: "SHA-256" }, k, 256); });
+  }
+  function sameBytes(a, b) {
+    if (a.length !== b.length) return false;
+    var d = 0; for (var i = 0; i < a.length; i++) d |= a[i] ^ b[i];
+    return d === 0;
+  }
+  function cleanSnap(snap) {
+    var p = Object.assign({}, (snap && snap.profile) || {});
+    delete p.pin; delete p.password_hash; delete p.session_token; // never kept on the device
+    return { profile: p, school: (snap && snap.school) || null, settings: (snap && snap.settings) || null };
+  }
+  function saveCredential(username, password, snap) {
+    if (!canHash() || !password) return Promise.resolve(false);
+    var salt = global.crypto.getRandomValues(new Uint8Array(16)), c = cleanSnap(snap);
+    return derive(password, salt, AUTH_ITER).then(function (bits) {
+      return arun("readwrite", function (s) {
+        return s.put({ username: ukey(username), salt: b64(salt), hash: b64(bits), iter: AUTH_ITER,
+          profile: c.profile, school: c.school, settings: c.settings, verifiedAt: Date.now(), fails: 0, lockUntil: 0 });
+      });
+    }).then(function () { return true; });
+  }
+  // The server just confirmed this user (session restored): refresh the snapshot and the 14-day window.
+  function touch(username, snap) {
+    var key = ukey(username), c = cleanSnap(snap);
+    return arun("readonly", function (s) { return s.get(key); }).then(function (rec) {
+      rec = rec || { username: key, salt: null, hash: null, iter: AUTH_ITER, fails: 0, lockUntil: 0 };
+      rec.profile = c.profile; rec.school = c.school || rec.school;
+      rec.settings = c.settings || rec.settings; rec.verifiedAt = Date.now();
+      return arun("readwrite", function (s) { return s.put(rec); });
+    });
+  }
+  function getSnapshot(username) {
+    return arun("readonly", function (s) { return s.get(ukey(username)); }).then(function (rec) {
+      if (!rec) return null;
+      rec.fresh = (Date.now() - rec.verifiedAt) < OFFLINE_MAX_MS;
+      return rec;
+    });
+  }
+  function removeCredential(username) { return arun("readwrite", function (s) { return s.delete(ukey(username)); }); }
+  function verify(username, password) {
+    if (!canHash()) return Promise.resolve({ ok: false, message: MSG_NOCRED });
+    return arun("readonly", function (s) { return s.get(ukey(username)); }).then(function (rec) {
+      if (!rec || !rec.hash) return { ok: false, message: MSG_NOCRED };
+      if (rec.lockUntil && rec.lockUntil > Date.now()) {
+        return { ok: false, message: "Too many wrong attempts. Try again in " + Math.ceil((rec.lockUntil - Date.now()) / 60000) + " minute(s)." };
+      }
+      return derive(password, unb64(rec.salt), rec.iter).then(function (bits) {
+        if (!sameBytes(new Uint8Array(bits), unb64(rec.hash))) {
+          rec.fails = (rec.fails || 0) + 1;
+          if (rec.fails >= MAX_FAILS) { rec.lockUntil = Date.now() + LOCK_MS; rec.fails = 0; }
+          return arun("readwrite", function (s) { return s.put(rec); }).then(function () {
+            return { ok: false, message: "Incorrect username or password." };
+          });
+        }
+        if ((Date.now() - rec.verifiedAt) > OFFLINE_MAX_MS) return { ok: false, message: MSG_EXPIRED };
+        if (rec.fails || rec.lockUntil) { rec.fails = 0; rec.lockUntil = 0; arun("readwrite", function (s) { return s.put(rec); }).catch(function () {}); }
+        return { ok: true, record: rec };
+      });
+    });
+  }
+  var authApi = { saveCredential: saveCredential, touch: touch, getSnapshot: getSnapshot, verify: verify, remove: removeCredential, MAX_DAYS: 14 };
+
+  global.NovaOffline = {
+    auth: authApi,
+    start: start, queueWrite: queueWrite, readThrough: readThrough, overlay: overlay,
+    listDrafts: listDrafts, sync: sync, retry: retry, discard: discard,
+    getStatus: getStatus, subscribe: subscribe, isOnline: isOnline, isNetworkError: isNetworkError,
+    UPSERT_KEYS: UPSERT_KEYS
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
+<script>
 function isEditableTarget(t) {
   return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable));
 }
@@ -1225,6 +1604,7 @@ async function loadCurrentSchool() {
     const rows = await sb(`/rest/v1/rpc/get_my_school`, { method:"POST", body: JSON.stringify({}) });
     CURRENT_SCHOOL = (rows && rows[0]) || null;
   } catch (e) {
+    if (CURRENT_SCHOOL && window.NovaOffline && NovaOffline.isNetworkError(e)) return; // offline: keep the last known school
     CURRENT_SCHOOL = null;
   }
 }
@@ -2618,6 +2998,7 @@ function scopedBody(table, body) {
 }
 async function dbSelect(table, params={}) {
   const path = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, params)))}`;
+  if (offlineReadOn(table)) return await offlineRead(table, path, params);
   return await sb(path);
 }
 async function _dbInsert(table, body) {
@@ -2637,6 +3018,7 @@ async function _dbDelete(table, id) {
 async function dbSelectActive(table, params={}) {
   const filteredParams = Object.assign({ deleted_at:"is.null" }, params);
   const filteredPath = `/rest/v1/${table}?${qs(scopedParams(table, Object.assign({select:"*"}, filteredParams)))}`;
+  if (offlineReadOn(table)) return await offlineRead(table, filteredPath, filteredParams);
   return await sb(filteredPath);
 }
 function deleteWhereParams(table, filter) {
@@ -2795,30 +3177,280 @@ function broadcastActivityNotification(table, description) {
   }).catch(e => console.error("notification broadcast failed", e));
 }
 async function dbInsert(table, body) {
+  if (offlineOn(table)) {
+    body = offlineAssignIds(table, body); // id fixed before the first attempt, so a retry can never duplicate
+    if (NovaOffline.isOnline()) {
+      try {
+        const r = await _dbInsert(table, body);
+        logActivity(table, "insert", r && r[0] && r[0].id, body);
+        return r;
+      } catch (e) { if (!NovaOffline.isNetworkError(e)) throw e; }
+    }
+    return await offlineQueue(table, { op: "insert", body });
+  }
   const result = await _dbInsert(table, body);
   logActivity(table, "insert", result && result[0] && result[0].id, body);
   return result;
 }
 async function dbUpdate(table, id, body) {
+  if (offlineOn(table)) {
+    if (NovaOffline.isOnline()) {
+      try {
+        const r = await _dbUpdate(table, id, body);
+        logActivity(table, "update", id, body);
+        return r;
+      } catch (e) { if (!NovaOffline.isNetworkError(e)) throw e; }
+    }
+    return await offlineQueue(table, { op: "update", id, body });
+  }
   const result = await _dbUpdate(table, id, body);
   logActivity(table, "update", id, body);
   return result;
 }
 async function dbUpsert(table, body, onConflict) {
+  if (offlineOn(table)) {
+    if (NovaOffline.isOnline()) {
+      try {
+        const r = await _dbUpsert(table, body, onConflict);
+        logActivity(table, "upsert", Array.isArray(body) ? undefined : (body && body.id), body);
+        return r;
+      } catch (e) { if (!NovaOffline.isNetworkError(e)) throw e; }
+    }
+    return await offlineQueue(table, { op: "upsert", body, onConflict });
+  }
   const result = await _dbUpsert(table, body, onConflict);
   const rid = Array.isArray(body) ? undefined : (body && body.id);
   logActivity(table, "upsert", rid, body);
   return result;
 }
 async function dbDelete(table, id) {
+  if (offlineOn(table)) {
+    if (NovaOffline.isOnline()) {
+      try {
+        const r = await _dbDelete(table, id);
+        logActivity(table, "delete", id, undefined);
+        return r;
+      } catch (e) { if (!NovaOffline.isNetworkError(e)) throw e; }
+    }
+    return await offlineQueue(table, { op: "delete", id });
+  }
   const result = await _dbDelete(table, id);
   logActivity(table, "delete", id, undefined);
   return result;
 }
 async function dbDeleteWhere(table, filter) {
+  if (offlineOn(table)) {
+    if (NovaOffline.isOnline()) {
+      try {
+        const r = await _dbDeleteWhere(table, filter);
+        logActivity(table, "delete", undefined, filter);
+        return r;
+      } catch (e) { if (!NovaOffline.isNetworkError(e)) throw e; }
+    }
+    return await offlineQueue(table, { op: "deleteWhere", filter });
+  }
   const result = await _dbDeleteWhere(table, filter);
   logActivity(table, "delete", undefined, filter);
   return result;
+}
+
+// ===================== OFFLINE SERVICE + DRAFTS (glue for offline.js) =====================
+// Writes to the tables below never fail just because there is no signal: they are saved on the
+// device as drafts (offline.js) and uploaded to Supabase, in order, when the connection returns.
+// The normal view always shows real Supabase data (or the last saved copy while offline); the
+// "Draft view" (toggle in the sync pill) shows the same data with your pending changes on top.
+// To bring another page offline, add its table name here. Not included on purpose: `profiles`
+// (accounts are created through secured RPCs with password hashing).
+const OFFLINE_TABLES = new Set(["students", "attendance", "staff_attendance", "fee_payments", "fee_structures", "teachers"]);
+const READ_CACHE_TABLES = new Set(["school_settings", "classes", "subjects", "class_subjects", "terms", "academic_years", "exam_types", "grades"]); // saved for reading only; their writes still need a connection
+function offlineReadOn(table) { return offlineOn(table) || !!(window.NovaOffline && CURRENT_SCHOOL_ID && READ_CACHE_TABLES.has(table)); }
+function offlineOn(table) { return !!(window.NovaOffline && CURRENT_SCHOOL_ID && OFFLINE_TABLES.has(table)); }
+function draftViewOn() { try { return sessionStorage.getItem("novaDraftView") === "1"; } catch (e) { return false; } }
+function offlineAssignIds(table, body) {
+  if (window.NovaOffline.UPSERT_KEYS[table]) return body; // identity-id tables are saved as upserts on their natural key
+  const withId = (r) => (r && r.id != null) ? r : Object.assign({ id: crypto.randomUUID() }, r);
+  return Array.isArray(body) ? body.map(withId) : withId(body);
+}
+async function offlineQueue(table, w) {
+  const d = await NovaOffline.queueWrite(Object.assign({ schoolId: CURRENT_SCHOOL_ID, table, label: activityLogLabel(table) }, w));
+  toast("Saved as draft. It will upload when you're back online.", false);
+  if (!d || !d.body) return [];
+  const rows = Array.isArray(d.body) ? d.body : [d.body];
+  return rows.map((r) => Object.assign({}, r, { _draft: true }));
+}
+async function offlineRead(table, path, params) {
+  const res = await NovaOffline.readThrough(CURRENT_SCHOOL_ID, path, () => {
+    if (!NovaOffline.isOnline()) throw new Error("Couldn't connect right now.");
+    return sb(path);
+  });
+  let rows = res.data;
+  if (draftViewOn() && OFFLINE_TABLES.has(table) && Array.isArray(rows)) {
+    rows = await NovaOffline.overlay(CURRENT_SCHOOL_ID, table, rows);
+    // rows added by drafts never went through the server's filters, so apply the simple ones here
+    const tests = Object.entries(params || {}).filter(([k, v]) => k !== "school_id" && typeof v === "string" && /^(eq\.|is\.null$)/.test(v));
+    if (tests.length) rows = rows.filter((r) => !r._draft || tests.every(([k, v]) => v === "is.null" ? (r[k] == null) : String(r[k]) === v.slice(3)));
+  }
+  return rows;
+}
+async function novaOfflineExec(d) {
+  if (!SESSION_TOKEN || OFFLINE_SESSION || d.schoolId !== CURRENT_SCHOOL_ID) throw new Error("Couldn't connect right now. Sign in to upload your drafts."); // keeps the draft pending
+  const t = d.table;
+  if (d.op === "insert") { const r = await _dbInsert(t, d.body); logActivity(t, "insert", d.recordId, d.body); return r; }
+  if (d.op === "update") { const r = await _dbUpdate(t, d.recordId, d.body); logActivity(t, "update", d.recordId, d.body); return r; }
+  if (d.op === "upsert") { const r = await _dbUpsert(t, d.body, d.onConflict); logActivity(t, "upsert", d.recordId, d.body); return r; }
+  if (d.op === "delete") { const r = await _dbDelete(t, d.recordId); logActivity(t, "delete", d.recordId, undefined); return r; }
+  if (d.op === "deleteWhere") { const r = await _dbDeleteWhere(t, d.filter); logActivity(t, "delete", undefined, d.filter); return r; }
+  throw new Error("Unknown draft type");
+}
+
+// ---- small status pill + panel (only visible when offline, syncing, or drafts exist) ----
+let __offStatus = { online: true, syncing: false, pending: 0, failed: 0 };
+let __offPanelOpen = false;
+function offlinePillEls() {
+  let pill = document.getElementById("novaSyncPill");
+  if (pill) return { pill, panel: document.getElementById("novaSyncPanel") };
+  pill = document.createElement("button");
+  pill.id = "novaSyncPill"; pill.type = "button";
+  pill.style.cssText = "position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:8px;z-index:2147482000;border:0;border-radius:16px;padding:6px 11px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:none;";
+  pill.addEventListener("click", () => { __offPanelOpen = !__offPanelOpen; offlineRender(); });
+  const panel = document.createElement("div");
+  panel.id = "novaSyncPanel";
+  panel.style.cssText = "position:fixed;top:calc(env(safe-area-inset-top,0px) + 44px);right:8px;z-index:2147482000;width:min(92vw,340px);max-height:60vh;overflow:auto;background:#fff;color:#1a2233;border-radius:14px;padding:12px;font:13px system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.3);display:none;";
+  document.body.appendChild(pill); document.body.appendChild(panel);
+  return { pill, panel };
+}
+function offlineBtn(text, bg, fn) {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = text;
+  b.style.cssText = `border:0;border-radius:9px;padding:7px 11px;font:600 12px system-ui,sans-serif;color:#fff;background:${bg};margin:0 6px 6px 0;`;
+  b.addEventListener("click", fn); return b;
+}
+async function offlineRender() {
+  const s = __offStatus, dv = draftViewOn();
+  const { pill, panel } = offlinePillEls();
+  const visible = !s.online || s.syncing || s.pending || s.failed || dv || NEEDS_SIGNIN;
+  pill.style.display = visible ? "block" : "none";
+  if (!visible) { panel.style.display = "none"; __offPanelOpen = false; return; }
+  const bits = [];
+  if (!s.online) bits.push("Offline");
+  if (s.syncing) bits.push("Syncing…");
+  if (s.pending) bits.push(s.pending + " draft" + (s.pending === 1 ? "" : "s"));
+  if (s.failed) bits.push(s.failed + " failed");
+  if (NEEDS_SIGNIN) bits.push("Sign in to sync");
+  if (dv) bits.push("Draft view");
+  pill.textContent = bits.join(" · ") || "Drafts";
+  pill.style.background = (s.failed || NEEDS_SIGNIN) ? "#D6564F" : !s.online ? "#B7791F" : dv ? "#2E9E7C" : "#2F6FDB";
+  panel.style.display = __offPanelOpen ? "block" : "none";
+  if (!__offPanelOpen) return;
+  const drafts = await NovaOffline.listDrafts(CURRENT_SCHOOL_ID || "__none__", null);
+  panel.textContent = "";
+  const head = document.createElement("div");
+  head.style.cssText = "font-weight:700;margin-bottom:8px;";
+  head.textContent = s.online ? "Online" : "Offline: changes are saved as drafts";
+  panel.appendChild(head);
+  if (NEEDS_SIGNIN) panel.appendChild(offlineBtn("Sign in to upload drafts", "#D6564F", () => { NEEDS_SIGNIN = false; OFFLINE_SESSION = false; __offPanelOpen = false; logout(); offlineRender().catch(() => {}); }));
+  panel.appendChild(offlineBtn(dv ? "Draft view: ON (tap for real data)" : "Show draft view", dv ? "#2E9E7C" : "#5A6B8C", () => {
+    try { sessionStorage.setItem("novaDraftView", dv ? "0" : "1"); } catch (e) {}
+    refreshActiveView(); offlineRender();
+  }));
+  panel.appendChild(offlineBtn("Sync now", "#2F6FDB", async () => {
+    if (!NovaOffline.isOnline()) { toast("You're offline. Drafts will upload when you're back online."); return; }
+    try { await NovaOffline.sync(); } catch (e) { toast(e.message || "Sync failed"); }
+    refreshActiveView();
+  }));
+  if (!drafts.length) {
+    const none = document.createElement("div"); none.style.cssText = "color:#667;margin-top:4px;"; none.textContent = "No drafts waiting.";
+    panel.appendChild(none); return;
+  }
+  drafts.forEach((d) => {
+    const row = document.createElement("div");
+    row.style.cssText = "border-top:1px solid #E4E8F0;padding:8px 0;";
+    const t = document.createElement("div");
+    t.style.fontWeight = "600";
+    t.textContent = (d.label || d.table) + " · " + d.op + (d.status === "failed" ? " · failed" : "");
+    const m = document.createElement("div");
+    m.style.cssText = "font-size:11px;color:" + (d.status === "failed" ? "#D6564F" : "#667") + ";margin:2px 0 6px;";
+    m.textContent = d.status === "failed" ? (d.error || "Rejected by the server") : new Date(d.createdAt).toLocaleString();
+    row.appendChild(t); row.appendChild(m);
+    if (d.status === "failed") row.appendChild(offlineBtn("Retry", "#2F6FDB", async () => { await NovaOffline.retry(d.seq); refreshActiveView(); }));
+    row.appendChild(offlineBtn("Discard", "#8A94A6", async () => {
+      if (confirm("Discard this draft? The change will not be uploaded.")) { await NovaOffline.discard(d.seq); refreshActiveView(); }
+    }));
+    panel.appendChild(row);
+  });
+}
+// ---- Offline sign-in glue (Stage 3) ----
+// OFFLINE_SESSION = the app was opened/signed in without the server confirming the user this time.
+// Drafts stay pending during an offline session; when the connection returns the saved session is
+// re-checked with the server (upgradeOfflineSession) and only then are drafts uploaded.
+let OFFLINE_SESSION = false, __offlineSnapshot = null, NEEDS_SIGNIN = false;
+function offlineSnapshotNow() { return { profile: profile, school: CURRENT_SCHOOL, settings: schoolSettings }; }
+function offlineRememberCredential(username, password, remember) {
+  if (!window.NovaOffline || !NovaOffline.auth || !username) return;
+  const A = NovaOffline.auth;
+  if (!remember) { A.remove(username).catch(() => {}); return; } // "Remember me" off: nothing kept on the device
+  if (password) A.saveCredential(username, password, offlineSnapshotNow()).catch(() => {});
+  else A.touch(username, offlineSnapshotNow()).catch(() => {});
+}
+function offlineApplySnapshot(rec) {
+  OFFLINE_SESSION = true; __offlineSnapshot = rec; NEEDS_SIGNIN = false;
+  profile = rec.profile;
+  SESSION_TOKEN = getPersistedSessionToken(); // may be null; it is re-checked when the connection returns
+  setCurrentSchool(profile.school_id);
+  CURRENT_SCHOOL = rec.school || null;
+  schoolSettings = rec.settings || null;
+  applyBrandColor(schoolSettings?.brand_color);
+  auth = { user: { id: profile.id } };
+  markDeviceSeen(); pinLocked = false;
+  startSchoolSync(); startNotifPolling();
+}
+async function offlineLoginAttempt(username, password) {
+  const r = await NovaOffline.auth.verify(username, password);
+  if (!r.ok) return { ok: false, message: r.message };
+  offlineApplySnapshot(r.record);
+  tab = "dashboard"; pendingSubTab = null; authView = "login";
+  render();
+  toast("Signed in offline. Your changes are saved as drafts until you're back online.", false);
+  offlineRender().catch(() => {});
+  return { ok: true };
+}
+let __upgrading = false;
+async function upgradeOfflineSession() {
+  if (!OFFLINE_SESSION || __upgrading || !window.NovaOffline || !NovaOffline.isOnline()) return;
+  __upgrading = true;
+  try {
+    const token = getPersistedSessionToken();
+    if (!token) { NEEDS_SIGNIN = true; offlineRender().catch(() => {}); return; }
+    SESSION_TOKEN = token;
+    const row = await sb(`/rest/v1/rpc/restore_session`, { method: "POST", body: JSON.stringify({ p_token: token }) });
+    if (!row || !row.id || !profile || row.id !== profile.id) { SESSION_TOKEN = null; NEEDS_SIGNIN = true; offlineRender().catch(() => {}); return; }
+    profile = scrubProfile(row);
+    await loadCurrentSchool();
+    await loadSchoolSettings();
+    OFFLINE_SESSION = false; NEEDS_SIGNIN = false;
+    offlineRememberCredential(profile.username, null, true);
+    const st = await NovaOffline.getStatus();
+    if (st.pending) toast("Back online. Uploading your drafts.", false);
+    try { await NovaOffline.sync(); } catch (e) { /* failed drafts stay listed in the sync pill */ }
+    if (!schoolIsActive()) render(); else refreshActiveView();
+    offlineRender().catch(() => {});
+  } catch (e) {
+    if (!NovaOffline.isNetworkError(e)) { SESSION_TOKEN = null; NEEDS_SIGNIN = true; offlineRender().catch(() => {}); }
+  } finally { __upgrading = false; }
+}
+if (window.NovaOffline) {
+  window.addEventListener("online", () => setTimeout(upgradeOfflineSession, 600));
+  setInterval(upgradeOfflineSession, 30000);
+}
+
+if (window.NovaOffline) {
+  let __wasSyncing = false;
+  NovaOffline.subscribe((s) => {
+    __offStatus = s; offlineRender().catch(() => {});
+    if (__wasSyncing && !s.syncing) refreshActiveView(); // drafts just uploaded: reload real data
+    __wasSyncing = s.syncing;
+  });
+  NovaOffline.start({ exec: novaOfflineExec, schoolId: () => CURRENT_SCHOOL_ID || "__none__" }).catch((e) => console.warn("Offline service unavailable:", e));
 }
 
 let __activeRefresh = null;
@@ -2906,6 +3538,14 @@ async function tryRestoreRememberedSession() {
     primeSchoolCache();
     return true;
   } catch (e) {
+    if (window.NovaOffline && NovaOffline.isNetworkError(e)) {
+      // No connection is not a rejected session: keep the saved login and use the offline snapshot.
+      try {
+        const rec = await NovaOffline.auth.getSnapshot(username);
+        if (rec && rec.fresh && rec.profile && rec.profile.id) { offlineApplySnapshot(rec); return true; }
+      } catch (e2) { /* fall through to the login screen, saved login kept */ }
+      return false;
+    }
     clearRememberedSession();
     persistSessionToken(null);
     return false;
@@ -3584,14 +4224,20 @@ async function authDoLogin() {
     // No School ID on this screen: usernames are unique across the whole system (create_account rejects
     // duplicates and the live profiles table has none), so verify_login finds the account by lower(username)
     // with p_school_id = null, then checks password_hash and the account's own school status.
+    if (window.NovaOffline && !NovaOffline.isOnline()) throw new Error("Couldn't connect right now.");
     const res = await sb(`/rest/v1/rpc/verify_login`, {
       method: "POST",
       body: JSON.stringify({ p_username: username, p_password: password, p_school_id: null }),
     });
     if (res && res.__error) throw new Error(res.__error);
     if (!res || !res.id || !res.session_token) throw new Error("Login failed. Please try again.");
-    await authCompleteLogin(res, remember);
+    await authCompleteLogin(res, remember, password);
   } catch (e) {
+    if (window.NovaOffline && NovaOffline.isNetworkError(e)) {
+      const o = await offlineLoginAttempt(username, password);
+      if (o.ok) return;
+      e = new Error(o.message);
+    }
     authMsg("err", e.message || "Login failed. Please try again.");
     const pw = document.getElementById("authPass"); if (pw) { pw.value = ""; pw.focus(); }
     authBusy(document.getElementById("authLoginBtn"), false, "Log in", "Logging in…");
@@ -3600,7 +4246,7 @@ async function authDoLogin() {
 
 // Same state the boot-time session restore builds (tryRestoreRememberedSession), so everything downstream
 // behaves identically whether the user just logged in or came back with a remembered session.
-async function authCompleteLogin(row, remember) {
+async function authCompleteLogin(row, remember, password) {
   const token = row.session_token;
   const p = scrubProfile(row); // strips password_hash + session_token from the in-memory profile
   if (remember) {
@@ -3621,6 +4267,8 @@ async function authCompleteLogin(row, remember) {
   markDeviceSeen();
   pinLocked = false;
   await loadSchoolSettings(); // brand colour / logo / ID prefixes now that a session exists
+  OFFLINE_SESSION = false; NEEDS_SIGNIN = false;
+  offlineRememberCredential(p.username, password, remember); // enables offline sign-in on this device (only when Remember me is ticked)
   startSchoolSync();
   startNotifPolling();
   primeSchoolCache();
@@ -11075,6 +11723,8 @@ function renderBootLoader() {
   renderBootLoader(); // shown immediately so nothing white/blank ever appears
   startHeaderClock(); 
   await Promise.all([loadSchoolSettings(), tryRestoreRememberedSession()]);
+  if (OFFLINE_SESSION && __offlineSnapshot) { schoolSettings = __offlineSnapshot.settings || schoolSettings; applyBrandColor(schoolSettings?.brand_color); }
+  else if (auth && profile) offlineRememberCredential(profile.username, null, true);
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } 
   render(); // lands straight on the dashboard (home)
 })();
