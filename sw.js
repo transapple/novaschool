@@ -4,7 +4,7 @@
    - Shows staff push notifications ({ title, body } payload). */
 
 const CACHE_PREFIX = "my-school-";
-const CACHE = CACHE_PREFIX + "v2";
+const CACHE = CACHE_PREFIX + "v3";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -36,6 +36,26 @@ function refresh(req, key) {
   });
 }
 
+// Fetch the newest app page and keep it ONLY if it arrived complete (a dropped connection or a village wifi
+// login page must never replace the good saved copy). When it differs from the saved copy, tell open windows
+// so the app can switch to the new version at a safe moment.
+async function refreshPage(previous) {
+  const res = await fetch(new Request("./index.html", { cache: "reload" }));
+  if (!res || res.status !== 200) return null;
+  const text = await res.clone().text();
+  if (!/<\/html>\s*$/i.test(text) || text.length < 5000) return null;
+  const cache = await caches.open(CACHE);
+  await cache.put("./index.html", res.clone());
+  if (previous) {
+    const old = await previous.clone().text().catch(() => "");
+    if (old && old !== text) {
+      const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      list.forEach((c) => c.postMessage({ type: "nova-update" }));
+    }
+  }
+  return res;
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -50,7 +70,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       const cached = (await cache.match("./index.html", { ignoreSearch: true })) || (await cache.match("./", { ignoreSearch: true }));
-      const update = refresh(new Request("./index.html", { cache: "reload" }), "./index.html").catch(() => null);
+      const update = refreshPage(cached).catch(() => null);
       if (cached) { event.waitUntil(update); return cached; }
       const fresh = await update;
       return fresh || Response.error();
@@ -61,7 +81,7 @@ self.addEventListener("fetch", (event) => {
   // Icons, manifest and other same-site files: cached copy first, refreshed in the background.
   event.respondWith(
     caches.match(req).then((cached) => {
-      const network = refresh(req).catch(() => cached);
+      const network = refresh(req).catch(() => cached || Response.error());
       return cached || network;
     })
   );

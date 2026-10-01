@@ -3458,19 +3458,33 @@ async function snapshotQuery(path, opts) {
   try { const data = runQueryOnRows(snap.data, path, tables); return data ? { data, ts: snap.ts } : null; } catch (e) { return null; }
 }
 // Online: real data (and a saved copy). Offline: the newest saved copy, either that exact list or the full table copy.
+// On a weak connection (signal bars but data crawling) nobody should wait for the full timeout: after a few
+// seconds the saved copy is shown while the live request keeps going and refreshes the saved copy for next time.
+const SLOW_READ_MS = 3500;
+async function savedCopy(sid, key, path, opts) {
+  const [hit, snap] = await Promise.all([NovaOffline.cacheGet(sid, key).catch(() => null), snapshotQuery(path, opts)]);
+  if (hit && snap) return snap.ts > hit.ts ? snap.data : hit.data;
+  if (hit) return hit.data;
+  if (snap) return snap.data;
+  return undefined;
+}
 async function cachedRead(path, opts) {
   const sid = CURRENT_SCHOOL_ID, key = "sb|" + path;
   try {
     if (!NovaOffline.isOnline()) throw new Error("Couldn't connect right now.");
-    const data = await sbNet(path, opts);
-    NovaOffline.cachePut(sid, key, data).catch(() => {});
-    return data;
+    const net = sbNet(path, opts);
+    net.then((d) => { NovaOffline.cachePut(sid, key, d).catch(() => {}); }, () => {}); // saved even if we already answered from the old copy
+    let timer; const SLOW = {};
+    const first = await Promise.race([net, new Promise((r) => { timer = setTimeout(() => r(SLOW), SLOW_READ_MS); })]);
+    clearTimeout(timer);
+    if (first !== SLOW) return first;
+    const saved = await savedCopy(sid, key, path, opts);
+    if (saved !== undefined) return saved;
+    return await net; // nothing saved yet: have to wait for the live answer
   } catch (e) {
     if (!NovaOffline.isNetworkError(e)) throw e;
-    const [hit, snap] = await Promise.all([NovaOffline.cacheGet(sid, key).catch(() => null), snapshotQuery(path, opts)]);
-    if (hit && snap) return snap.ts > hit.ts ? snap.data : hit.data;
-    if (hit) return hit.data;
-    if (snap) return snap.data;
+    const saved = await savedCopy(sid, key, path, opts);
+    if (saved !== undefined) return saved;
     throw e;
   }
 }
@@ -3505,6 +3519,17 @@ async function novaOfflineExec(d) {
 // ---- The only thing the user ever sees: "You're offline" and "Back online, syncing" ----
 let __offStatus = { online: true, syncing: false, pending: 0, failed: 0 };
 let __wasOffline = false, __bannerHideT = null;
+// The orange "You're offline" notice is NOT permanent: it shows for 5 seconds when the app opens and for
+// 2 seconds each time a module is opened (or the connection drops), then disappears by itself.
+let __offShowUntil = 0, __prevOnline = true;
+function flashOfflineBanner(ms) {
+  __offShowUntil = Math.max(__offShowUntil, Date.now() + ms);
+  offlineRender().catch(() => {});
+  setTimeout(() => offlineRender().catch(() => {}), ms + 80);
+}
+function flashOfflineBannerIfOffline(ms) {
+  try { if (window.NovaOffline && !NovaOffline.isOnline()) flashOfflineBanner(ms); } catch (e) {}
+}
 function offlineBannerEl() {
   let b = document.getElementById("novaNetBanner");
   if (b) return b;
@@ -3527,9 +3552,11 @@ function setTransient(text, bg, ms, tappable) {
 async function offlineRender() {
   const s = __offStatus, el = offlineBannerEl(), waiting = (s.pending || 0) + (s.failed || 0), now = Date.now();
   let text = "", bg = "", tappable = false;
+  if (s.online) __prevOnline = true;
   if (!s.online) {
     __wasOffline = true; __syncShowSince = 0;
-    text = "You're offline" + (waiting ? " - " + waiting + " in draft" : ""); bg = "#B7791F";
+    if (__prevOnline) { __prevOnline = false; __offShowUntil = Math.max(__offShowUntil, now + 2000); setTimeout(() => offlineRender().catch(() => {}), 2080); } // connection just dropped
+    if (now < __offShowUntil) { text = "You're offline" + (waiting ? " - " + waiting + " in draft" : ""); bg = "#B7791F"; }
   } else if (NEEDS_SIGNIN && waiting) {
     text = "Tap here and sign in again to sync your changes"; bg = "#D6564F"; tappable = true;
   } else if (s.syncing || s.pending) {
@@ -3637,6 +3664,25 @@ if (window.NovaOffline) {
   window.addEventListener("online", () => setTimeout(upgradeOfflineSession, 600));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") upgradeOfflineSession(); });
   setInterval(upgradeOfflineSession, 30000);
+}
+
+// ---- New version of the app: the service worker downloads it quietly; it is switched on at a safe moment ----
+let __updateReady = false;
+function safeToReloadForUpdate() {
+  if (!__updateReady || !window.NovaOffline || !NovaOffline.isOnline()) return false;
+  if (!auth || !profile || OFFLINE_SESSION || pinLocked || !getPersistedSessionToken()) return false; // never log anyone out
+  if (__offStatus && ((__offStatus.pending || 0) + (__offStatus.failed || 0) + (__offStatus.syncing ? 1 : 0))) return false; // drafts first
+  if (__inFlightRequests > 0) return false;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false; // never interrupt typing
+  if (document.querySelector(".modal, .overlay, .bell-backdrop, [role=dialog]")) return false;
+  return true;
+}
+function applyUpdateIfSafe() { if (safeToReloadForUpdate()) { __updateReady = false; location.reload(); } }
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "nova-update") { __updateReady = true; setTimeout(applyUpdateIfSafe, 1500); } });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") setTimeout(applyUpdateIfSafe, 800); });
+  setInterval(applyUpdateIfSafe, 20000);
 }
 
 if (window.NovaOffline) {
@@ -4284,6 +4330,7 @@ function updateActiveNavHighlight() {
 }
 
 function renderTabContent() {
+  flashOfflineBannerIfOffline(2000); // opening any module while offline: notice for 2 seconds
   resetNavStack();
   const pageTitle = document.getElementById("pageTitle");
   pageTitle.textContent = NAV.find(n=>n.id===tab)?.label || "";
@@ -5689,6 +5736,7 @@ function renderParentApp() {
   });
   restoreBottomNavScroll(bottomnav, prevBottomNavScroll);
   refreshParentBadges();
+  flashOfflineBannerIfOffline(2000);
   resetNavStack();
   const pageTitle = document.getElementById("pageTitle");
   pageTitle.textContent = NAV_PARENT.find(n=>n.id===tab)?.label || "";
@@ -12048,6 +12096,7 @@ function renderBootLoader() {
   else if (auth && profile) offlineRememberCredential(profile.username, null, true);
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } 
   render(); // lands straight on the dashboard (home)
+  flashOfflineBannerIfOffline(5000); // app just opened while offline: notice for 5 seconds
   setTimeout(() => { downloadEverything(true).catch(() => {}); finalizeQueuedStudents().catch(() => {}); }, 1500);
 })();
 
