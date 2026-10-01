@@ -773,7 +773,7 @@
   var DB_VER = 1;
   // Tables whose id is assigned by the database (identity). Offline inserts become upserts on
   // the natural unique key, which also makes a retried sync safe.
-  var UPSERT_KEYS = { attendance: "student_id,date", staff_attendance: "teacher_id,date" };
+  var UPSERT_KEYS = { attendance: "student_id,date", staff_attendance: "teacher_id,date", school_settings: "school_id" };
 
   var dbp = null;
   var listeners = [];
@@ -822,7 +822,32 @@
       return (c === "x" ? r : (r & 3) | 8).toString(16);
     });
   }
-  function isOnline() { return typeof navigator === "undefined" || navigator.onLine !== false; }
+  function isOnline() { if (global.__novaLinkDown) return false; return typeof navigator === "undefined" || navigator.onLine !== false; }
+  // Called by the app whenever a real request to the server succeeds (up) or fails to connect (down).
+  function setLink(up) { var was = !global.__novaLinkDown; global.__novaLinkDown = !up; if (was !== !!up) { notify(); if (up) sync().catch(function () {}); } }
+  var SENSITIVE = { pin: 1, password_hash: 1, session_token: 1, password: 1 };
+  function scrubRow(r) { if (!r || typeof r !== "object") return r; var o = {}; Object.keys(r).forEach(function (k) { if (!SENSITIVE[k]) o[k] = r[k]; }); return o; }
+  function scrub(d) { return Array.isArray(d) ? d.map(scrubRow) : scrubRow(d); }
+  function cachePut(schoolId, key, data) { return run("readcache", "readwrite", function (s) { return s.put({ key: (schoolId || "") + "|" + key, data: scrub(data), ts: Date.now() }); }); }
+  function cacheGet(schoolId, key) { return run("readcache", "readonly", function (s) { return s.get((schoolId || "") + "|" + key); }); }
+  function retryFailed() {
+    return listDrafts(null, null).then(function (all) {
+      return Promise.all(all.filter(function (d) { return d.status === "failed"; }).map(function (d) { d.status = "pending"; d.error = null; return putDraft(d); }));
+    }).catch(function () {});
+  }
+  function retryAll() { return retryFailed().then(function () { notify(); return sync(); }); }
+  function clearReadCache() { return run("readcache", "readwrite", function (s) { return s.clear(); }); }
+  function replaceTmp(v, map) {
+    if (typeof v === "string") return map[v] !== undefined ? map[v] : v;
+    if (Array.isArray(v)) return v.map(function (x) { return replaceTmp(x, map); });
+    if (v && typeof v === "object") { var o = {}; Object.keys(v).forEach(function (k) { o[k] = replaceTmp(v[k], map); }); return o; }
+    return v;
+  }
+  function remapDraft(d, map) {
+    if (!Object.keys(map).length) return;
+    d.body = replaceTmp(d.body, map); d.filter = replaceTmp(d.filter, map);
+    if (d.recordId && map[d.recordId] !== undefined) d.recordId = String(map[d.recordId]);
+  }
   function isNetworkError(e) {
     if (!isOnline()) return true;
     var m = String((e && e.message) || e || "");
@@ -867,7 +892,9 @@
     var op = w.op, body = w.body, onConflict = w.onConflict, recordId = w.id != null ? String(w.id) : null;
     if (op === "insert") {
       if (UPSERT_KEYS[w.table]) { op = "upsert"; onConflict = UPSERT_KEYS[w.table]; }
-      else {
+      else if (w.noId) {
+        if (!Array.isArray(body)) recordId = "tmp-" + uuid();
+      } else {
         body = Array.isArray(body)
           ? body.map(function (r) { return Object.assign({ id: uuid() }, r); })
           : Object.assign({ id: uuid() }, body);
@@ -876,6 +903,7 @@
     } else if (op === "upsert" && body && !Array.isArray(body) && body.id != null) {
       recordId = String(body.id);
     }
+    if (op === "upsert" && w.table === "school_settings" && body && !Array.isArray(body) && body.school_id == null) body = Object.assign({ school_id: w.schoolId }, body);
     return listDrafts(w.schoolId, w.table).then(function (existing) {
       var pendingSame = recordId && existing.filter(function (d) {
         return d.status === "pending" && d.recordId === recordId;
@@ -908,7 +936,7 @@
   function readThrough(schoolId, key, fetcher) {
     var ck = (schoolId || "") + "|" + key;
     return Promise.resolve().then(fetcher).then(function (data) {
-      run("readcache", "readwrite", function (s) { return s.put({ key: ck, data: data, ts: Date.now() }); }).catch(function () {});
+      run("readcache", "readwrite", function (s) { return s.put({ key: ck, data: scrub(data), ts: Date.now() }); }).catch(function () {});
       return { data: data, stale: false, ts: Date.now() };
     }, function (err) {
       if (!isNetworkError(err)) throw err;
@@ -926,6 +954,7 @@
       drafts.forEach(function (d) {
         if (d.op === "insert" || d.op === "upsert") {
           rowsOf(d.body).forEach(function (nr) {
+            if (d.recordId && /^tmp-/.test(d.recordId) && nr.id == null) nr = Object.assign({ id: d.recordId }, nr);
             var i = out.findIndex(function (r) { return sameRow(d.table, r, nr); });
             if (i >= 0) out[i] = Object.assign({}, out[i], nr, { _draft: true });
             else out.push(Object.assign({}, nr, { _draft: true }));
@@ -951,7 +980,7 @@
     if (syncing || !cfg.exec || !isOnline()) return Promise.resolve({ skipped: true });
     syncing = true; notify();
     var summary = { done: 0, failed: 0, remaining: 0, stoppedOffline: false };
-    var blocked = {};
+    var blocked = {}, idmap = {};
     return listDrafts(cfg.schoolId(), null).then(function (all) {
       var queue = all.filter(function (d) { return d.status === "pending"; });
       var chain = Promise.resolve();
@@ -960,8 +989,12 @@
           if (summary.stoppedOffline) return;
           var bk = d.table + ":" + (d.recordId || "");
           if (d.recordId && blocked[bk]) return; // an earlier draft of this record failed; keep order
-          return Promise.resolve().then(function () { return cfg.exec(d); }).then(function () {
+          return Promise.resolve().then(function () { remapDraft(d, idmap); return cfg.exec(d); }).then(function (res) {
             summary.done++;
+            if (/^tmp-/.test(d.recordId || "") && res && res[0] && res[0].id != null) {
+              idmap[d.recordId] = res[0].id;
+              queue.forEach(function (q) { if (q.seq > d.seq) { remapDraft(q, idmap); putDraft(q).catch(function () {}); } });
+            }
             return removeDraft(d.seq);
           }, function (err) {
             var msg = String((err && err.message) || err);
@@ -1013,8 +1046,17 @@
       global.addEventListener("online", function () { notify(); sync().catch(function () {}); });
       global.addEventListener("offline", notify);
     }
-    if (!timer) timer = setInterval(function () { if (isOnline()) sync().catch(function () {}); }, 30000);
-    return open().then(function () { notify(); return sync().catch(function () {}); });
+    var ticks = 0;
+    if (!timer) timer = setInterval(function () { if (!isOnline()) return; ticks++; (ticks % 4 === 0 ? retryFailed() : Promise.resolve()).then(function () { return sync(); }).catch(function () {}); }, 30000);
+    if (global.document) global.document.addEventListener("visibilitychange", function () { if (global.document.visibilityState === "visible" && isOnline()) sync().catch(function () {}); });
+    if (global.navigator && global.navigator.serviceWorker) global.navigator.serviceWorker.addEventListener("message", function (e) { if (e.data && e.data.type === "nova-sync" && isOnline()) sync().catch(function () {}); });
+    // Changes the server rejected earlier get another try each time the app starts; nothing is ever dropped.
+    function resetFailed() {
+      return listDrafts(null, null).then(function (all) {
+        return Promise.all(all.filter(function (d) { return d.status === "failed"; }).map(function (d) { d.status = "pending"; d.error = null; return putDraft(d); }));
+      }).catch(function () {});
+    }
+    return open().then(resetFailed).then(function () { notify(); return sync().catch(function () {}); });
   }
 
   // ---------- offline sign-in (Stage 3) ----------
@@ -1127,7 +1169,7 @@
     start: start, queueWrite: queueWrite, readThrough: readThrough, overlay: overlay,
     listDrafts: listDrafts, sync: sync, retry: retry, discard: discard,
     getStatus: getStatus, subscribe: subscribe, isOnline: isOnline, isNetworkError: isNetworkError,
-    UPSERT_KEYS: UPSERT_KEYS
+    UPSERT_KEYS: UPSERT_KEYS, setLink: setLink, clearReadCache: clearReadCache, cachePut: cachePut, cacheGet: cacheGet, retryAll: retryAll
   };
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -2958,6 +3000,15 @@ $reset_password$;
 grant execute on function reset_password(text,text,text,uuid) to anon, authenticated;`;
 
 async function sb(path, opts = {}) {
+  const isRead = !opts.method || String(opts.method).toUpperCase() === "GET";
+  if (isRead && window.NovaOffline && CURRENT_SCHOOL_ID && path.startsWith("/rest/v1/") && !path.startsWith("/rest/v1/rpc/")
+      && !/^\/rest\/v1\/(activity_log|push_subscriptions_staff|ai_)/.test(path)) {
+    // Every list the app reads is saved on the device; offline, the last saved copy is shown.
+    return await cachedRead(path, opts);
+  }
+  return sbNet(path, opts);
+}
+async function sbNet(path, opts = {}) {
   const headers = Object.assign({
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + SUPABASE_KEY,
@@ -2970,11 +3021,13 @@ async function sb(path, opts = {}) {
   try {
     res = await fetch(SUPABASE_URL + path, Object.assign({}, opts, { headers, signal: controller.signal }));
   } catch (e) {
+    if (window.NovaOffline && NovaOffline.setLink) NovaOffline.setLink(false);
     throw new Error("Couldn't connect right now. Please try again.");
   } finally {
     clearTimeout(timeoutId);
     __inFlightRequests--;
   }
+  if (window.NovaOffline && NovaOffline.setLink) NovaOffline.setLink(true);
   let data = null;
   try { data = await res.json(); } catch(e) { data = null; }
   if (!res.ok) {
@@ -3261,30 +3314,120 @@ async function dbDeleteWhere(table, filter) {
 // "Draft view" (toggle in the sync pill) shows the same data with your pending changes on top.
 // To bring another page offline, add its table name here. Not included on purpose: `profiles`
 // (accounts are created through secured RPCs with password hashing).
-const OFFLINE_TABLES = new Set(["students", "attendance", "staff_attendance", "fee_payments", "fee_structures", "teachers"]);
-const READ_CACHE_TABLES = new Set(["school_settings", "classes", "subjects", "class_subjects", "terms", "academic_years", "exam_types", "grades"]); // saved for reading only; their writes still need a connection
-function offlineReadOn(table) { return offlineOn(table) || !!(window.NovaOffline && CURRENT_SCHOOL_ID && READ_CACHE_TABLES.has(table)); }
+const OFFLINE_TABLES = new Set(["students", "attendance", "staff_attendance", "fee_payments", "fee_structures", "teachers",
+  "classes", "subjects", "class_subjects", "terms", "academic_years", "exam_types", "exams", "grades", "exam_results", "report_cards",
+  "inventory_items", "asset_maintenance", "library_books", "library_loans", "fee_reminders", "school_meetings", "school_communications",
+  "teacher_profiles", "teacher_qualifications", "teacher_documents", "teacher_evaluations", "teacher_evaluation_audit",
+  "school_settings", "parent_messages", "private_messages"]);
+// Never kept on the device. Everything else the app reads is saved for offline use (passwords/PINs are always stripped first).
+const NO_CACHE_TABLES = new Set(["activity_log", "push_subscriptions_staff", "ai_messages", "ai_conversations"]);
+function offlineReadOn(table) { return !!(window.NovaOffline && CURRENT_SCHOOL_ID && !NO_CACHE_TABLES.has(table)); }
 function offlineOn(table) { return !!(window.NovaOffline && CURRENT_SCHOOL_ID && OFFLINE_TABLES.has(table)); }
-function draftViewOn() { try { return sessionStorage.getItem("novaDraftView") === "1"; } catch (e) { return false; } }
+function draftViewOn() { return true; } // pending changes always show on top of the real data, so the user sees their own work
+
+// Some tables use uuid ids, others use database-assigned numbers. We learn which from real rows (remembered on the device).
+// uuid tables: the id is created on the device. Number tables: the server assigns it; a temporary local id stands in until sync.
+const ID_KIND_KEY = "novaIdKinds";
+let __idKinds = (() => { try { return JSON.parse(localStorage.getItem(ID_KIND_KEY) || "{}") || {}; } catch (e) { return {}; } })();
+["students", "fee_payments", "fee_structures", "teachers"].forEach((t) => { if (!__idKinds[t]) __idKinds[t] = "uuid"; });
+function learnIdKind(table, rows) {
+  if (!Array.isArray(rows) || !rows.length || !rows[0] || rows[0].id == null) return;
+  const kind = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(rows[0].id)) ? "uuid" : "other";
+  if (__idKinds[table] === kind) return;
+  __idKinds[table] = kind;
+  try { localStorage.setItem(ID_KIND_KEY, JSON.stringify(__idKinds)); } catch (e) {}
+}
+function idIsUuid(table) { return __idKinds[table] === "uuid"; }
 function offlineAssignIds(table, body) {
-  if (window.NovaOffline.UPSERT_KEYS[table]) return body; // identity-id tables are saved as upserts on their natural key
+  if (window.NovaOffline.UPSERT_KEYS[table] || !idIsUuid(table)) return body; // natural-key upserts, and server-numbered tables, get no device id
   const withId = (r) => (r && r.id != null) ? r : Object.assign({ id: crypto.randomUUID() }, r);
   return Array.isArray(body) ? body.map(withId) : withId(body);
 }
 async function offlineQueue(table, w) {
-  const d = await NovaOffline.queueWrite(Object.assign({ schoolId: CURRENT_SCHOOL_ID, table, label: activityLogLabel(table) }, w));
-  toast("Saved as draft. It will upload when you're back online.", false);
+  const noId = w.op === "insert" && !NovaOffline.UPSERT_KEYS[table] && !idIsUuid(table);
+  const d = await NovaOffline.queueWrite(Object.assign({ schoolId: CURRENT_SCHOOL_ID, table, label: activityLogLabel(table), noId }, w));
+  try { navigator.serviceWorker.ready.then((r) => r.sync && r.sync.register("nova-sync")).catch(() => {}); } catch (e) {}
+  toast("Saved in draft. It will upload when you are back online.", false);
   if (!d || !d.body) return [];
   const rows = Array.isArray(d.body) ? d.body : [d.body];
-  return rows.map((r) => Object.assign({}, r, { _draft: true }));
+  return rows.map((r) => Object.assign({}, (d.recordId && r.id == null) ? { id: d.recordId } : {}, r, { _draft: true }));
+}
+// ---- Offline query engine: answers a normal data request from the full copy of the table kept on the device ----
+function qCompare(a, b) {
+  if (a == null && b == null) return 0; if (a == null) return -1; if (b == null) return 1;
+  const na = Number(a), nb = Number(b);
+  if (typeof a !== "boolean" && a !== "" && b !== "" && !isNaN(na) && !isNaN(nb) && /^-?[0-9.]+$/.test(String(b))) return na - nb;
+  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+function qTest(row, col, spec) {
+  let neg = false, op, val;
+  if (spec.startsWith("not.")) { neg = true; spec = spec.slice(4); }
+  const i = spec.indexOf("."); op = spec.slice(0, i); val = spec.slice(i + 1);
+  const v = row[col]; let r;
+  if (op === "eq") r = v != null && String(v) === val;
+  else if (op === "neq") r = v == null || String(v) !== val;
+  else if (op === "gt") r = v != null && qCompare(v, val) > 0;
+  else if (op === "gte") r = v != null && qCompare(v, val) >= 0;
+  else if (op === "lt") r = v != null && qCompare(v, val) < 0;
+  else if (op === "lte") r = v != null && qCompare(v, val) <= 0;
+  else if (op === "is") r = val === "null" ? v == null : val === "true" ? v === true : val === "false" ? v === false : false;
+  else if (op === "in") { const list = val.replace(/^\(|\)$/g, "").split(",").map((x) => x.replace(/^"|"$/g, "")); r = v != null && list.includes(String(v)); }
+  else if (op === "like" || op === "ilike") {
+    const re = new RegExp("^" + val.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/%/g, ".*") + "$", op === "ilike" ? "i" : "");
+    r = v != null && re.test(String(v));
+  } else throw new Error("unsupported");
+  return neg ? !r : r;
+}
+function runQueryOnRows(rows, path) {
+  const q = path.split("?")[1] || ""; let out = rows.slice(), order = null, limit = null, offset = 0, select = "*";
+  for (const part of q.split("&")) {
+    if (!part) continue;
+    const eq = part.indexOf("="); const k = decodeURIComponent(part.slice(0, eq)); const v = decodeURIComponent(part.slice(eq + 1));
+    if (k === "select") select = v; else if (k === "order") order = v; else if (k === "limit") limit = parseInt(v, 10);
+    else if (k === "offset") offset = parseInt(v, 10) || 0; else if (k === "or" || k === "and" || k === "not") return null;
+    else out = out.filter((r) => qTest(r, k, v));
+  }
+  if (order) {
+    const cols = order.split(",").map((o) => { const a = o.split("."); return { c: a[0], d: a[1] === "desc" ? -1 : 1, nf: a.includes("nullsfirst") }; });
+    out.sort((x, y) => { for (const o of cols) { const c = qCompare(x[o.c], y[o.c]); if (c) return c * o.d; } return 0; });
+  }
+  if (offset) out = out.slice(offset);
+  if (limit != null && !isNaN(limit)) out = out.slice(0, limit);
+  if (select !== "*") {
+    if (/[()]/.test(select)) return null; // joined data cannot be answered from one table copy
+    const cols = select.split(",").map((c) => c.trim());
+    out = out.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
+  }
+  return out;
+}
+async function snapshotQuery(path, opts) {
+  const m = /^\/rest\/v1\/([a-z_]+)\?/.exec(path); if (!m) return null;
+  if (opts && opts.headers && /pgrst\.object/i.test(JSON.stringify(opts.headers))) return null;
+  const snap = await NovaOffline.cacheGet(CURRENT_SCHOOL_ID, "tbl|" + m[1]).catch(() => null);
+  if (!snap || !Array.isArray(snap.data)) return null;
+  try { const data = runQueryOnRows(snap.data, path); return data ? { data, ts: snap.ts } : null; } catch (e) { return null; }
+}
+// Online: real data (and a saved copy). Offline: the newest saved copy, either that exact list or the full table copy.
+async function cachedRead(path, opts) {
+  const sid = CURRENT_SCHOOL_ID, key = "sb|" + path;
+  try {
+    if (!NovaOffline.isOnline()) throw new Error("Couldn't connect right now.");
+    const data = await sbNet(path, opts);
+    NovaOffline.cachePut(sid, key, data).catch(() => {});
+    return data;
+  } catch (e) {
+    if (!NovaOffline.isNetworkError(e)) throw e;
+    const [hit, snap] = await Promise.all([NovaOffline.cacheGet(sid, key).catch(() => null), snapshotQuery(path, opts)]);
+    if (hit && snap) return snap.ts > hit.ts ? snap.data : hit.data;
+    if (hit) return hit.data;
+    if (snap) return snap.data;
+    throw e;
+  }
 }
 async function offlineRead(table, path, params) {
-  const res = await NovaOffline.readThrough(CURRENT_SCHOOL_ID, path, () => {
-    if (!NovaOffline.isOnline()) throw new Error("Couldn't connect right now.");
-    return sb(path);
-  });
-  let rows = res.data;
-  if (draftViewOn() && OFFLINE_TABLES.has(table) && Array.isArray(rows)) {
+  let rows = await cachedRead(path);
+  learnIdKind(table, rows);
+  if (OFFLINE_TABLES.has(table) && Array.isArray(rows)) {
     rows = await NovaOffline.overlay(CURRENT_SCHOOL_ID, table, rows);
     // rows added by drafts never went through the server's filters, so apply the simple ones here
     const tests = Object.entries(params || {}).filter(([k, v]) => k !== "school_id" && typeof v === "string" && /^(eq\.|is\.null$)/.test(v));
@@ -3295,7 +3438,7 @@ async function offlineRead(table, path, params) {
 async function novaOfflineExec(d) {
   if (!SESSION_TOKEN || OFFLINE_SESSION || d.schoolId !== CURRENT_SCHOOL_ID) throw new Error("Couldn't connect right now. Sign in to upload your drafts."); // keeps the draft pending
   const t = d.table;
-  if (d.op === "insert") { const r = await _dbInsert(t, d.body); logActivity(t, "insert", d.recordId, d.body); return r; }
+  if (d.op === "insert") { const r = await _dbInsert(t, d.body); logActivity(t, "insert", (r && r[0] && r[0].id) || d.recordId, d.body); return r; }
   if (d.op === "update") { const r = await _dbUpdate(t, d.recordId, d.body); logActivity(t, "update", d.recordId, d.body); return r; }
   if (d.op === "upsert") { const r = await _dbUpsert(t, d.body, d.onConflict); logActivity(t, "upsert", d.recordId, d.body); return r; }
   if (d.op === "delete") { const r = await _dbDelete(t, d.recordId); logActivity(t, "delete", d.recordId, undefined); return r; }
@@ -3303,82 +3446,50 @@ async function novaOfflineExec(d) {
   throw new Error("Unknown draft type");
 }
 
-// ---- small status pill + panel (only visible when offline, syncing, or drafts exist) ----
+// ---- The only thing the user ever sees: "You're offline" and "Back online, syncing" ----
 let __offStatus = { online: true, syncing: false, pending: 0, failed: 0 };
-let __offPanelOpen = false;
-function offlinePillEls() {
-  let pill = document.getElementById("novaSyncPill");
-  if (pill) return { pill, panel: document.getElementById("novaSyncPanel") };
-  pill = document.createElement("button");
-  pill.id = "novaSyncPill"; pill.type = "button";
-  pill.style.cssText = "position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:8px;z-index:2147482000;border:0;border-radius:16px;padding:6px 11px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:none;";
-  pill.addEventListener("click", () => { __offPanelOpen = !__offPanelOpen; offlineRender(); });
-  const panel = document.createElement("div");
-  panel.id = "novaSyncPanel";
-  panel.style.cssText = "position:fixed;top:calc(env(safe-area-inset-top,0px) + 44px);right:8px;z-index:2147482000;width:min(92vw,340px);max-height:60vh;overflow:auto;background:#fff;color:#1a2233;border-radius:14px;padding:12px;font:13px system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.3);display:none;";
-  document.body.appendChild(pill); document.body.appendChild(panel);
-  return { pill, panel };
-}
-function offlineBtn(text, bg, fn) {
-  const b = document.createElement("button");
-  b.type = "button"; b.textContent = text;
-  b.style.cssText = `border:0;border-radius:9px;padding:7px 11px;font:600 12px system-ui,sans-serif;color:#fff;background:${bg};margin:0 6px 6px 0;`;
-  b.addEventListener("click", fn); return b;
+let __wasOffline = false, __bannerHideT = null;
+function offlineBannerEl() {
+  let b = document.getElementById("novaNetBanner");
+  if (b) return b;
+  b = document.createElement("div");
+  b.id = "novaNetBanner";
+  b.setAttribute("role", "status"); b.setAttribute("aria-live", "polite");
+  b.style.cssText = "position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:2147482000;display:none;max-width:92vw;border-radius:18px;padding:7px 14px;font:600 12.5px/1.3 system-ui,sans-serif;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.22);text-align:center;pointer-events:none;";
+  b.addEventListener("click", () => {
+    if (NEEDS_SIGNIN) { NEEDS_SIGNIN = false; OFFLINE_SESSION = false; logout(); return; }
+    NovaOffline.retryAll().then(() => refreshActiveView()).catch(() => {});
+  });
+  document.body.appendChild(b);
+  return b;
 }
 async function offlineRender() {
-  const s = __offStatus, dv = draftViewOn();
-  const { pill, panel } = offlinePillEls();
-  const visible = !s.online || s.syncing || s.pending || s.failed || dv || NEEDS_SIGNIN;
-  pill.style.display = visible ? "block" : "none";
-  if (!visible) { panel.style.display = "none"; __offPanelOpen = false; return; }
-  const bits = [];
-  if (!s.online) bits.push("Offline");
-  if (s.syncing) bits.push("Syncing…");
-  if (s.pending) bits.push(s.pending + " draft" + (s.pending === 1 ? "" : "s"));
-  if (s.failed) bits.push(s.failed + " failed");
-  if (NEEDS_SIGNIN) bits.push("Sign in to sync");
-  if (dv) bits.push("Draft view");
-  pill.textContent = bits.join(" · ") || "Drafts";
-  pill.style.background = (s.failed || NEEDS_SIGNIN) ? "#D6564F" : !s.online ? "#B7791F" : dv ? "#2E9E7C" : "#2F6FDB";
-  panel.style.display = __offPanelOpen ? "block" : "none";
-  if (!__offPanelOpen) return;
-  const drafts = await NovaOffline.listDrafts(CURRENT_SCHOOL_ID || "__none__", null);
-  panel.textContent = "";
-  const head = document.createElement("div");
-  head.style.cssText = "font-weight:700;margin-bottom:8px;";
-  head.textContent = s.online ? "Online" : "Offline: changes are saved as drafts";
-  panel.appendChild(head);
-  if (NEEDS_SIGNIN) panel.appendChild(offlineBtn("Sign in to upload drafts", "#D6564F", () => { NEEDS_SIGNIN = false; OFFLINE_SESSION = false; __offPanelOpen = false; logout(); offlineRender().catch(() => {}); }));
-  panel.appendChild(offlineBtn(dv ? "Draft view: ON (tap for real data)" : "Show draft view", dv ? "#2E9E7C" : "#5A6B8C", () => {
-    try { sessionStorage.setItem("novaDraftView", dv ? "0" : "1"); } catch (e) {}
-    refreshActiveView(); offlineRender();
-  }));
-  panel.appendChild(offlineBtn("Sync now", "#2F6FDB", async () => {
-    if (!NovaOffline.isOnline()) { toast("You're offline. Drafts will upload when you're back online."); return; }
-    try { await NovaOffline.sync(); } catch (e) { toast(e.message || "Sync failed"); }
-    refreshActiveView();
-  }));
-  if (!drafts.length) {
-    const none = document.createElement("div"); none.style.cssText = "color:#667;margin-top:4px;"; none.textContent = "No drafts waiting.";
-    panel.appendChild(none); return;
+  const s = __offStatus, el = offlineBannerEl(), waiting = (s.pending || 0) + (s.failed || 0);
+  clearTimeout(__bannerHideT);
+  let text = "", bg = "", tappable = false;
+  if (!s.online) { __wasOffline = true; text = "You're offline" + (waiting ? " - " + waiting + " in draft" : ""); bg = "#B7791F"; }
+  else if (NEEDS_SIGNIN && waiting) { text = "Tap here and sign in again to sync your changes"; bg = "#D6564F"; tappable = true; }
+  else if (s.syncing || s.pending) { __wasOffline = true; text = "You're back online. Data is syncing..."; bg = "#2F6FDB"; }
+  else if (s.failed) { text = s.failed + " in draft. Tap to try again"; bg = "#D6564F"; tappable = true; }
+  else if (__wasOffline) {
+    text = "You're back online. Data is synced."; bg = "#2E9E7C";
+    __bannerHideT = setTimeout(() => { __wasOffline = false; el.style.display = "none"; }, 2500);
   }
-  drafts.forEach((d) => {
-    const row = document.createElement("div");
-    row.style.cssText = "border-top:1px solid #E4E8F0;padding:8px 0;";
-    const t = document.createElement("div");
-    t.style.fontWeight = "600";
-    t.textContent = (d.label || d.table) + " · " + d.op + (d.status === "failed" ? " · failed" : "");
-    const m = document.createElement("div");
-    m.style.cssText = "font-size:11px;color:" + (d.status === "failed" ? "#D6564F" : "#667") + ";margin:2px 0 6px;";
-    m.textContent = d.status === "failed" ? (d.error || "Rejected by the server") : new Date(d.createdAt).toLocaleString();
-    row.appendChild(t); row.appendChild(m);
-    if (d.status === "failed") row.appendChild(offlineBtn("Retry", "#2F6FDB", async () => { await NovaOffline.retry(d.seq); refreshActiveView(); }));
-    row.appendChild(offlineBtn("Discard", "#8A94A6", async () => {
-      if (confirm("Discard this draft? The change will not be uploaded.")) { await NovaOffline.discard(d.seq); refreshActiveView(); }
-    }));
-    panel.appendChild(row);
-  });
+  el.style.pointerEvents = tappable ? "auto" : "none";
+  if (!text) { el.style.display = "none"; return; }
+  el.textContent = text; el.style.background = bg; el.style.display = "block";
 }
+// Real connectivity check: a phone can show wifi with no internet, so we ask the server itself while we think we're down.
+async function probeLink() {
+  if (!window.NovaOffline) return;
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), 5000);
+  try { await fetch(SUPABASE_URL + "/auth/v1/health", { headers: { apikey: SUPABASE_KEY }, signal: c.signal, cache: "no-store" }); NovaOffline.setLink(true); }
+  catch (e) { NovaOffline.setLink(false); }
+  finally { clearTimeout(t); }
+}
+window.addEventListener("online", () => { probeLink(); });
+window.addEventListener("offline", () => { if (window.NovaOffline) NovaOffline.setLink(false); });
+setInterval(() => { if (window.__novaLinkDown || navigator.onLine === false) probeLink(); }, 8000);
 // ---- Offline sign-in glue (Stage 3) ----
 // OFFLINE_SESSION = the app was opened/signed in without the server confirming the user this time.
 // Drafts stay pending during an offline session; when the connection returns the saved session is
@@ -3410,7 +3521,7 @@ async function offlineLoginAttempt(username, password) {
   offlineApplySnapshot(r.record);
   tab = "dashboard"; pendingSubTab = null; authView = "login";
   render();
-  toast("Signed in offline. Your changes are saved as drafts until you're back online.", false);
+  
   offlineRender().catch(() => {});
   return { ok: true };
 }
@@ -3424,15 +3535,20 @@ async function upgradeOfflineSession() {
     SESSION_TOKEN = token;
     const row = await sb(`/rest/v1/rpc/restore_session`, { method: "POST", body: JSON.stringify({ p_token: token }) });
     if (!row || !row.id || !profile || row.id !== profile.id) { SESSION_TOKEN = null; NEEDS_SIGNIN = true; offlineRender().catch(() => {}); return; }
+    const __sig = (p) => JSON.stringify(Object.assign({}, p, { pin: undefined }));
+    const __before = __sig(profile);
     profile = scrubProfile(row);
+    const __changed = __sig(profile) !== __before;
     await loadCurrentSchool();
     await loadSchoolSettings();
     OFFLINE_SESSION = false; NEEDS_SIGNIN = false;
+    primeSchoolCache().catch(() => {});
+    downloadEverything(true).catch(() => {});
     offlineRememberCredential(profile.username, null, true);
     const st = await NovaOffline.getStatus();
-    if (st.pending) toast("Back online. Uploading your drafts.", false);
+    
     try { await NovaOffline.sync(); } catch (e) { /* failed drafts stay listed in the sync pill */ }
-    if (!schoolIsActive()) render(); else refreshActiveView();
+    if (__changed || !schoolIsActive()) render(); else refreshActiveView();
     offlineRender().catch(() => {});
   } catch (e) {
     if (!NovaOffline.isNetworkError(e)) { SESSION_TOKEN = null; NEEDS_SIGNIN = true; offlineRender().catch(() => {}); }
@@ -3440,6 +3556,7 @@ async function upgradeOfflineSession() {
 }
 if (window.NovaOffline) {
   window.addEventListener("online", () => setTimeout(upgradeOfflineSession, 600));
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") upgradeOfflineSession(); });
   setInterval(upgradeOfflineSession, 30000);
 }
 
@@ -3447,11 +3564,100 @@ if (window.NovaOffline) {
   let __wasSyncing = false;
   NovaOffline.subscribe((s) => {
     __offStatus = s; offlineRender().catch(() => {});
-    if (__wasSyncing && !s.syncing) refreshActiveView(); // drafts just uploaded: reload real data
+    refreshDraftKeys().catch(() => {});
+    if (__wasSyncing && !s.syncing) { refreshActiveView(); setTimeout(() => downloadEverything(true).catch(() => {}), 500); } // drafts just uploaded: reload real data
     __wasSyncing = s.syncing;
   });
   NovaOffline.start({ exec: novaOfflineExec, schoolId: () => CURRENT_SCHOOL_ID || "__none__" }).catch((e) => console.warn("Offline service unavailable:", e));
 }
+
+// ---- Small "draft" tag on anything changed on this device that has not reached the server yet ----
+(function () {
+  const st = document.createElement("style");
+  st.textContent = ".nova-draft-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;background:#FDF0D5;color:#8A5A00;font:600 10px/1.5 system-ui,sans-serif;vertical-align:middle;white-space:nowrap;}";
+  document.head.appendChild(st);
+})();
+let __draftKeys = new Set(), __tagT = null;
+async function refreshDraftKeys() {
+  if (!window.NovaOffline) return;
+  const ds = await NovaOffline.listDrafts(CURRENT_SCHOOL_ID || "__none__", null);
+  const k = new Set();
+  ds.forEach((d) => {
+    if (d.recordId) k.add(String(d.recordId));
+    (Array.isArray(d.body) ? d.body : [d.body]).forEach((r) => {
+      if (!r) return;
+      if (r.id != null) k.add(String(r.id));
+      if (d.table === "attendance" && r.student_id) k.add(String(r.student_id));
+      if (d.table === "staff_attendance" && r.teacher_id) k.add(String(r.teacher_id));
+    });
+  });
+  __draftKeys = k; tagDrafts();
+}
+function tagDrafts() {
+  const wanted = new Set();
+  if (__draftKeys.size) {
+    document.querySelectorAll("[data-id],[data-sid],[data-tid],[data-staffid]").forEach((e) => {
+      const id = e.dataset.id || e.dataset.sid || e.dataset.tid || e.dataset.staffid;
+      if (!__draftKeys.has(String(id))) return;
+      let host = e;
+      if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(e.tagName)) host = e.closest("tr,li,[class*='row'],[class*='item'],[class*='card']");
+      if (!host || host === document.body || host.id === "app") return;
+      if (host.tagName === "TR") host = host.cells && host.cells[0];
+      if (host) wanted.add(host);
+    });
+  }
+  document.querySelectorAll(".nova-draft-tag").forEach((t) => { if (!wanted.has(t.parentElement)) t.remove(); });
+  wanted.forEach((h) => {
+    if (h.querySelector(":scope > .nova-draft-tag")) return;
+    const t = document.createElement("span"); t.className = "nova-draft-tag"; t.textContent = "draft"; h.appendChild(t);
+  });
+}
+new MutationObserver(() => {
+  if (__tagT) return;
+  __tagT = setTimeout(() => { __tagT = null; if (__draftKeys.size || document.querySelector(".nova-draft-tag")) tagDrafts(); }, 250);
+}).observe(document.body, { childList: true, subtree: true });
+
+// ---- Download everything: a full copy of the school's data is kept on this device and refreshed all the time ----
+const DOWNLOAD_TABLES = ["school_settings", "students", "attendance", "staff_attendance", "fee_payments", "fee_structures", "fee_reminders",
+  "teachers", "teacher_profiles", "teacher_qualifications", "teacher_evaluations", "classes", "subjects", "class_subjects", "terms",
+  "academic_years", "exam_types", "exams", "grades", "exam_results", "report_cards", "inventory_items", "asset_maintenance",
+  "library_books", "library_loans", "school_meetings", "school_communications", "profiles", "parent_students", "parent_messages", "private_messages"];
+let __dlRunning = false, __dlLast = 0;
+async function downloadTable(t, sid) {
+  const size = 1000; let all = [], useOrder = t !== "school_settings";
+  for (let page = 0; page < 80; page++) {
+    const p = Object.assign({ select: "*" }, useOrder ? { order: "id.asc" } : {});
+    const path = `/rest/v1/${t}?${qs(scopedParams(t, p))}`;
+    let rows;
+    try { rows = await sbNet(path, { headers: { "Range-Unit": "items", "Range": `${page * size}-${page * size + size - 1}` } }); }
+    catch (e) { if (useOrder && page === 0 && !NovaOffline.isNetworkError(e)) { useOrder = false; page = -1; all = []; continue; } throw e; }
+    if (!Array.isArray(rows)) return;
+    all = all.concat(rows);
+    if (rows.length < size) break;
+  }
+  learnIdKind(t, all);
+  await NovaOffline.cachePut(sid, "tbl|" + t, all);
+}
+async function downloadEverything(force) {
+  if (__dlRunning || !window.NovaOffline || !CURRENT_SCHOOL_ID || !auth || !profile || OFFLINE_SESSION || !SESSION_TOKEN) return;
+  if (!NovaOffline.isOnline() || !schoolIsActive()) return;
+  if (!force && Date.now() - __dlLast < 300000) return;
+  __dlRunning = true; const sid = CURRENT_SCHOOL_ID;
+  try {
+    const queue = DOWNLOAD_TABLES.slice();
+    const worker = async () => {
+      while (queue.length) {
+        if (!NovaOffline.isOnline() || sid !== CURRENT_SCHOOL_ID) return;
+        const t = queue.shift();
+        try { await downloadTable(t, sid); } catch (e) { /* a table this user cannot read is simply skipped */ }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    __dlLast = Date.now();
+  } finally { __dlRunning = false; }
+}
+setInterval(() => { downloadEverything(false).catch(() => {}); }, 5000);
+window.addEventListener("online", () => setTimeout(() => downloadEverything(true).catch(() => {}), 3000));
 
 let __activeRefresh = null;
 function setActiveRefresh(fn) { __activeRefresh = fn; }
@@ -3523,6 +3729,14 @@ async function tryRestoreRememberedSession() {
   const username = getRememberedSession();
   const token = getPersistedSessionToken();
   if (!username || !token) { clearRememberedSession(); persistSessionToken(null); return false; }
+  // Instant open: this device already holds a saved copy of the remembered user, so go straight into the app
+  // (no login, no waiting on the network) and let the server re-confirm quietly in the background.
+  try {
+    if (window.NovaOffline && NovaOffline.auth) {
+      const rec = await NovaOffline.auth.getSnapshot(username);
+      if (rec && rec.fresh && rec.profile && rec.profile.id) { offlineApplySnapshot(rec); setTimeout(upgradeOfflineSession, 0); return true; }
+    }
+  } catch (e) { /* no saved copy yet: fall through to the normal online restore */ }
   try {
     SESSION_TOKEN = token;
     const row = await sb(`/rest/v1/rpc/restore_session`, { method:"POST", body: JSON.stringify({ p_token: token }) });
@@ -3631,6 +3845,8 @@ function promptAdminPassword(title) {
 }
 function logout() {
   const token = SESSION_TOKEN;
+  try { if (window.NovaOffline) { if (profile && profile.username) NovaOffline.auth.remove(profile.username).catch(() => {}); NovaOffline.clearReadCache().catch(() => {}); } } catch (e) {}
+  OFFLINE_SESSION = false; NEEDS_SIGNIN = false;
   stopSchoolSync(); stopNotifPolling(); auth = null; profile = null; cache = {}; CURRENT_SCHOOL_ID = null; CURRENT_SCHOOL = null;
   clearRememberedSession(); persistSessionToken(null); pinLocked = false; showSupportPortal = false; render();
   if (token) sb(`/rest/v1/rpc/revoke_session`, { method:"POST", body: JSON.stringify({ p_token: token }) }).catch(()=>{});
@@ -11722,7 +11938,7 @@ function renderBootLoader() {
 (async function boot() {
   renderBootLoader(); // shown immediately so nothing white/blank ever appears
   startHeaderClock(); 
-  await Promise.all([loadSchoolSettings(), tryRestoreRememberedSession()]);
+  await Promise.all([Promise.race([loadSchoolSettings().catch(() => {}), new Promise((r) => setTimeout(r, 2500))]), tryRestoreRememberedSession()]);
   if (OFFLINE_SESSION && __offlineSnapshot) { schoolSettings = __offlineSnapshot.settings || schoolSettings; applyBrandColor(schoolSettings?.brand_color); }
   else if (auth && profile) offlineRememberCredential(profile.username, null, true);
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } 
