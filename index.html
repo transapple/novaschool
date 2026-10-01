@@ -3378,34 +3378,84 @@ function qTest(row, col, spec) {
   } else throw new Error("unsupported");
   return neg ? !r : r;
 }
-function runQueryOnRows(rows, path) {
+function splitTop(str) {
+  const out = []; let d = 0, cur = "";
+  for (const ch of str) {
+    if (ch === "(") d++; if (ch === ")") d--;
+    if (ch === "," && d === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+function parseSelect(sel) {
+  const cols = [], embeds = [];
+  splitTop(sel).forEach((part) => {
+    const m = /^(?:([a-z_]+):)?([a-z_]+)(?:![a-z_]+)?\(([\s\S]*)\)$/.exec(part);
+    if (m) embeds.push({ alias: m[1] || m[2], table: m[2], inner: m[3] }); else cols.push(part);
+  });
+  return { cols, embeds };
+}
+function singularOf(t) { return /sses$/.test(t) ? t.slice(0, -2) : /ies$/.test(t) ? t.slice(0, -3) + "y" : t.replace(/s$/, ""); }
+function embedTables(sel, acc) {
+  acc = acc || new Set();
+  parseSelect(sel).embeds.forEach((e) => { acc.add(e.table); embedTables(e.inner, acc); });
+  return acc;
+}
+function applySelect(rows, sel, tables) {
+  const { cols, embeds } = parseSelect(sel);
+  return rows.map((r) => {
+    let o;
+    if (cols.includes("*") || sel === "*") o = Object.assign({}, r);
+    else { o = {}; cols.forEach((c) => { o[c] = r[c]; }); }
+    embeds.forEach((e) => {
+      const list = tables[e.table] || [];
+      const fks = [singularOf(e.table) + "_id"];
+      if (e.table === "profiles") fks.push("parent_id", "user_id", "teacher_id", "received_by", "marked_by");
+      const fk = fks.find((k) => r[k] !== undefined && r[k] !== null);
+      let val = null;
+      if (fk) { const hit = list.find((x) => String(x.id) === String(r[fk])); if (hit) val = applySelect([hit], e.inner, tables)[0]; }
+      o[e.alias] = val;
+    });
+    return o;
+  });
+}
+function runQueryOnRows(rows, path, tables) {
   const q = path.split("?")[1] || ""; let out = rows.slice(), order = null, limit = null, offset = 0, select = "*";
   for (const part of q.split("&")) {
     if (!part) continue;
     const eq = part.indexOf("="); const k = decodeURIComponent(part.slice(0, eq)); const v = decodeURIComponent(part.slice(eq + 1));
     if (k === "select") select = v; else if (k === "order") order = v; else if (k === "limit") limit = parseInt(v, 10);
-    else if (k === "offset") offset = parseInt(v, 10) || 0; else if (k === "or" || k === "and" || k === "not") return null;
+    else if (k === "offset") offset = parseInt(v, 10) || 0;
+    else if (k === "or" || k === "and" || k === "not" || k.includes(".")) return null; // not answerable from one table copy
     else out = out.filter((r) => qTest(r, k, v));
   }
   if (order) {
-    const cols = order.split(",").map((o) => { const a = o.split("."); return { c: a[0], d: a[1] === "desc" ? -1 : 1, nf: a.includes("nullsfirst") }; });
+    const cols = order.split(",").map((o) => { const a = o.split("."); return { c: a[0], d: a[1] === "desc" ? -1 : 1 }; });
     out.sort((x, y) => { for (const o of cols) { const c = qCompare(x[o.c], y[o.c]); if (c) return c * o.d; } return 0; });
   }
   if (offset) out = out.slice(offset);
   if (limit != null && !isNaN(limit)) out = out.slice(0, limit);
-  if (select !== "*") {
-    if (/[()]/.test(select)) return null; // joined data cannot be answered from one table copy
-    const cols = select.split(",").map((c) => c.trim());
-    out = out.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
-  }
+  if (select !== "*") out = applySelect(out, select, tables || {});
   return out;
+}
+async function loadEmbedTables(sel) {
+  const tables = {};
+  for (const n of embedTables(sel)) {
+    const sn = await NovaOffline.cacheGet(CURRENT_SCHOOL_ID, "tbl|" + n).catch(() => null);
+    if (!sn || !Array.isArray(sn.data)) return null;
+    tables[n] = sn.data;
+  }
+  return tables;
 }
 async function snapshotQuery(path, opts) {
   const m = /^\/rest\/v1\/([a-z_]+)\?/.exec(path); if (!m) return null;
   if (opts && opts.headers && /pgrst\.object/i.test(JSON.stringify(opts.headers))) return null;
   const snap = await NovaOffline.cacheGet(CURRENT_SCHOOL_ID, "tbl|" + m[1]).catch(() => null);
   if (!snap || !Array.isArray(snap.data)) return null;
-  try { const data = runQueryOnRows(snap.data, path); return data ? { data, ts: snap.ts } : null; } catch (e) { return null; }
+  const sm = /(?:^|&)select=([^&]*)/.exec(path.split("?")[1] || "");
+  const tables = await loadEmbedTables(sm ? decodeURIComponent(sm[1]) : "*");
+  if (!tables) return null;
+  try { const data = runQueryOnRows(snap.data, path, tables); return data ? { data, ts: snap.ts } : null; } catch (e) { return null; }
 }
 // Online: real data (and a saved copy). Offline: the newest saved copy, either that exact list or the full table copy.
 async function cachedRead(path, opts) {
@@ -3432,11 +3482,17 @@ async function offlineRead(table, path, params) {
     // rows added by drafts never went through the server's filters, so apply the simple ones here
     const tests = Object.entries(params || {}).filter(([k, v]) => k !== "school_id" && typeof v === "string" && /^(eq\.|is\.null$)/.test(v));
     if (tests.length) rows = rows.filter((r) => !r._draft || tests.every(([k, v]) => v === "is.null" ? (r[k] == null) : String(r[k]) === v.slice(3)));
+    const sel = params && typeof params.select === "string" ? params.select : "";
+    if (sel.includes("(") && rows.some((r) => r._draft)) {
+      const tb = await loadEmbedTables(sel);
+      if (tb) rows = rows.map((r) => r._draft ? Object.assign({}, r, applySelect([r], sel, tb)[0]) : r);
+    }
   }
   return rows;
 }
 async function novaOfflineExec(d) {
-  if (!SESSION_TOKEN || OFFLINE_SESSION || d.schoolId !== CURRENT_SCHOOL_ID) throw new Error("Couldn't connect right now. Sign in to upload your drafts."); // keeps the draft pending
+  if (OFFLINE_SESSION && NovaOffline.isOnline()) await upgradeOfflineSession(); // confirm the saved sign-in first, then upload
+  if (!SESSION_TOKEN || OFFLINE_SESSION || d.schoolId !== CURRENT_SCHOOL_ID) throw new Error(NEEDS_SIGNIN ? "Sign in again to upload your drafts." : "Couldn't connect right now. Waiting for the sign-in check."); // keeps the draft
   const t = d.table;
   if (d.op === "insert") { const r = await _dbInsert(t, d.body); logActivity(t, "insert", (r && r[0] && r[0].id) || d.recordId, d.body); return r; }
   if (d.op === "update") { const r = await _dbUpdate(t, d.recordId, d.body); logActivity(t, "update", d.recordId, d.body); return r; }
@@ -3463,18 +3519,33 @@ function offlineBannerEl() {
   document.body.appendChild(b);
   return b;
 }
+let __transient = { text: "", bg: "", until: 0, tappable: false }, __syncShowSince = 0, __failShown = 0;
+function setTransient(text, bg, ms, tappable) {
+  __transient = { text, bg, until: Date.now() + ms, tappable: !!tappable };
+  setTimeout(() => offlineRender().catch(() => {}), ms + 60);
+}
 async function offlineRender() {
-  const s = __offStatus, el = offlineBannerEl(), waiting = (s.pending || 0) + (s.failed || 0);
-  clearTimeout(__bannerHideT);
+  const s = __offStatus, el = offlineBannerEl(), waiting = (s.pending || 0) + (s.failed || 0), now = Date.now();
   let text = "", bg = "", tappable = false;
-  if (!s.online) { __wasOffline = true; text = "You're offline" + (waiting ? " - " + waiting + " in draft" : ""); bg = "#B7791F"; }
-  else if (NEEDS_SIGNIN && waiting) { text = "Tap here and sign in again to sync your changes"; bg = "#D6564F"; tappable = true; }
-  else if (s.syncing || s.pending) { __wasOffline = true; text = "You're back online. Data is syncing..."; bg = "#2F6FDB"; }
-  else if (s.failed) { text = s.failed + " in draft. Tap to try again"; bg = "#D6564F"; tappable = true; }
-  else if (__wasOffline) {
-    text = "You're back online. Data is synced."; bg = "#2E9E7C";
-    __bannerHideT = setTimeout(() => { __wasOffline = false; el.style.display = "none"; }, 2500);
+  if (!s.online) {
+    __wasOffline = true; __syncShowSince = 0;
+    text = "You're offline" + (waiting ? " - " + waiting + " in draft" : ""); bg = "#B7791F";
+  } else if (NEEDS_SIGNIN && waiting) {
+    text = "Tap here and sign in again to sync your changes"; bg = "#D6564F"; tappable = true;
+  } else if (s.syncing || s.pending) {
+    __wasOffline = true;
+    if (!__syncShowSince) __syncShowSince = now;
+    if (s.syncing || now - __syncShowSince < 15000) { // never stays on screen for long
+      text = "You're back online. Data is syncing..."; bg = "#2F6FDB";
+      if (!s.syncing) { NovaOffline.sync().catch(() => {}); setTimeout(() => offlineRender().catch(() => {}), 3000); }
+    }
+  } else {
+    __syncShowSince = 0;
+    if (!s.failed) __failShown = 0;
+    if (s.failed && __failShown !== s.failed) { __failShown = s.failed; __wasOffline = false; setTransient(s.failed + " in draft. Tap to try again", "#D6564F", 6000, true); }
+    else if (__wasOffline) { __wasOffline = false; setTransient("You're back online. Data is synced.", "#2E9E7C", 2500, false); }
   }
+  if (!text && __transient.until > now) { text = __transient.text; bg = __transient.bg; tappable = __transient.tappable; }
   el.style.pointerEvents = tappable ? "auto" : "none";
   if (!text) { el.style.display = "none"; return; }
   el.textContent = text; el.style.background = bg; el.style.display = "block";
@@ -3483,13 +3554,15 @@ async function offlineRender() {
 async function probeLink() {
   if (!window.NovaOffline) return;
   const c = new AbortController(); const t = setTimeout(() => c.abort(), 5000);
-  try { await fetch(SUPABASE_URL + "/auth/v1/health", { headers: { apikey: SUPABASE_KEY }, signal: c.signal, cache: "no-store" }); NovaOffline.setLink(true); }
+  // no-cors: any reply at all from the server proves we are online; only a real network failure rejects.
+  try { await fetch(SUPABASE_URL + "/rest/v1/?_=" + Date.now(), { mode: "no-cors", signal: c.signal, cache: "no-store" }); NovaOffline.setLink(true); }
   catch (e) { NovaOffline.setLink(false); }
   finally { clearTimeout(t); }
 }
 window.addEventListener("online", () => { probeLink(); });
 window.addEventListener("offline", () => { if (window.NovaOffline) NovaOffline.setLink(false); });
-setInterval(() => { if (window.__novaLinkDown || navigator.onLine === false) probeLink(); }, 8000);
+setInterval(() => { if (window.__novaLinkDown) probeLink(); }, 4000);
+window.addEventListener("focus", () => { if (window.__novaLinkDown) probeLink(); });
 // ---- Offline sign-in glue (Stage 3) ----
 // OFFLINE_SESSION = the app was opened/signed in without the server confirming the user this time.
 // Drafts stay pending during an offline session; when the connection returns the saved session is
@@ -3526,7 +3599,13 @@ async function offlineLoginAttempt(username, password) {
   return { ok: true };
 }
 let __upgrading = false;
-async function upgradeOfflineSession() {
+let __upPromise = null;
+function upgradeOfflineSession() {
+  if (__upPromise) return __upPromise;
+  __upPromise = _upgradeOfflineSession().catch(() => {}).finally(() => { __upPromise = null; });
+  return __upPromise;
+}
+async function _upgradeOfflineSession() {
   if (!OFFLINE_SESSION || __upgrading || !window.NovaOffline || !NovaOffline.isOnline()) return;
   __upgrading = true;
   try {
@@ -3565,7 +3644,7 @@ if (window.NovaOffline) {
   NovaOffline.subscribe((s) => {
     __offStatus = s; offlineRender().catch(() => {});
     refreshDraftKeys().catch(() => {});
-    if (__wasSyncing && !s.syncing) { refreshActiveView(); setTimeout(() => downloadEverything(true).catch(() => {}), 500); } // drafts just uploaded: reload real data
+    if (__wasSyncing && !s.syncing) { finalizeQueuedStudents().catch(() => {}); refreshActiveView(); setTimeout(() => downloadEverything(true).catch(() => {}), 500); } // drafts just uploaded: reload real data
     __wasSyncing = s.syncing;
   });
   NovaOffline.start({ exec: novaOfflineExec, schoolId: () => CURRENT_SCHOOL_ID || "__none__" }).catch((e) => console.warn("Offline service unavailable:", e));
@@ -3623,13 +3702,14 @@ const DOWNLOAD_TABLES = ["school_settings", "students", "attendance", "staff_att
   "academic_years", "exam_types", "exams", "grades", "exam_results", "report_cards", "inventory_items", "asset_maintenance",
   "library_books", "library_loans", "school_meetings", "school_communications", "profiles", "parent_students", "parent_messages", "private_messages"];
 let __dlRunning = false, __dlLast = 0;
+const HEAVY_TABLES = new Set(["students", "profiles", "teachers", "teacher_profiles", "library_books", "inventory_items"]);
 async function downloadTable(t, sid) {
-  const size = 1000; let all = [], useOrder = t !== "school_settings";
-  for (let page = 0; page < 80; page++) {
-    const p = Object.assign({ select: "*" }, useOrder ? { order: "id.asc" } : {});
+  const size = HEAVY_TABLES.has(t) ? 100 : 1000; let all = [], useOrder = t !== "school_settings";
+  for (let page = 0; page < 400; page++) {
+    const p = Object.assign({ select: "*", limit: String(size), offset: String(page * size) }, useOrder ? { order: "id.asc" } : {});
     const path = `/rest/v1/${t}?${qs(scopedParams(t, p))}`;
     let rows;
-    try { rows = await sbNet(path, { headers: { "Range-Unit": "items", "Range": `${page * size}-${page * size + size - 1}` } }); }
+    try { rows = await sbNet(path); }
     catch (e) { if (useOrder && page === 0 && !NovaOffline.isNetworkError(e)) { useOrder = false; page = -1; all = []; continue; } throw e; }
     if (!Array.isArray(rows)) return;
     all = all.concat(rows);
@@ -3649,11 +3729,12 @@ async function downloadEverything(force) {
       while (queue.length) {
         if (!NovaOffline.isOnline() || sid !== CURRENT_SCHOOL_ID) return;
         const t = queue.shift();
-        try { await downloadTable(t, sid); } catch (e) { /* a table this user cannot read is simply skipped */ }
+        try { await downloadTable(t, sid); } catch (e) { failed++; /* a table this user cannot read, or a slow connection: tried again soon */ }
       }
     };
+    let failed = 0;
     await Promise.all([worker(), worker(), worker()]);
-    __dlLast = Date.now();
+    __dlLast = failed ? Date.now() - 240000 : Date.now(); // a failed table is retried after about a minute
   } finally { __dlRunning = false; }
 }
 setInterval(() => { downloadEverything(false).catch(() => {}); }, 5000);
@@ -7431,6 +7512,26 @@ async function schoolFinalizeStudent(studentId) {
   return res;
 }
 
+const FIN_KEY = "novaFinalizeQueue";
+function finQueue() { try { return JSON.parse(localStorage.getItem(FIN_KEY) || "[]") || []; } catch (e) { return []; } }
+function finSave(a) { try { localStorage.setItem(FIN_KEY, JSON.stringify(a)); } catch (e) {} }
+// Students registered offline: once their record has reached the server, finish the SIN registration step.
+let __finBusy = false;
+async function finalizeQueuedStudents() {
+  if (__finBusy || !window.NovaOffline || !NovaOffline.isOnline() || OFFLINE_SESSION || !SESSION_TOKEN) return;
+  const q = finQueue(); if (!q.length) return;
+  __finBusy = true;
+  try {
+    const waiting = new Set((await NovaOffline.listDrafts(CURRENT_SCHOOL_ID, "students")).map((d) => String(d.recordId)));
+    const keep = [];
+    for (const id of q) {
+      if (waiting.has(id)) { keep.push(id); continue; } // its record has not uploaded yet
+      try { await schoolFinalizeStudent(id); } catch (e) { if (NovaOffline.isNetworkError(e)) keep.push(id); }
+    }
+    finSave(keep);
+    if (keep.length < q.length) refreshActiveView();
+  } finally { __finBusy = false; }
+}
 let sinSyncBusy = false;
 async function syncPendingSins() {
   if (sinSyncBusy) return null;
@@ -7558,11 +7659,13 @@ function openStudentModal(container, classes, s) {
     const saved = Array.isArray(rows) ? rows[0] : rows;
     let outcome = null;
     let finalizeErr = null;
-    try { outcome = await schoolFinalizeStudent(saved.id); }
-    catch (e) { finalizeErr = e; }
+    const queuedOffline = !!(saved && saved._draft);
+    if (queuedOffline) { const q = finQueue(); q.push(String(saved.id)); finSave(q); }
+    else { try { outcome = await schoolFinalizeStudent(saved.id); } catch (e) { finalizeErr = e; } }
     renderStudents(container);
     if (outcome) showRegistrationOutcome(payload.full_name, outcome);
     else if (finalizeErr) toast(`Saved as “SIN pending”. Could not link it yet: ${reqEsc(finalizeErr.message || "")}`, true);
+    else if (queuedOffline) toast("Student saved in draft. Registration finishes when you are back online.", false);
     else toast("Saved as “SIN pending”.", false);
   }, { saveLabel: isEdit ? "Save changes" : "Register" });
 
@@ -11773,9 +11876,11 @@ function beginSearchGen(container) { return (container.__searchGen = (container.
 function isStaleSearch(container, token) { return container.__searchGen !== token; }
 
 function toast(msg, isError=true) {
-  const t = el(`<div style="position:fixed;left:50%;bottom:104px;transform:translateX(-50%);background:${isError?'#D6564F':'#2E9E7C'};color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 10px 28px rgba(0,0,0,.25);max-width:90%;text-align:center;">${msg}</div>`);
+  document.querySelectorAll(".nova-toast").forEach((n) => n.remove());
+  const t = el(`<div class="nova-toast" onclick="this.remove()" style="position:fixed;left:50%;bottom:104px;transform:translateX(-50%);background:${isError?'#D6564F':'#2E9E7C'};color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 10px 28px rgba(0,0,0,.25);max-width:90%;text-align:center;">${msg}</div>`);
   document.body.appendChild(t);
-  setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, 3000);
+  setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; }, 2600);
+  setTimeout(()=>{ try { t.remove(); } catch(e){} }, 3200);
 }
 
 function safe(fn) {
@@ -11943,6 +12048,7 @@ function renderBootLoader() {
   else if (auth && profile) offlineRememberCredential(profile.username, null, true);
   if (typeof sb === "function") { sb(`/rest/v1/rpc/purge_expired_trashed_schools`, { method:"POST", body: JSON.stringify({}) }).catch(() => {}); } 
   render(); // lands straight on the dashboard (home)
+  setTimeout(() => { downloadEverything(true).catch(() => {}); finalizeQueuedStudents().catch(() => {}); }, 1500);
 })();
 
 </script>
