@@ -53,6 +53,9 @@
 :root{--bg:#f6f7f9;--card:#fff;--tx:#1a1d21;--mut:#6b7280;--pri:#0b6b3a;--bd:#e3e6ea}
 @media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b2026;--tx:#eceff2;--mut:#98a2ad;--bd:#2a313a}}
 *{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+/* No text cursor or text selection on page text; boxes you type in still work. */
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 header{background:var(--pri);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
 header b{font-size:17px}main{max-width:720px;margin:0 auto;padding:14px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
