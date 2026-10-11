@@ -635,14 +635,18 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div class="mkhint">The student opens Transfer in Digital Students and creates a one-time code (OTP). Enter the student number and that code here before it expires. After the transfer, the old school keeps the history as inactive.</div>
     <div id="trRes" class="mkbody"></div>
     <h3 class="mksec">Transfer history</h3><div id="trHist" class="mkbody"></div></div>
-  <div data-t="stu" data-s="link" id="linkBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128279;</div><div><b>Link parent or student login</b><small>Give a parent or student access to the app</small></div></div><div class="mkpad">
-    <p id="lkhelp" class="mut">The parent must first sign up in the app. Then enter the phone number they used.</p>
-    <select id="lkstu"></select><input id="lkemail" type="tel" inputmode="tel" placeholder="Their phone number">
-    <div class="row"><select id="lktype" onchange="lkMode()"><option value="parent">Parent / guardian</option><option value="student">Student's own login</option></select><input id="lkrel" placeholder="Relationship (e.g. mother)"></div>
+  <div data-t="stu" data-s="link" id="linkBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128279;</div><div><b>Link student login</b><small>Give a student access to their own records</small></div></div><div class="mkpad">
+    <p id="lkhelp" class="mut">The student must first sign up in the app. Then enter the email they used.</p>
+    <select id="lkstu"></select><input id="lkemail" type="email" inputmode="email" placeholder="Their email">
+    <input type="hidden" id="lktype" value="student"><input type="hidden" id="lkrel" value="">
     <button onclick="linkAcct()">Link account</button><div id="lkerr" class="err"></div><div id="lklist"></div></div></div>
 
+  <div data-t="stu" data-s="link" id="pcBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128222;</div><div><b>Parent contacts</b><small>From Parent Hub. Read only.</small></div></div><div class="mkpad">
+    <p class="mut">Parents who linked their child to this school in Parent Hub. Enter the school key from the platform owner once; it is kept on this device only.</p>
+    <input id="pcKey" type="password" placeholder="School key" autocomplete="off"><button onclick="pcLoad()">Load parent contacts</button><div id="pcErr" class="err"></div><div id="pcList"></div></div></div>
+
   <div id="portal" class="hide">
-    <div id="pnone" class="card hide"><h3>No learner linked yet</h3><p class="mut">No student is linked to your account yet. Give the school office the phone number (parents) or email you signed up with, then refresh this page.</p></div>
+    <div id="pnone" class="card hide"><h3>No learner linked yet</h3><p class="mut">No student is linked to your account yet. Give the school office the email you signed up with, then refresh this page.</p></div>
     <div id="pmain" class="hide">
       <div class="card"><h3>Learner</h3><select id="pkid" onchange="loadKid()"></select></div>
       <div class="row" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px"><button class="alt" onclick="setP('ann')">Notices</button><button class="alt" onclick="setP('att')">Attendance</button><button class="alt" onclick="setP('rep')">Report card</button><button class="alt" onclick="setP('fee')">Fees</button><button class="alt" onclick="setP('lrn')">Learning</button></div>
@@ -790,7 +794,7 @@ async function load(){
   show("pending",me.role==="pending");if(me.role==="pending")loadStaffMatch();show("staffHome",me.role==="staff");if(me.role==="staff")drawStaffHome();
   perm={ad,st:ad||me.role==="teacher",view:["super_admin","school_admin","teacher","bursar"].includes(me.role),fee:ad||me.role==="bursar",res:ad||me.role==="teacher"};applyTab();
   acc=null;if(!sa&&me.school_id){const{data:a}=await sb.rpc("my_access");acc=a||null}applyTab();
-  show("portal",["parent","student"].includes(me.role));if(["parent","student"].includes(me.role))loadPortal();
+  show("portal",me.role==="student");if(me.role==="student")loadPortal();
   if(!sa&&me.school_id){const{data:sc}=await sb.from("schools").select("*").eq("id",me.school_id).maybeSingle();SCHI=sc||null}
   drawLogo();
   if(sa)await loadSchools();
@@ -975,15 +979,16 @@ function stuEdit(i){const s=students.find(x=>x.id===i);if(!s)return;if(stuInacti
   <input id="eCam" type="file" accept="image/*" capture="environment" class="hide" onchange="edPic(this)"><input id="eGal" type="file" accept="image/*" class="hide" onchange="edPic(this)">
   <div style="padding:10px 12px;border-radius:10px;background:var(--bg);margin:0 0 8px"><div class="mut">Name, date of birth and gender (locked)</div><b>${esc(((s.first_name||"")+" "+(s.last_name||"")).trim())}</b><div class="mut">${esc(String(s.date_of_birth||"Not set").slice(0,10))} · ${esc(s.gender||"")}</div><div class="mut" style="margin-top:4px">These travel with the student number. Only Mother can correct them: close this and tap Request correction.</div></div>
   <div class="row" style="grid-template-columns:1fr"><select id="eCid"><option value="">No class yet</option>${cs.map(c=>`<option value="${c.id}" ${c.id===s.class_id?"selected":""}>${esc(cname(c))}</option>`).join("")}</select></div>
-  <input id="eGn" placeholder="Parent / guardian name" value="${esc(s.guardian_name||"")}">
-  ${relHTML("e",s.guardian_relationship)}
-  <input id="eGp" type="tel" inputmode="tel" placeholder="Parent / guardian phone number" value="${esc(s.guardian_phone||"")}">
+  <input id="eGn" placeholder="Parent / guardian name" value="${esc(s.guardian_name||"")}" ${s.guardian_name?"readonly":""}>
+  ${s.guardian_relationship?`<input id="eGrl" value="${esc(s.guardian_relationship)}" readonly>`:relHTML("e",s.guardian_relationship)}
+  <input id="eGp" type="tel" inputmode="tel" placeholder="Parent / guardian phone number" value="${esc(s.guardian_phone||"")}" ${s.guardian_phone?"readonly":""}>
+  <div class="mut" style="font-size:12px">Guardian details are fixed after registration. The parent updates them in Parent Hub. Empty fields can still be filled in once.</div>
   <div id="eErr" class="err"></div><div class="brow"><button class="pri" id="eSave" onclick="stuSave('${i}')">Save</button><button class="alt" onclick="closeModal()">Cancel</button></div>`)}
 function edDobValue(){const a=$("eDd").value,b=$("eDm").value,c=$("eDy").value;if(!a&&!b&&!c)return"";const d=+a,m=+b,y=+c;if(!d||!m||c.length!==4)return null;const t=new Date(y,m-1,d);if(t.getFullYear()!==y||t.getMonth()!==m-1||t.getDate()!==d)return null;if(t>new Date()||y<1950)return null;return y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
 async function stuSave(i){const s=students.find(x=>x.id===i);if(!s)return;const g=id=>$(id).value.trim(),err=m=>{$("eErr").textContent=m;$("eSave").disabled=false};
   $("eSave").disabled=true;$("eErr").textContent="Saving...";
   const cid=$("eCid").value;{const w=cid&&cid!==s.class_id?clFullMsg(cid,s.id):"";if(w&&!confirm(w))return err("Choose another class or stream.")}
-  const row={class_id:cid||null,class_level:cid?$("eCid").selectedOptions[0].text:null,guardian_name:g("eGn"),guardian_relationship:relVal("e"),guardian_phone:g("eGp")};
+  const row={class_id:cid||null,class_level:cid?$("eCid").selectedOptions[0].text:null,};if(!s.guardian_name)row.guardian_name=g("eGn");if(!s.guardian_relationship)row.guardian_relationship=relVal("e");if(!s.guardian_phone)row.guardian_phone=g("eGp");
   try{if(edBlob)row.photo_url=await upImg(`${me.id}/students/${s.id}.jpg`,edBlob);const{error}=await sb.from("students").update(row).eq("id",s.id);if(error)throw error;edBlob=null;closeModal();await loadStudents()}catch(e){err(e.message||"Could not save.")}}
 async function stuDel(i){const s=students.find(x=>x.id===i);if(!s)return;if(stuInactive(s)){closeModal();return toast("Inactive learner: nothing can be changed here")}if(!confirm("Move "+s.first_name+" "+s.last_name+" to the Trash? You can restore them later."))return;
   const{error}=await sb.from("students").update({deleted_at:new Date().toISOString(),status:"withdrawn",status_before_trash:s.status}).eq("id",i);
@@ -1183,7 +1188,7 @@ function applyTab(){
   
   document.querySelectorAll("#side button[data-t],#bnav button[data-t]").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));applySub();renderHome();drawActivity();show("actBox",!!perm.ad&&cfg.feed);show("setBox",tab==="set");show("ssBox",false);show("tabSS",false);show("bFee",perm.fee);
   show("stuBox",perm.ad&&tab==="stu");show("listBox",perm.view&&tab==="stu");show("trashBox",perm.ad&&tab==="stu");
-  show("classBox",perm.view&&tab==="cls");show("attBox",perm.view&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("promoBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("staffAtt",perm.ad);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
+  show("classBox",perm.view&&tab==="cls");show("attBox",perm.view&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("promoBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("staffAtt",perm.ad);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
   show("adminCls",perm.ad);show("adminTea",perm.st);staffRoleOpts();applyAccess();
 }
 /* AUTH_START: sign in and create account with the school ID given by the platform admin. Layout untouched: this is a full-screen overlay only. */
@@ -1310,7 +1315,7 @@ function drawAuthDyn(){
   if(authMode!=="up"){d.innerHTML="";return}
   const o0=authOpt,ok=o0&&typeof o0==="object",o=ok?o0:{has_admin:true,subjects:[],classes:[]};
   const msg=!o0?"Enter your school ID above. Your role options appear after that.":o0==="wait"?"Checking school ID...":o0==="bad"?"School ID not found, or the school is not active.":"";
-  const F=authF,first=!o.has_admin,role=first?"school_admin":(["staff","parent"].includes(F.role)?F.role:"staff"),staffRole=["school_admin","teacher","bursar"].includes(role);
+  const F=authF,first=!o.has_admin,role=first?"school_admin":(["staff"].includes(F.role)?F.role:"staff"),staffRole=["school_admin","teacher","bursar"].includes(role);
   const sel=(id,opts,val,ph,ch)=>`<select id="${id}" ${ch?'onchange="authDyn()"':""}>${ph?`<option value="">${ph}</option>`:""}${opts.map(x=>`<option value="${x[0]}" ${x[0]===val?"selected":""}>${esc(x[1])}</option>`).join("")}</select>`;
   const chk=(id,list,on,none)=>list.length?`<div id="${id}" style="max-height:130px;overflow:auto;border:1px solid var(--bd);border-radius:10px;padding:6px 10px;margin:4px 0 10px">${list.map(x=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" style="width:auto;margin:0" value="${x.id}" ${on.includes(x.id)?"checked":""}> ${esc(x.name)}</label>`).join("")}</div>`:`<p class="mut">${none}</p>`;
   d.innerHTML=(()=>{
@@ -1318,10 +1323,10 @@ function drawAuthDyn(){
   const fld=(l,h)=>`<div class="af"><label>${l}</label>${h}</div>`;
   const pic=`<div class="aph"><b>Profile picture <span class="req">*</span></b><label for="aPic" class="apic">${authPrev?`<img src="${authPrev}">`:'<svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>'}<span class="acam">+</span></label><input id="aPic" type="file" accept="image/*" hidden onchange="authPic(this)"></div>`;
   const kids=role==="parent"?`<span class="alab">Your children (student ID from the school's records)</span><div id="aKids">${F.kids.map((k,i)=>`<div class="aKid"><input value="${esc(k.id)}" autocapitalize="characters"><select><option value="father" ${k.rel==="father"?"selected":""}>Father</option><option value="mother" ${k.rel==="mother"?"selected":""}>Mother</option><option value="guardian" ${k.rel==="guardian"?"selected":""}>Guardian</option></select>${F.kids.length>1?`<button type="button" onclick="authKid(0,${i})">×</button>`:""}</div>`).join("")}</div><button type="button" class="aadd" onclick="authKid(1)">+ Add another child</button>`:"";
-  if(role==="staff"&&!first)return `${msg?`<p class="${o0==="bad"?"err":"mut"}" style="margin:0 0 12px">${msg}</p>`:""}${fld("Account type",sel("aRole",[["staff","Staff"],["parent","Parent"]],role,null,1))}${staffAuthHtml(o,F,fld,sel,pic)}`;
+  if(role==="staff"&&!first)return `${msg?`<p class="${o0==="bad"?"err":"mut"}" style="margin:0 0 12px">${msg}</p>`:""}${fld("Account type",sel("aRole",[["staff","Staff"]],role,null,1))}${staffAuthHtml(o,F,fld,sel,pic)}`;
   return `${msg?`<p class="${o0==="bad"?"err":"mut"}" style="margin:0 0 12px">${msg}</p>`:""}${pic}
   ${first?'<div class="anote">This school has no administrator yet. You will become its super admin.</div>':""}
-  ${first?"":fld("Account type",sel("aRole",[["staff","Staff"],["parent","Parent"]],role,null,1))}
+  ${first?"":fld("Account type",sel("aRole",[["staff","Staff"]],role,null,1))}
   <div class="asec">Personal details</div>
   ${fld("Full name",`<input id="aName" autocomplete="name" value="${esc(F.name||"")}">`)}
   ${fld('Username <span class="req">*</span>',`<input id="aUser" autocapitalize="none" autocomplete="off" value="${esc(F.user||"")}" onchange="authUserChk()">`)}<div id="aUserMsg" class="mut ahint"></div>
@@ -1347,7 +1352,7 @@ async function authGo(){
   let info=null;
   if(up){
     const o=authOpt,F=authF;if(!o||typeof o!=="object")return fail("Enter a valid school ID first.");
-    const first=!o.has_admin,role=first?"school_admin":(["staff","parent"].includes(F.role)?F.role:"staff"),staffRole=["school_admin","teacher","bursar"].includes(role);isPar=role==="parent";isStaff=role==="staff"&&!first;if(isStaff){if(!F.sf)return fail("Find your staff record first.");F.name=F.sf.full_name;F.dept=F.sf.i_am;F.other=F.sf.i_am;if(F.sf.phone)F.phone=F.sf.phone}
+    const first=!o.has_admin,role=first?"school_admin":(["staff"].includes(F.role)?F.role:"staff"),staffRole=["school_admin","teacher","bursar"].includes(role);isPar=role==="parent";isStaff=role==="staff"&&!first;if(isStaff){if(!F.sf)return fail("Find your staff record first.");F.name=F.sf.full_name;F.dept=F.sf.i_am;F.other=F.sf.i_am;if(F.sf.phone)F.phone=F.sf.phone}
     if(!authBlob){const p=document.querySelector("#auth .aph");if(p)p.scrollIntoView({block:"center",behavior:"smooth"});return fail("A profile picture is required. Tap the circle to add your photo.")}
     const un0=(F.user||"").trim().toLowerCase();if(!/^[a-z0-9._]{3,20}$/.test(un0)){const u=$("aUser");if(u){u.scrollIntoView({block:"center",behavior:"smooth"});u.focus()}return fail("A username is required: 3 to 20 letters, numbers, dots or underscores.")}
     if(!role)return fail("Choose who you are: academics, finance, administrators or parent.");
@@ -1477,7 +1482,7 @@ window.alert=m=>_alert(acc&&/row-level security|plan does not allow/i.test(Strin
 function accBox(id,css,html){let e=$(id);if(!e){e=document.createElement("div");e.id=id;e.style.cssText=css;document.body.appendChild(e)}e.innerHTML=html;e.style.display=html?"":"none";return e}
 function applyAccess(){
   if(!acc)return;
-  const closed=acc.status!=="active",portalOff=me&&["parent","student"].includes(me.role)&&lvl("portal")==="off";
+  const closed=acc.status!=="active",portalOff=me&&["student"].includes(me.role)&&lvl("portal")==="off";
   accBox("lock","position:fixed;inset:0;z-index:99;background:Canvas;color:CanvasText;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center",
     closed||portalOff?`<div style="max-width:420px"><h2>${closed?(acc.status==="suspended"?"School account suspended":"School account closed"):"Access not available"}</h2><p>${closed?esc(acc.reason||"Please contact the platform administrator."):"Parent and student access is not included in your school's plan."}</p><p class="mut">${esc(acc.name||"")} ${esc(acc.code||"")}</p></div>`:"");
   if(closed||portalOff)return;
@@ -2525,10 +2530,10 @@ const POSTS=["Head teacher","Deputy head teacher","Assistant head teacher","Dire
 function pgDepts(){const by=r=>ACCS.filter(a=>a.role===r);
   const grp=(t,r)=>`<div class="st"><b>${t}</b> <span class="tag">${by(r).length}</span><div class="mut">${by(r).map(a=>esc(a.full_name)).join(", ")||"Nobody yet"}</div></div>`;
   return `<div class="card"><h3>Key posts</h3>${POSTS.map(p=>{const h=ACCS.find(a=>(a.department||"").toLowerCase()===p.toLowerCase());return `<div class="st" style="display:flex;justify-content:space-between;gap:8px"><span>${p}</span><span>${h?`<b>${esc(h.full_name)}</b>`:'<span class="mut">Vacant</span>'}</span></div>`}).join("")}</div>
-  <div class="card"><h3>Departments</h3>${grp("Administrators","school_admin")}${grp("Academics","teacher")}${grp("Finance","bursar")}${grp("Parents","parent")}</div>`}
+  <div class="card"><h3>Departments</h3>${grp("Administrators","school_admin")}${grp("Academics","teacher")}${grp("Finance","bursar")}</div>`}
 function pgReg(){const s=schRow()||{},c=Object.assign({open:true,administrators:true,academics:true,finance:true,parent:true},s.registration||{}),on=c.open,
   row=(k,l,d,dis)=>`<div class="trow ${dis?"off":""}"><span><b>${l}</b><small class="mut" style="display:block">${d}</small></span><button type="button" class="sw ${c[k]?"on":""}" ${dis?"disabled":""} onclick="stReg('${k}')" aria-label="${l}"></button></div>`;
-  return `<div class="card">${row("open","Registration open","When off, nobody can create an account with your school ID.",false)}</div><div class="card"><h3>Who may register</h3>${row("administrators","Administrators","Head teacher, deputy, assistant, support staff",!on)}${row("academics","Academics","Director of Studies and teachers",!on)}${row("finance","Finance","Bursar, accountant, cashier",!on)}${row("parent","Parents","Parents and guardians",!on)}</div>`}
+  return `<div class="card">${row("open","Registration open","When off, nobody can create an account with your school ID.",false)}</div><div class="card"><h3>Who may register</h3>${row("administrators","Administrators","Head teacher, deputy, assistant, support staff",!on)}${row("academics","Academics","Director of Studies and teachers",!on)}${row("finance","Finance","Bursar, accountant, cashier",!on)}</div>`}
 async function stReg(k){const s=schRow()||{},c=Object.assign({open:true,administrators:true,academics:true,finance:true,parent:true},s.registration||{});
   const{error}=await sb.rpc("save_registration",{p:{[k]:!c[k]},p_school:pSch()});if(error)return alert(error.message);await reloadSchool();setRender()}
 async function xferOpen(){if(!ACCS.length)await loadAccts();const c=ACCS.filter(a=>a.role==="school_admin"&&a.id!==me.id);
@@ -2731,18 +2736,16 @@ const GUIDE=[
 ]
 },
 {
-"t": "Link a parent or a student's own login",
+"t": "Link a student's own login",
 "r": [
 "school_admin"
 ],
 "b": [
-"Parents and students see their information in the portal only after you link them.",
-"- 1. Ask the parent to sign up in the app as a Parent, using their phone number. A student signs up with their own email.",
-"- 2. In the Students tab, find the card Link parent or student login.",
-"- 3. Choose the student, choose Parent / guardian, type the parent's phone number and write the relationship (for example mother). For Student's own login, type the student's email instead.",
-"- 4. Tap Link account. Tell them to refresh the app.",
-"One parent can be linked to several children, and one child can have several parents. To remove a parent link, tap Remove next to it in the list. Each student can have only one own login.",
-"A staff account cannot also be a parent account. If a teacher is also a parent, they should use a second phone number for the parent account."
+"Students see their own information in the portal only after you link them.",
+"- 1. Ask the student to sign up in the app with their own email.",
+"- 2. In the Students tab, find the card Link student login.",
+"- 3. Choose the student, type the email they used and tap Link account. Tell them to refresh the app.",
+"Each student can have only one own login. Parents no longer sign up in My School: they use Parent Hub, and the guardian name and phone you record at registration are what Parent Hub checks."
 ]
 },
 {
@@ -3060,26 +3063,42 @@ async function rejectApp(id){
 /* ---------- LINKS (admin) ---------- */
 let links=[],lprof=[];
 async function loadLinks(){
-  const[g,p]=await Promise.all([sb.from("guardian_students").select("*"),sb.from("profiles").select("id,full_name,role,school_id").in("role",["parent","student"])]);
-  links=g.data||[];lprof=p.data||[];drawLinks();
+  const p=await sb.from("profiles").select("id,full_name,role,school_id").in("role",["student"]);
+  links=[];lprof=p.data||[];drawLinks();
 }
 function drawLinks(){
   const S=sid(),ss=students.filter(s=>s.school_id===S&&s.status==="active"),keep=$("lkstu").value;
   $("lkstu").innerHTML=opt(ss,s=>`${s.first_name} ${s.last_name} (${s.national_student_id})`);if(keep)$("lkstu").value=keep;
-  const nm=id=>lprof.find(x=>x.id===id)?.full_name||"—",sn=id=>{const s=students.find(x=>x.id===id);return s?`${s.first_name} ${s.last_name}`:"?"};
-  const a=links.filter(l=>l.school_id===S).map(l=>`<div class="st"><span class="tag ok">Parent</span> ${esc(nm(l.guardian_id))} → ${esc(sn(l.student_id))} <span class="mut">(${esc(l.relationship)})</span> <a href="#" onclick="unlink('${l.id}');return false">Remove</a></div>`);
+  const nm=id=>lprof.find(x=>x.id===id)?.full_name||"—";
   const b=students.filter(s=>s.school_id===S&&s.user_id).map(s=>`<div class="st"><span class="tag ok">Student</span> ${esc(nm(s.user_id))} → ${esc(s.first_name)} ${esc(s.last_name)} <span class="mut">(own login)</span></div>`);
-  $("lklist").innerHTML=a.concat(b).join("")||'<p class="mut">No accounts linked yet.</p>';
+  $("lklist").innerHTML=b.join("")||'<p class="mut">No accounts linked yet.</p>';
 }
-function lkMode(){const par=$("lktype").value==="parent",i=$("lkemail");i.type=par?"tel":"email";i.placeholder=par?"Their phone number":"Their email";i.value="";$("lkhelp").textContent=par?"The parent must first sign up in the app. Then enter the phone number they used.":"The person must first sign up in the app. Then enter the email they used."}
+function lkMode(){}
 async function linkAcct(){
-  const par=$("lktype").value==="parent",v=$("lkemail").value.trim(),base={p_student:$("lkstu").value};
-  if(par&&!/^[+0-9 ()-]{7,}$/.test(v)){$("lkerr").style.color="";$("lkerr").textContent="Enter a valid phone number.";return}
-  const{error}=await sb.rpc(par?"link_guardian":"link_student_login",par?{...base,p_phone:v,p_relationship:$("lkrel").value}:{...base,p_email:v});
-  $("lkerr").style.color=error?"":"var(--pri)";$("lkerr").textContent=error?error.message:"Linked Ask them to refresh the app.";
-  if(!error){$("lkemail").value="";$("lkrel").value="";loadStudents()}
+  const v=$("lkemail").value.trim();
+  if(!v){$("lkerr").style.color="";$("lkerr").textContent="Enter their email.";return}
+  const{error}=await sb.rpc("link_student_login",{p_student:$("lkstu").value,p_email:v});
+  $("lkerr").style.color=error?"":"var(--pri)";$("lkerr").textContent=error?error.message:"Linked. Ask them to refresh the app.";
+  if(!error){$("lkemail").value="";loadStudents()}
 }
-async function unlink(id){if(!confirm("Remove this link?"))return;const{error}=await sb.from("guardian_students").delete().eq("id",id);if(error)return alert(error.message);loadLinks()}
+/* ---------- PARENT CONTACTS (read only, from Parent Hub) ---------- */
+const PHB="https://kxsxwefzqyqyxnpwfowd.supabase.co",PHK="sb_publishable_ACK5WYStzJ6Tz-UfqsvKNQ_2hdKN9k8";
+function pcInit(){try{const k=localStorage.getItem("pcKey");if(k&&$("pcKey"))$("pcKey").value=k}catch(e){}}
+async function pcLoad(){
+  const err=$("pcErr"),box=$("pcList"),sc=(schRow()||{}).school_code,key=$("pcKey").value.trim();err.textContent="";
+  if(!key){err.textContent="Enter the school key.";return}
+  if(!sc){err.textContent="School code not found.";return}
+  const S=sid(),ss=students.filter(x=>x.school_id===S&&x.status==="active");
+  box.innerHTML='<p class="mut">Loading...</p>';
+  let r;try{r=await fetch(PHB+"/rest/v1/rpc/school_parent_contacts",{method:"POST",headers:{apikey:PHK,Authorization:"Bearer "+PHK,"Content-Type":"application/json"},body:JSON.stringify({p_school:sc,p_key:key,p_sins:ss.map(x=>x.national_student_id)})})}catch(e){box.innerHTML="";err.textContent="No connection. Try again.";return}
+  const d=await r.json().catch(()=>null);
+  if(!r.ok){box.innerHTML="";err.textContent=(d&&d.message)||"Could not load.";return}
+  try{localStorage.setItem("pcKey",key)}catch(e){}
+  const by={};(d||[]).forEach(x=>{(by[x.student_id]=by[x.student_id]||[]).push(x)});
+  const rows=ss.filter(x=>by[x.national_student_id]).map(x=>`<div class="st"><b>${esc(x.first_name)} ${esc(x.last_name)}</b> <span class="mut">${esc(x.national_student_id)}</span>`+by[x.national_student_id].map(p=>`<div>${esc(p.parent_name)} <span class="mut">(${esc(p.relationship||"")}${p.status==="pending"?", linked by parent":""})</span> ${p.phone?'<a href="tel:'+esc(p.phone)+'">'+esc(p.phone)+"</a>":""}</div>`).join("")+"</div>");
+  box.innerHTML=rows.join("")||'<p class="mut">No parents have linked to your students in Parent Hub yet.</p>';
+}
+setTimeout(pcInit,0);
 /* ---------- PARENT / STUDENT PORTAL ---------- */
 let kids=[],pd=null,ptab="att";
 const ICON=Object.fromEntries(["present","late","absent","excused"].map(k=>[k,`<span class="dot ${k}"></span>`]));
@@ -3123,13 +3142,13 @@ async function stuView(i){const s=students.find(x=>x.id===i);if(!s)return;
   const q=async f=>{try{const r=await f();return r.data||[]}catch(e){return[]}},
   [att,bl,pay,rs,gl]=await Promise.all([q(()=>sb.from("attendance").select("status,attendance_date").eq("student_id",i).order("attendance_date",{ascending:false}).limit(400)),
    perm.fee||perm.ad?q(()=>sb.from("student_balances").select("*").eq("student_id",i)):[],perm.fee||perm.ad?q(()=>sb.from("payments").select("*").eq("student_id",i).order("created_at",{ascending:false}).limit(30)):[],
-   perm.res||perm.ad?q(()=>sb.from("results_view").select("*").eq("student_id",i)):[],perm.ad?q(()=>sb.from("guardian_students").select("*").eq("student_id",i)):[]]);
+   perm.res||perm.ad?q(()=>sb.from("results_view").select("*").eq("student_id",i)):[],[]]);
   let gp=[];if(gl.length)gp=await q(()=>sb.from("profiles").select("id,full_name,phone").in("id",gl.map(x=>x.guardian_id||x.user_id).filter(Boolean)));
   const cnt={present:0,late:0,absent:0,excused:0};att.forEach(a=>{const k=String(a.status).toLowerCase();if(k in cnt)cnt[k]++});const tot=att.length,rate=tot?Math.round(100*(cnt.present+cnt.late)/tot):null;
   const asg=c?assigns.filter(a=>classes.find(k=>k.id===a.class_id)?.name===c.name):[];
   let h=head+sec("Personal",kvs([["Gender",s.gender],["Date of birth",s.date_of_birth],["Registered",s.created_at?new Date(s.created_at).toLocaleDateString():""]]));
   h+=sec("Class",c?kvs([["Class",`<a href="#" onclick="clsView('${c.id}');return false">${esc(sCls(s))} ›</a>`,1],["Class teacher",tchr(c.class_teacher_id)||"Not set"],["Subjects",asg.map(a=>(subjects.find(x=>x.id===a.subject_id)?.name||"")+(tchr(a.teacher_id)?" ("+tchr(a.teacher_id)+")":"")).filter(Boolean).join(", ")||"None linked yet"]]):'<p class="mut">Not in a class yet.</p>');
-  h+=sec("Parent / guardian",kvs([["Name",s.guardian_name],["Relationship",s.guardian_relationship],["Phone",s.guardian_phone],["Linked app accounts",gp.map(p=>p.full_name+(p.phone?" · "+p.phone:"")).join("; ")||(perm.ad?"None linked yet":"")]]));
+  h+=sec("Parent / guardian",kvs([["Name",s.guardian_name],["Relationship",s.guardian_relationship],["Phone",s.guardian_phone]]));
   h+=sec("Attendance",tot?kvs([["Rate",rate+"% ("+tot+" days recorded)"],["Present / Late",cnt.present+" / "+cnt.late],["Absent / Excused",cnt.absent+" / "+cnt.excused],["Last absent",(att.find(a=>String(a.status).toLowerCase()==="absent")||{}).attendance_date]]):'<p class="mut">No attendance recorded yet.</p>');
   if(perm.fee||perm.ad){const tb=bl.reduce((a,b)=>a+Number(b.billed||0),0),tp=bl.reduce((a,b)=>a+Number(b.paid||0),0);
     h+=sec("Fees",bl.length?kvs([["Billed / Paid",money(tb)+" / "+money(tp)],["Balance",money(tb-tp)]].concat(bl.map(b=>[tname(b.term_id),"Billed "+money(b.billed)+", paid "+money(b.paid)+", balance "+money(b.balance)])))+(pay.length?'<p class="mut" style="margin:8px 0 2px">Recent payments</p>'+pay.slice(0,5).map(p=>`<div class="mut">${esc(p.receipt_no||"")} · ${money(p.amount)} · ${esc(String(p.method||"").replace("_"," "))} · ${esc(String(p.created_at||"").slice(0,10))}</div>`).join(""):""):'<p class="mut">No fees billed yet.</p>')}
@@ -3213,7 +3232,7 @@ function drawDash(){if(typeof drawRoom==="function")drawRoom()}
 <script>
 /* ROOM_START: Activity room (admins). Feed, Browse, Overview. No database change. */
 let ROOM={tab:"feed",cat:"all",per:"7",who:"",q:"",lim:40,logs:[],ex:null,groups:[],t:0};
-const RM_CATS=[["learners","Learners",["students","guardian_students"],"#14804a","stu"],["att","Attendance",["attendance","staff_attendance"],"#2b6cb0","att"],["fees","Fees",["payments","fee_structures"],"#d98e04","fee"],["res","Results",["assessments","results","report_comments"],"#7048e8","res"],["adm","Admissions",["admission_applications"],"#d6336c","adm"],["cls","Classes and terms",["classes","teaching_assignments","terms"],"#0b7285","cls"]];
+const RM_CATS=[["learners","Learners",["students"],"#14804a","stu"],["att","Attendance",["attendance","staff_attendance"],"#2b6cb0","att"],["fees","Fees",["payments","fee_structures"],"#d98e04","fee"],["res","Results",["assessments","results","report_comments"],"#7048e8","res"],["adm","Admissions",["admission_applications"],"#d6336c","adm"],["cls","Classes and terms",["classes","teaching_assignments","terms"],"#0b7285","cls"]];
 const rmCat=tb=>RM_CATS.find(c=>c[2].includes(tb))||["other","Other",[],"#6b7280","set"];
 (function(){const st=document.createElement("style");st.textContent=`
 #shBox .rmh{border-radius:22px;padding:18px;color:#fff;background:linear-gradient(135deg,var(--pri),#0b3d2e 65%,#1b2a49);position:relative;overflow:hidden}
