@@ -551,7 +551,7 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
 
   <div id="anBox" class="hide"><div id="anOut"></div></div>
 
-  <div id="annBox" class="hide">
+  <div id="pcatBox" class="hide"><div class="card"><div id="pmO"></div></div></div><div id="annBox" class="hide">
     <div data-t="ann" data-s="new" class="card"><h3>New announcement</h3>
       <select id="anCls"></select>
       <input id="anT" maxlength="120" placeholder="Title">
@@ -751,7 +751,7 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
   </div>
 </div>
 </main>
-<aside id="side" class="hide"><div class="sbrand"><span class="logo"><svg class="ic"><use href="#i-logo"/></svg></span><div class="tt"><b>My School</b><small>School Management</small></div></div><div class="grp">Overview</div><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Dashboard</button><button id="tabAn" data-t="an" class="hide" onclick="setTab('an')"><svg class="ic"><use href="#i-res"/></svg>Analytics</button><div class="grp">Learners</div><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button id="tabAdm" data-t="adm" onclick="setTab('adm')"><svg class="ic"><use href="#i-adm"/></svg>Admissions</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button data-t="ann" onclick="setTab('ann')"><svg class="ic"><use href="#i-adm"/></svg>Announcements</button><div class="grp">Academics</div><button data-t="cls" onclick="setTab('cls')"><svg class="ic"><use href="#i-cls"/></svg>Classes</button><button data-t="tt" onclick="setTab('tt')"><svg class="ic"><use href="#i-att"/></svg>Timetable</button><button id="tabLrn" data-t="lrn" class="hide" onclick="setTab('lrn')"><svg class="ic"><use href="#i-rc"/></svg>Digital learning</button><button data-t="tea" onclick="setTab('tea')"><svg class="ic"><use href="#i-tea"/></svg>Teachers</button><button id="tabRes" data-t="res" onclick="setTab('res')"><svg class="ic"><use href="#i-res"/></svg>Results</button><button id="tabRC" data-t="rc" onclick="setTab('rc')"><svg class="ic"><use href="#i-rc"/></svg>Report cards</button><div class="grp">Finance</div><button id="tabFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><div class="grp">Administration</div><button id="tabSS" data-t="ss" onclick="setTab('ss')"><svg class="ic"><use href="#i-set"/></svg>School settings</button><button data-t="set" onclick="setTab('set')"><svg class="ic"><use href="#i-set"/></svg>Settings</button><button id="tabSch" data-t="sch" onclick="setTab('sch')"><svg class="ic"><use href="#i-sch"/></svg>Schools</button></aside><nav id="bnav"><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Home</button><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button id="bFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><button onclick="openSide()"><svg class="ic"><use href="#i-menu"/></svg>More</button></nav><div id="ov" onclick="closeSide()"></div>
+<aside id="side" class="hide"><div class="sbrand"><span class="logo"><svg class="ic"><use href="#i-logo"/></svg></span><div class="tt"><b>My School</b><small>School Management</small></div></div><div class="grp">Overview</div><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Dashboard</button><button id="tabAn" data-t="an" class="hide" onclick="setTab('an')"><svg class="ic"><use href="#i-res"/></svg>Analytics</button><div class="grp">Learners</div><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button id="tabAdm" data-t="adm" onclick="setTab('adm')"><svg class="ic"><use href="#i-adm"/></svg>Admissions</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button data-t="ann" onclick="setTab('ann')"><svg class="ic"><use href="#i-adm"/></svg>Announcements</button><button data-t="pc" onclick="setTab('pc')"><svg class="ic"><use href="#i-adm"/></svg>Parent chats</button><div class="grp">Academics</div><button data-t="cls" onclick="setTab('cls')"><svg class="ic"><use href="#i-cls"/></svg>Classes</button><button data-t="tt" onclick="setTab('tt')"><svg class="ic"><use href="#i-att"/></svg>Timetable</button><button id="tabLrn" data-t="lrn" class="hide" onclick="setTab('lrn')"><svg class="ic"><use href="#i-rc"/></svg>Digital learning</button><button data-t="tea" onclick="setTab('tea')"><svg class="ic"><use href="#i-tea"/></svg>Teachers</button><button id="tabRes" data-t="res" onclick="setTab('res')"><svg class="ic"><use href="#i-res"/></svg>Results</button><button id="tabRC" data-t="rc" onclick="setTab('rc')"><svg class="ic"><use href="#i-rc"/></svg>Report cards</button><div class="grp">Finance</div><button id="tabFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><div class="grp">Administration</div><button id="tabSS" data-t="ss" onclick="setTab('ss')"><svg class="ic"><use href="#i-set"/></svg>School settings</button><button data-t="set" onclick="setTab('set')"><svg class="ic"><use href="#i-set"/></svg>Settings</button><button id="tabSch" data-t="sch" onclick="setTab('sch')"><svg class="ic"><use href="#i-sch"/></svg>Schools</button></aside><nav id="bnav"><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Home</button><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button id="bFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><button onclick="openSide()"><svg class="ic"><use href="#i-menu"/></svg>More</button></nav><div id="ov" onclick="closeSide()"></div>
 <div id="printArea"></div>
 <div id="guide" class="hide" style="position:fixed;inset:0;overflow:auto;background:var(--bg);z-index:10;padding:14px"><div style="max-width:720px;margin:0 auto">
   <div class="row" style="align-items:center"><h2 style="margin:0">User guide</h2><button onclick="closeGuide()">Close</button></div>
@@ -943,20 +943,20 @@ function edPic(inp){const f=inp.files&&inp.files[0];inp.value="";pickImg(f,400,t
 const stuInactive=s=>!!s&&s.status!=="active";
 const stuInactiveNote=()=>'<p class="mut" style="margin:14px 0 0;padding:10px 12px;border-radius:10px;background:#fef3c7;color:#92400e">Inactive: this learner has moved to another school. You can still read the history, but nothing new can be recorded or changed here.</p>';
 const CORR_LBL={full_name:"Full name",date_of_birth:"Date of birth",gender:"Gender",guardian_name:"Guardian name",guardian_relation:"Relationship",guardian_contact:"Guardian phone"};/* only name, date of birth and gender are sent now; the rest stay for old rows */
-const CORR_ST={sent:["Sent to Mother","#0b6b3a"],queued:["Not sent yet","#b45309"],approved:["Approved","#0b6b3a"],rejected:["Rejected","#c0392b"]};
+const CORR_ST={sent:["Submitted","#0b6b3a"],queued:["Not sent yet","#b45309"],approved:["Approved","#0b6b3a"],rejected:["Rejected","#c0392b"]};
 async function corrSec(i){let r=[];try{const q=await sb.from("student_correction_requests").select("*").eq("student_id",i).order("created_at",{ascending:false}).limit(5);r=q.data||[]}catch(e){}
   if(!r.length)return"";
   return'<h4 style="margin:16px 0 6px">Correction requests</h4>'+r.map(x=>{const st=CORR_ST[x.status]||[x.status,"#6b7280"],ch=Object.keys(x.changes||{}).map(k=>CORR_LBL[k]||k).join(", ");
-    return'<div class="st"><div><b style="color:'+st[1]+'">'+esc(st[0])+'</b>'+(x.mother_ref?' · '+esc(x.mother_ref):'')+' · <span class="mut">'+esc(String(x.created_at).slice(0,10))+'</span></div><div class="mut">'+esc(ch)+' — '+esc(x.reason||"")+'</div>'+(x.status==="queued"?'<div class="mut" style="color:#b45309">'+esc(x.last_error||"Could not reach Mother.")+'</div><button class="alt" style="width:auto;margin:6px 0 0" onclick="corrResend(\''+x.id+'\')">Send again</button>':'')+'</div>'}).join("")}
+    return'<div class="st"><div><b style="color:'+st[1]+'">'+esc(st[0])+'</b>'+(x.mother_ref?' · '+esc(x.mother_ref):'')+' · <span class="mut">'+esc(String(x.created_at).slice(0,10))+'</span></div><div class="mut">'+esc(ch)+' — '+esc(x.reason||"")+'</div>'+(x.status==="queued"?'<div class="mut" style="color:#b45309">'+esc(x.last_error||"Could not be submitted yet.")+'</div><button class="alt" style="width:auto;margin:6px 0 0" onclick="corrResend(\''+x.id+'\')">Send again</button>':'')+'</div>'}).join("")}
 function stuCorr(i){const s=students.find(x=>x.id===i);if(!s)return;if(stuInactive(s))return toast("Inactive learner: the new school must send corrections");
   const nm=((s.first_name||"")+" "+(s.last_name||"")).trim();
-  modal(`<h3 style="margin:0 0 4px">Request correction</h3><div class="id" style="margin-bottom:6px">${esc(s.national_student_id)}</div>
-  <p class="mut" style="margin:0 0 10px">Name, date of birth and gender travel with the student number, so the school cannot change them. Change only what is wrong and give the reason. The request goes to Mother, and nothing changes until Mother approves it. One open request per learner.</p>
+  modal(`<h3 style="margin:0 0 4px">Submit correction</h3><div class="id" style="margin-bottom:6px">${esc(s.national_student_id)}</div>
+  <p class="mut" style="margin:0 0 10px">Name, date of birth and gender travel with the student number, so the school cannot change them. Change only what is wrong and give the reason. Nothing changes until the correction is approved. One open request per learner.</p>
   <label class="mut">Full name</label><input id="cFn" autocomplete="off" value="${esc(nm)}">
   <label class="mut">Date of birth</label><input id="cDob" type="date" value="${esc(String(s.date_of_birth||"").slice(0,10))}">
   <label class="mut">Gender</label><select id="cGen"><option value="male" ${s.gender==="male"?"selected":""}>Male</option><option value="female" ${s.gender==="female"?"selected":""}>Female</option></select>
     <label class="mut">Why is this correction needed?</label><input id="cWhy" autocomplete="off">
-  <div id="cErr" class="err"></div><div class="brow"><button class="pri" id="cSend" onclick="corrSend('${i}')">Send to Mother</button><button class="alt" onclick="closeModal()">Cancel</button></div>`)}
+  <div id="cErr" class="err"></div><div class="brow"><button class="pri" id="cSend" onclick="corrSend('${i}')">Submit correction</button><button class="alt" onclick="closeModal()">Cancel</button></div>`)}
 async function corrSend(i){const s=students.find(x=>x.id===i);if(!s)return;const g=id=>$(id).value.trim(),err=m=>{$("cErr").textContent=m;$("cSend").disabled=false};
   const ch={},nm=((s.first_name||"")+" "+(s.last_name||"")).trim().replace(/\s+/g," "),nn=g("cFn").replace(/\s+/g," ");
   if(nn!==nm){if(nn.split(" ").filter(Boolean).length<2)return err("Enter the full name (at least two names).");ch.full_name=nn}
@@ -968,16 +968,16 @@ async function corrSend(i){const s=students.find(x=>x.id===i);if(!s)return;const
   const q=await sb.rpc("submit_student_correction",{p_student:i,p_changes:ch,p_reason:g("cWhy")});
   if(q.error)return err(q.error.message);
   closeModal();
-  if(q.data&&q.data.status==="sent")toast("Correction "+(q.data.ref||"")+" sent to Mother");
-  else alert("The request is saved but could not reach Mother yet.\n\n"+((q.data&&q.data.error)||"")+"\n\nOpen the learner's record and tap Send again later.")}
+  if(q.data&&q.data.status==="sent")toast("Correction "+(q.data.ref||"")+" submitted");
+  else alert("The correction is saved but could not be submitted yet.\n\n"+((q.data&&q.data.error)||"")+"\n\nOpen the learner's record and tap Send again later.")}
 async function corrResend(id){const q=await sb.rpc("resend_student_correction",{p_id:id});if(q.error)return alert(q.error.message);
-  if(q.data&&q.data.status==="sent")toast("Correction "+(q.data.ref||"")+" sent to Mother");else alert("Still could not reach Mother.\n\n"+((q.data&&q.data.error)||""));closeModal()}
+  if(q.data&&q.data.status==="sent")toast("Correction "+(q.data.ref||"")+" submitted");else alert("Still could not be submitted.\n\n"+((q.data&&q.data.error)||""));closeModal()}
 /* CORRECTIONS_END */
 function stuEdit(i){const s=students.find(x=>x.id===i);if(!s)return;if(stuInactive(s)){closeModal();return toast("Inactive learner: nothing can be changed here")}edBlob=null;const S=s.school_id,cs=classes.filter(c=>c.school_id===S),dob=String(s.date_of_birth||"").split("-"),dY=dob[0]||"",dM=dob[1]||"",dD=dob[2]||"";
   modal(`<h3 style="margin:0 0 4px">Edit student</h3><div class="id" style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bd)">${esc(s.national_student_id)}</div>
   <div style="text-align:center;margin-bottom:12px"><div id="ePh" style="display:inline-block;cursor:pointer" onclick="photoMenu('ed')" role="button" aria-label="Change student photo">${stuAv(s,1)}</div><div class="mut" style="margin-top:4px">Tap the circle to change the photo</div></div>
   <input id="eCam" type="file" accept="image/*" capture="environment" class="hide" onchange="edPic(this)"><input id="eGal" type="file" accept="image/*" class="hide" onchange="edPic(this)">
-  <div style="padding:10px 12px;border-radius:10px;background:var(--bg);margin:0 0 8px"><div class="mut">Name, date of birth and gender (locked)</div><b>${esc(((s.first_name||"")+" "+(s.last_name||"")).trim())}</b><div class="mut">${esc(String(s.date_of_birth||"Not set").slice(0,10))} · ${esc(s.gender||"")}</div><div class="mut" style="margin-top:4px">These travel with the student number. Only Mother can correct them: close this and tap Request correction.</div></div>
+  <div style="padding:10px 12px;border-radius:10px;background:var(--bg);margin:0 0 8px"><div class="mut">Name, date of birth and gender (locked)</div><b>${esc(((s.first_name||"")+" "+(s.last_name||"")).trim())}</b><div class="mut">${esc(String(s.date_of_birth||"Not set").slice(0,10))} · ${esc(s.gender||"")}</div><div class="mut" style="margin-top:4px">These travel with the student number. To correct them, close this and tap Submit correction.</div></div>
   <div class="row" style="grid-template-columns:1fr"><select id="eCid"><option value="">No class yet</option>${cs.map(c=>`<option value="${c.id}" ${c.id===s.class_id?"selected":""}>${esc(cname(c))}</option>`).join("")}</select></div>
   <input id="eGn" placeholder="Parent / guardian name" value="${esc(s.guardian_name||"")}" ${s.guardian_name?"readonly":""}>
   ${s.guardian_relationship?`<input id="eGrl" value="${esc(s.guardian_relationship)}" readonly>`:relHTML("e",s.guardian_relationship)}
@@ -2651,11 +2651,11 @@ const GUIDE=[
 "school_admin"
 ],
 "b": [
-"Students cannot send corrections from their own app. A student who finds a mistake (name, date of birth or gender) tells the school. The school cannot change these three itself, because they travel with the student number. Only Mother corrects them.",
+"Students cannot send corrections from their own app. A student who finds a mistake (name, date of birth or gender) tells the school. The school cannot change these three itself, because they travel with the student number. They are changed by correction only.",
 "- 1. Open Students and tap the learner.",
-"- 2. Tap Request correction, change only what is wrong and give the reason. (Guardian details are not sent to Mother: change them with Edit.)",
-"- 3. Tap Send to Mother. Nothing changes until Mother approves it. Only one request can be open per learner.",
-"The learner's record lists the request and its status. If Mother could not be reached it shows Not sent yet with a Send again button. Inactive (transferred) learners cannot be corrected here: the new school sends the request."
+"- 2. Tap Submit correction, change only what is wrong and give the reason. (Guardian details are changed with Edit.)",
+"- 3. Tap Submit correction. Nothing changes until it is approved. Only one request can be open per learner.",
+"The learner's record lists the request and its status. If it could not be submitted it shows Not sent yet with a Send again button. Inactive (transferred) learners cannot be corrected here: the new school sends the request."
 ]
 },
 {
@@ -3146,18 +3146,22 @@ async function stuView(i){const s=students.find(x=>x.id===i);if(!s)return;
   let gp=[];if(gl.length)gp=await q(()=>sb.from("profiles").select("id,full_name,phone").in("id",gl.map(x=>x.guardian_id||x.user_id).filter(Boolean)));
   const cnt={present:0,late:0,absent:0,excused:0};att.forEach(a=>{const k=String(a.status).toLowerCase();if(k in cnt)cnt[k]++});const tot=att.length,rate=tot?Math.round(100*(cnt.present+cnt.late)/tot):null;
   const asg=c?assigns.filter(a=>classes.find(k=>k.id===a.class_id)?.name===c.name):[];
+  const ph=await phGet(s.national_student_id);
+  const subLines=(()=>{const seen=new Set(),out=[];asg.forEach(a=>{const sj=subjects.find(x=>x.id===a.subject_id);if(!sj)return;const k=a.subject_id||sj.name.toLowerCase();if(seen.has(k)||seen.has("n:"+sj.name.trim().toLowerCase()))return;seen.add(k);seen.add("n:"+sj.name.trim().toLowerCase());out.push(sj.name)});return out})();
+  const subHTML=subLines.length?subLines.map(n=>`<div class="sbl" title="${esc(n)}">${esc(n)}</div>`).join(""):"None linked yet";
+  const ctn=c&&tchr(c.class_teacher_id);
   let h=head+sec("Personal",kvs([["Gender",s.gender],["Date of birth",s.date_of_birth],["Registered",s.created_at?new Date(s.created_at).toLocaleDateString():""]]));
-  h+=sec("Class",c?kvs([["Class",`<a href="#" onclick="clsView('${c.id}');return false">${esc(sCls(s))} ›</a>`,1],["Class teacher",tchr(c.class_teacher_id)||"Not set"],["Subjects",asg.map(a=>(subjects.find(x=>x.id===a.subject_id)?.name||"")+(tchr(a.teacher_id)?" ("+tchr(a.teacher_id)+")":"")).filter(Boolean).join(", ")||"None linked yet"]]):'<p class="mut">Not in a class yet.</p>');
-  h+=sec("Parent / guardian",kvs([["Name",s.guardian_name],["Relationship",s.guardian_relationship],["Phone",s.guardian_phone]]));
+  h+=sec("Class",c?kvs([["Class",`<a href="#" onclick="clsView('${c.id}');return false">${esc(sCls(s))} ›</a>`,1],["Class teacher",ctn?`<span class="lnk">${esc(ctn)} ›</span>`:"Not set",!!ctn],["Subjects",subHTML,1]]):'<p class="mut">Not in a class yet.</p>');
+  h+=sec("Parent / guardian",ph&&ph.length?ph.map(p=>kvs([["Name",p.parent_name],["Relationship",p.relationship||s.guardian_relationship],["Phone",p.phone||s.guardian_phone]])+(p.status==="pending"?'<p class="mut" style="font-size:12px;margin:-6px 0 6px">Linked by the parent in Parent Hub</p>':"")).join(""):kvs([["Name",s.guardian_name],["Relationship",s.guardian_relationship],["Phone",s.guardian_phone]])+phHint(s.id,ph?ph.length:-1));
   h+=sec("Attendance",tot?kvs([["Rate",rate+"% ("+tot+" days recorded)"],["Present / Late",cnt.present+" / "+cnt.late],["Absent / Excused",cnt.absent+" / "+cnt.excused],["Last absent",(att.find(a=>String(a.status).toLowerCase()==="absent")||{}).attendance_date]]):'<p class="mut">No attendance recorded yet.</p>');
   if(perm.fee||perm.ad){const tb=bl.reduce((a,b)=>a+Number(b.billed||0),0),tp=bl.reduce((a,b)=>a+Number(b.paid||0),0);
-    h+=sec("Fees",bl.length?kvs([["Billed / Paid",money(tb)+" / "+money(tp)],["Balance",money(tb-tp)]].concat(bl.map(b=>[tname(b.term_id),"Billed "+money(b.billed)+", paid "+money(b.paid)+", balance "+money(b.balance)])))+(pay.length?'<p class="mut" style="margin:8px 0 2px">Recent payments</p>'+pay.slice(0,5).map(p=>`<div class="mut">${esc(p.receipt_no||"")} · ${money(p.amount)} · ${esc(String(p.method||"").replace("_"," "))} · ${esc(String(p.created_at||"").slice(0,10))}</div>`).join(""):""):'<p class="mut">No fees billed yet.</p>')}
+    h+=sec("Fees",bl.length?kvs([["Billed",money(tb)],["Paid",money(tp)],["Balance",money(tb-tp)]].concat(bl.map(b=>[tname(b.term_id),`<div>Billed ${esc(money(b.billed))}</div><div>Paid ${esc(money(b.paid))}</div><div>Balance ${esc(money(b.balance))}</div>`,1])))+(pay.length?'<p class="mut" style="margin:8px 0 2px">Recent payments</p>'+pay.slice(0,5).map(p=>`<div class="mut">${esc(p.receipt_no||"")} · ${money(p.amount)} · ${esc(String(p.method||"").replace("_"," "))} · ${esc(String(p.created_at||"").slice(0,10))}</div>`).join(""):""):'<p class="mut">No fees billed yet.</p>')}
   if(perm.res||perm.ad){const by={};rs.forEach(r=>{const k=r.term_id+"|"+r.subject_id;(by[k]=by[k]||[]).push(Number(r.percent))});
     const rows=Object.entries(by).map(([k,v])=>{const[t,sb2]=k.split("|"),a=Math.round(v.reduce((x,y)=>x+y,0)/v.length);return[tname(t)+" · "+(subjects.find(x=>x.id===sb2)?.name||"Subject"),a+"% ("+gradeFor(a)+")"]});
     h+=sec("Results",rows.length?kvs(rows):'<p class="mut">No results yet.</p>')}
   if(perm.ad&&stuInactive(s))h+=stuInactiveNote();
   if(perm.ad&&!stuInactive(s))h+=await corrSec(i);
-  h+=`${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:14px 0 0" onclick="stuCorr('${i}')">Request correction</button>`:""}<div class="row" style="gap:8px;margin-top:8px">${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:0" onclick="stuEdit('${i}')">Edit</button>`:""}<button style="margin:0" onclick="closeModal()">Close</button></div>`;
+  h+=`${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:14px 0 0" onclick="stuCorr('${i}')">Submit correction</button>`:""}<div class="row" style="gap:8px;margin-top:8px">${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:0" onclick="stuEdit('${i}')">Edit</button>`:""}<button style="margin:0" onclick="closeModal()">Close</button></div>`;
   if($("mdl"))modal(h)}
 function clsView(id){const c=classes.find(x=>x.id===id);if(!c)return;const L=students.filter(s=>s.class_id===id&&s.status==="active"),asg=assigns.filter(a=>a.class_id===id);
   modal(`<div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">${esc(c.name)}${c.stream?" "+esc(c.stream):""}</b></div>`+
@@ -4121,4 +4125,89 @@ body.compact .card.mkc{padding:0}
   return h};
 })();
 </script>
+<style>
+.mbox .kv>span{min-width:0}
+.mbox .sbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mbox .lnk{color:var(--pri);font-weight:600}
+</style>
+<script>
+/* PARENT HUB: live parent details for the learner full view + change notifications in the bell */
+(function(){
+const SK="phSnap_v3",NK="phNotes_v1",SEEN="phSeen_v1";
+const ld=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const rawKey=()=>{try{return localStorage.getItem("pcKey")||""}catch(e){return""}};
+async function call(items){const sc=(typeof schRow==="function"&&schRow()||{}).school_code;if(!sc){window.PH_ERR="School code not found";return null}if(!items.length){window.PH_ERR="nophone";return null}
+  try{const r=await fetch(PHB+"/rest/v1/rpc/school_child_parents",{method:"POST",headers:{apikey:PHK,Authorization:"Bearer "+PHK,"Content-Type":"application/json"},body:JSON.stringify({p_school:sc,p_items:items})});
+    const d=await r.json().catch(()=>null);if(!r.ok){window.PH_ERR=(d&&d.message)||"Parent Hub could not be reached";return null}
+    window.PH_ERR="";return Array.isArray(d)?d:null}catch(e){window.PH_ERR="No connection to Parent Hub";return null}}
+const item=x=>({sin:x.national_student_id,phone:(x._gp0!==undefined?x._gp0:x.guardian_phone)||""});
+window.phGet=async function(sin){const st=students.find(x=>x.national_student_id===sin);if(!st)return null;const d=await call([item(st)]);return d?d.filter(x=>x.student_id===sin):null};
+window.phHint=function(id,n){if(!perm.ad)return"";const e=window.PH_ERR||"";
+  const msg=e==="nophone"?"This learner has no guardian phone recorded, so Parent Hub cannot be matched.":e?`Parent Hub: ${esc(e)}.`:"The parent has not linked this child in Parent Hub yet, or used a different phone number from the one recorded here. The parent's real name will appear here as soon as they link.";
+  return `<p class="mut" style="font-size:12px;margin:6px 0">${msg}</p>`};
+let PHN=ld(NK,[]);
+async function tick(){if(typeof me==="undefined"||!me||!perm||!perm.view)return;const sc=(schRow()||{}).school_code,S=sid();if(!sc)return;
+  const ss=students.filter(x=>x.school_id===S&&x.status==="active");if(!ss.length)return;
+  ss.forEach(st=>{if(st._gn0===undefined){st._gn0=st.guardian_name||"";st._gr0=st.guardian_relationship||"";st._gp0=st.guardian_phone||""}});
+  const d=await call(ss.filter(x=>x._gp0).map(item));if(!d)return;
+  const first={};d.forEach(x=>{if(!first[x.student_id]||(first[x.student_id].status==="pending"&&x.status!=="pending"))first[x.student_id]=x});
+  /* the parent's own details replace what the school typed; they go back when the parent unlinks */
+  let moved=false;
+  ss.forEach(st=>{const h=first[st.national_student_id],nn=h&&h.parent_name?h.parent_name:st._gn0,np=h&&h.phone?h.phone:st._gp0,nr=h&&h.relationship&&!/^parent$/i.test(h.relationship)?h.relationship:st._gr0;
+    if(st.guardian_name!==nn||st.guardian_phone!==np||st.guardian_relationship!==nr){st.guardian_name=nn;st.guardian_phone=np;st.guardian_relationship=nr;moved=true}});
+  if(moved&&!document.getElementById("mdl")){try{render()}catch(e){}}
+  /* tell the school exactly what the parent did */
+  const cur={};Object.keys(first).forEach(k=>cur[k]={n:first[k].parent_name||"",p:first[k].phone||"",r:first[k].relationship||""});
+  const old=ld(SK,null);if(!old||old.sc!==sc){sv(SK,{sc,m:cur});return}
+  const added=[],now=Date.now();
+  ss.forEach(st=>{const k=st.national_student_id,o=old.m[k],c=cur[k],nm=sName(st);if(!o&&!c)return;const add=t=>added.push({t:now,sin:k,name:nm,txt:t});
+    if(!o&&c)add(`${c.n||"A parent"} linked ${nm} in Parent Hub${c.r?" as "+c.r:""}${c.p?" ("+c.p+")":""}`);
+    else if(o&&!c)add(`${o.n||"A parent"} unlinked ${nm} in Parent Hub`);
+    else{if(o.n!==c.n)add(`Parent name changed from ${o.n||"none"} to ${c.n||"none"}`);if(o.p!==c.p)add(`${c.n||"The parent"} changed phone from ${o.p||"none"} to ${c.p||"none"}`);if(o.r!==c.r)add(`${c.n||"The parent"} changed relationship from ${o.r||"none"} to ${c.r||"none"}`)}});
+  sv(SK,{sc,m:cur});if(added.length){PHN=added.concat(PHN).slice(0,40);sv(NK,PHN);bellDraw(false)}}
+window.phTick=tick;
+const _bd=window.bellDraw;
+window.bellDraw=function(open){_bd(open);const b=$("bdg");if(!b)return;const seen=+ld(SEEN,0)||0;
+  if(open)sv(SEEN,Date.now());else{const un=PHN.filter(n=>n.t>seen).length;if(un){const cur=b.classList.contains("hide")?0:(parseInt(b.textContent)||0);b.textContent=cur+un>99?"99+":cur+un;b.classList.remove("hide")}}
+  const p=$("npop");if(p&&PHN.length&&(open||!p.classList.contains("hide"))){const h=p.querySelector(".ph");if(h&&!p.querySelector(".phn")){const m=p.querySelector("p.mut");if(m)m.remove();
+    h.insertAdjacentHTML("afterend",PHN.slice(0,10).map(n=>`<div class="ar phn" style="cursor:pointer" onclick="closePops();stuView('${(students.find(x=>x.national_student_id===n.sin)||{}).id||""}')"><span class="av">PH</span><div class="at"><b>${esc(n.name)}</b><div>${esc(n.txt)}</div><div class="tm">${ago(n.t)}</div></div></div>`).join(""))}}};
+setTimeout(tick,3000);setInterval(tick,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick()});
+})();
+</script>
+
+<!-- PARENT_CHAT_START: private two-way chat with Parent Hub; each staff member has a personal key tied to one department -->
+<style>#pmO{font-family:inherit}#pmO input,#pmO select,#pmO textarea{width:100%;box-sizing:border-box;padding:9px;margin:4px 0 8px;border:1px solid #bbb;border-radius:8px;font-size:15px}#pmO button{padding:9px 14px;border:0;border-radius:8px;background:#1b6b4a;color:#fff;font-weight:600;margin:2px}#pmO button.g{background:#777}#pmO .c{border:1px solid #ddd;border-radius:10px;padding:10px;margin:8px 0}#pmO .m{font-size:12px;color:#666}</style>
+
+<script>
+(function(){
+var U='https://kxsxwefzqyqyxnpwfowd.supabase.co/rest/v1/rpc/',K='sb_publishable_ACK5WYStzJ6Tz-UfqsvKNQ_2hdKN9k8',D={class_teacher:'Class teacher',head_teacher:'Head teacher',dos:'Director of Studies',bursar:'Bursar',office:'School office'},O=document.getElementById('pmO'),key=null,th=null,poll=null;
+try{key=localStorage.getItem('pm_key')}catch(e){}
+function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function Q(id){return document.getElementById(id)}
+async function R(f,a){var r;try{r=await fetch(U+f,{method:'POST',headers:{apikey:K,Authorization:'Bearer '+K,'Content-Type':'application/json'},body:JSON.stringify(a||{})})}catch(e){throw new Error('No connection. Check your internet.')}var j=await r.json().catch(function(){return null});if(!r.ok)throw new Error((j&&j.message)||'Request failed');return j}
+function close(){clearInterval(poll);O.classList.remove('on')}
+function top(t){return '<h2 style="margin:0 0 8px">'+t+'</h2>'}
+function wire(){var x=Q('pmX');if(x)x.onclick=close}
+var on_=false,_ap=window.applyTab;
+window.applyTab=function(){_ap.apply(this,arguments);var o=(typeof tab!=='undefined'&&tab==='pc');show('pcatBox',o);if(o&&!on_){on_=true;key?list():login()}else if(!o&&on_){on_=false;clearInterval(poll)}};
+function login(){clearInterval(poll);var sc='';try{sc=(typeof SCHI!=='undefined'&&SCHI&&SCHI.school_code)||''}catch(e){}
+ O.innerHTML=top('Parent chats')+'<p class="m">Chats with parents are private to each department. Sign in with your personal messaging key.</p><input id="pmK" placeholder="Your messaging key"><button id="pmIn">Sign in</button><hr><h3>Head or admin: give a staff member a key</h3><p class="m">Each key opens only that department (a class teacher sees only their own class). Share it privately with the staff member.</p><input id="pmS" placeholder="School ID" value="'+E(sc)+'"><input id="pmSK" placeholder="School key" type="password"><input id="pmN" placeholder="Staff name, e.g. Mr Okello"><select id="pmD">'+Object.keys(D).map(function(k){return '<option value="'+k+'">'+D[k]+'</option>'}).join('')+'</select><input id="pmI" placeholder="Class teacher only: student IDs, comma separated"><button id="pmIs">Create key</button><button class="g" id="pmLs">Show staff</button><div id="pmR"></div>';wire();
+ Q('pmIn').onclick=function(){var k=Q('pmK').value.trim();if(!k)return;key=k;R('staff_msg_threads',{k:k}).then(function(){try{localStorage.setItem('pm_key',k)}catch(e){}list()}).catch(function(e){key=null;alert(e.message)})};
+ Q('pmIs').onclick=function(){var s=Q('pmS').value.trim().toUpperCase(),d=Q('pmD').value,ids=Q('pmI').value.split(',').map(function(x){return x.trim().toUpperCase()}).filter(Boolean);R('staff_issue',{p_school:s,p_key:Q('pmSK').value,p_name:Q('pmN').value,p_dept:d,p_sins:d==='class_teacher'?ids:null}).then(function(k){Q('pmR').innerHTML='<div class="c"><b>Key for '+E(Q('pmN').value)+'</b><p style="word-break:break-all;user-select:all">'+E(k)+'</p><p class="m">Shown once. Copy it and send it privately.</p></div>'}).catch(function(e){alert(e.message)})};
+ Q('pmLs').onclick=function(){R('staff_list',{p_school:Q('pmS').value.trim().toUpperCase(),p_key:Q('pmSK').value}).then(function(L){Q('pmR').innerHTML=L.length?L.map(function(x){return '<div class="c">'+E(x.name)+' · '+E(D[x.dept])+(x.dept==='class_teacher'?' · '+x.students+' learners':'')+' <button class="g" data-r="'+x.id+'">Remove</button></div>'}).join(''):'<p class="m">No staff keys yet.</p>';Array.prototype.forEach.call(Q('pmR').querySelectorAll('button[data-r]'),function(b){b.onclick=function(){R('staff_revoke',{p_school:Q('pmS').value.trim().toUpperCase(),p_key:Q('pmSK').value,p_staff:b.dataset.r}).then(function(){Q('pmLs').onclick()}).catch(function(e){alert(e.message)})}})}).catch(function(e){alert(e.message)})}}
+function list(){th=null;clearInterval(poll);
+ O.innerHTML=top('Parent chats')+'<div id="pmL"><p class="m">Loading...</p></div><button id="pmNw">New message to a learner\'s parents</button><button class="g" id="pmOut">Sign out</button>';wire();
+ Q('pmOut').onclick=function(){try{localStorage.removeItem('pm_key')}catch(e){}key=null;login()};
+ Q('pmNw').onclick=function(){var s=prompt('Student ID (12 characters)');if(!s)return;var b=prompt('Message to the parents');if(!b)return;R('staff_msg_start',{k:key,p_sid:s,p_body:b}).then(function(n){alert('Sent to '+n+' parent(s)');load()}).catch(function(e){alert(e.message)})};
+ function load(){R('staff_msg_threads',{k:key}).then(function(L){var l=Q('pmL');if(!l)return;l.innerHTML=L.length?L.map(function(x,i){return '<div class="c" data-i="'+i+'" style="cursor:pointer"><b>'+E(x.parent_name)+'</b> · '+E(x.child_name||x.student_id)+(x.unread>0?' <span style="color:#c00">('+x.unread+' new)</span>':'')+'<div class="m">'+E(D[x.dept])+'</div><div>'+E(x.last_body)+'</div></div>'}).join(''):'<p class="m">No chats yet. When a parent writes to your department it appears here.</p>';Array.prototype.forEach.call(l.querySelectorAll('.c'),function(c){c.onclick=function(){open_(L[c.dataset.i])}})}).catch(function(e){var l=Q('pmL');if(l)l.innerHTML='<p class="m">'+E(e.message)+'</p>'})}
+ load();poll=setInterval(load,15000)}
+function open_(t){th=t;clearInterval(poll);
+ O.innerHTML=top(E(t.parent_name))+'<p class="m">'+E(t.child_name||t.student_id)+' · '+E(D[t.dept])+'</p><button class="g" id="pmBk">Back</button><div id="pmM"></div><textarea id="pmT" rows="2" maxlength="2000" placeholder="Write a reply"></textarea><button id="pmSd">Send</button>';wire();
+ Q('pmBk').onclick=list;
+ function load(){R('staff_msg_open',{k:key,p_thread:t.id}).then(function(L){var m=Q('pmM');if(!m)return;m.innerHTML=L.map(function(x){var me=x.side==='school';return '<div style="display:flex;justify-content:'+(me?'flex-end':'flex-start')+'"><div class="c" style="max-width:82%;background:'+(me?'#dff3e8':'#f1f1f1')+'"><div class="m">'+E(x.sender)+' · '+E(String(x.at).slice(0,16).replace('T',' '))+'</div>'+E(x.body)+'</div></div>'}).join('')}).catch(function(e){alert(e.message)})}
+ load();poll=setInterval(load,8000);
+ Q('pmSd').onclick=function(){var b=Q('pmT').value.trim();if(!b)return;R('staff_msg_reply',{k:key,p_thread:t.id,p_body:b}).then(function(){Q('pmT').value='';load()}).catch(function(e){alert(e.message)})}}
+})();
+</script>
+<!-- PARENT_CHAT_END -->
 </body></html>
