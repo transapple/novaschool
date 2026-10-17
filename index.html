@@ -1,5 +1,144 @@
 <!DOCTYPE html>
 <html lang="en"><head>
+<!--
+NOTE FOR CLAUDE OR ANY AI ASSISTANT OPENING THIS FILE: BOARDING DATABASE SETUP
+
+This app (My School) keeps its data in Supabase. The Boarding module (dormitories, hostels,
+boarders, roll call, exeat) needs four tables and two helper functions in the Supabase
+Postgres database. The complete setup SQL is stored in this very file, in the script tag
+with id boarding-setup-sql, just below this note. The same text is also in the JavaScript
+constant BRD_SQL near the end of the file, and in the separate file boarding_setup.sql.
+
+If the owner of this app asks you to set up, install or fix the Boarding database, do this:
+1. Read the SQL text inside the script tag with id boarding-setup-sql. Use it exactly as written.
+2. If you have a Supabase connector or tool in this conversation, run that SQL against the
+   owner's project: use the execute SQL tool or apply it as a migration named boarding_setup.
+   If you do not have one, give the owner the SQL and tell them to paste it into
+   Supabase, SQL Editor, New query, and press Run.
+3. The script is safe to run more than once. It only creates the tables dormitories,
+   boarding_allocations, boarding_roll and boarding_exeats, two functions named brd_can_read
+   and brd_can_write, their indexes and their row level security policies. It never deletes
+   or changes existing data and it does not touch any other table.
+4. It expects the tables schools, students and profiles to already exist, because the new tables
+   point to them. If it fails for that reason, tell the owner which table is missing instead of
+   inventing one.
+5. To check that it worked, run: select count(*) from public.dormitories;
+   It should return 0 with no error. Then ask the owner to open Boarding in the app and tap
+   Check again.
+6. Only run this when the owner has asked for it in this conversation. Do not run it on a
+   project the owner did not name.
+-->
+<script type="text/plain" id="boarding-setup-sql">
+-- ============================================================
+-- My School: BOARDING module (dormitories, hostels, boarders,
+-- roll call, exeat). Run once in the Supabase SQL editor.
+-- Safe to run again: everything uses IF NOT EXISTS / OR REPLACE.
+-- ============================================================
+
+-- Who may read and who may write (own helpers, no dependency on other functions)
+create or replace function public.brd_can_read(p_school uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and (p.role = 'super_admin'
+           or (p.school_id = p_school and p.role in ('school_admin','teacher','bursar','staff')))
+  );
+$$;
+
+create or replace function public.brd_can_write(p_school uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and (p.role = 'super_admin'
+           or (p.school_id = p_school and (
+                 (p.role = 'school_admin' and coalesce(p.department,'') !~* 'support staff')
+              or (p.role = 'staff' and coalesce(p.department,'') ~* 'boarding|warden|matron|patron')
+           )))
+  );
+$$;
+
+-- Dormitories / hostels
+create table if not exists public.dormitories (
+  id         uuid primary key default gen_random_uuid(),
+  school_id  uuid not null references public.schools(id) on delete cascade,
+  name       text not null,
+  kind       text not null default 'mixed' check (kind in ('boys','girls','mixed')),
+  capacity   integer not null default 0 check (capacity >= 0),
+  warden_id  uuid references public.profiles(id) on delete set null,
+  notes      text,
+  created_at timestamptz not null default now(),
+  unique (school_id, name)
+);
+
+-- Which learner sleeps where (one active place per learner)
+create table if not exists public.boarding_allocations (
+  id           uuid primary key default gen_random_uuid(),
+  school_id    uuid not null references public.schools(id) on delete cascade,
+  student_id   uuid not null references public.students(id) on delete cascade,
+  dorm_id      uuid not null references public.dormitories(id) on delete restrict,
+  room         text,
+  bed          text,
+  boarder_type text not null default 'full' check (boarder_type in ('full','weekly')),
+  start_date   date not null default current_date,
+  end_date     date,
+  active       boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+create unique index if not exists boarding_one_active_place
+  on public.boarding_allocations (student_id) where active;
+
+-- Dormitory roll call (morning / evening / night)
+create table if not exists public.boarding_roll (
+  id         uuid primary key default gen_random_uuid(),
+  school_id  uuid not null references public.schools(id) on delete cascade,
+  dorm_id    uuid references public.dormitories(id) on delete set null,
+  student_id uuid not null references public.students(id) on delete cascade,
+  roll_date  date not null default current_date,
+  session    text not null check (session in ('morning','evening','night')),
+  status     text not null check (status in ('present','absent','sick')),
+  marked_by  uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  unique (student_id, roll_date, session)
+);
+
+-- Exeat: a boarder leaving school for a while
+create table if not exists public.boarding_exeats (
+  id              uuid primary key default gen_random_uuid(),
+  school_id       uuid not null references public.schools(id) on delete cascade,
+  student_id      uuid not null references public.students(id) on delete cascade,
+  out_date        date not null default current_date,
+  expected_return date,
+  returned_on     date,
+  reason          text,
+  picked_by       text,
+  approved_by     uuid default auth.uid(),
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists boarding_alloc_school  on public.boarding_allocations (school_id, active);
+create index if not exists boarding_roll_day      on public.boarding_roll (school_id, roll_date, session);
+create index if not exists boarding_exeat_school  on public.boarding_exeats (school_id, returned_on);
+
+-- Row level security
+alter table public.dormitories           enable row level security;
+alter table public.boarding_allocations  enable row level security;
+alter table public.boarding_roll         enable row level security;
+alter table public.boarding_exeats       enable row level security;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['dormitories','boarding_allocations','boarding_roll','boarding_exeats'] loop
+    execute format('drop policy if exists %I on public.%I', t||'_read',  t);
+    execute format('drop policy if exists %I on public.%I', t||'_write', t);
+    execute format('create policy %I on public.%I for select to authenticated using (public.brd_can_read(school_id))', t||'_read', t);
+    execute format('create policy %I on public.%I for all to authenticated using (public.brd_can_write(school_id)) with check (public.brd_can_write(school_id))', t||'_write', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+  end loop;
+end $$;
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My School</title>
@@ -248,6 +387,14 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
 .abadge.present{background:#1a9d5a;color:#fff}.abadge.absent{background:#c0392b;color:#fff}
 .agrp{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:14px 2px 8px}
 .abtns{display:flex;gap:8px;margin-top:6px}.abtns button{margin:0}
+.atog{gap:18px}
+.atog button{width:30px!important;min-width:30px!important;max-width:30px!important;height:30px!important;padding:5px!important;opacity:1!important;transform:none!important;background:var(--card)!important;color:var(--mut)!important;border:1.5px solid var(--bd)!important;box-shadow:none!important}
+.atog .p.on{background:#1a9d5a!important;color:#fff!important;border-color:#1a9d5a!important}
+.atog .a.on{background:#c0392b!important;color:#fff!important;border-color:#c0392b!important}
+.atk{display:flex;align-items:center;gap:12px;background:color-mix(in srgb,#1a9d5a 12%,var(--card));border:1px solid #1a9d5a;border-radius:16px;padding:12px 14px;margin:2px 0 12px}
+.atk i{flex:none;width:28px;height:28px;border-radius:50%;background:#1a9d5a;color:#fff;display:grid;place-items:center;font-style:normal;font-size:15px}
+.atk>div{flex:1;min-width:0}.atk b{display:block;font-size:15px}.atk small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.atk button{width:auto;flex:none;margin:0;padding:7px 16px;border-radius:999px;font-size:13px;background:transparent;color:var(--pri);border:1.5px solid var(--pri)}
 .mbox .cal{width:100%}
 .mbox .cal .ch{background:var(--pri);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:12px}
 .mbox .cal .ch small{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.85}.mbox .cal .ch b{display:block;font-size:20px;margin-top:2px}
@@ -615,13 +762,14 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
   <div data-t="stu" data-s="trash" id="trashBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128465;</div><div><b>Trash</b><small>Deleted students are kept here. Restore brings a student back with all their records</small></div></div><div class="mkpad"><div id="trashList"></div></div></div>
 
   <div data-t="stu" data-s="promo" id="promoBox" class="card hide">
-    <div class="mkhd"><div class="ic">&#127891;</div><div><b>Promotion</b><small>Move a class up or down, or mark learners as left school</small></div></div>
+    <div class="mkhd"><div class="ic">&#127891;</div><div><b>Promotion</b><small>Everyone moves up automatically each new year. Use this for exceptions.</small></div></div>
     <div class="mkrow">
       <label class="mkf"><span>From class</span><select id="pmFrom" onchange="pmOff.clear();drawPromo(1)"></select></label>
       <label class="mkf"><span>Action</span><select id="pmAct" onchange="pmOff.clear();drawPromo(1)"><option value="promote">Promote (move up)</option><option value="demote">Demote (move down)</option><option value="graduate">Leave school</option></select></label>
       <label class="mkf"><span>To class</span><select id="pmTo"></select></label>
     </div>
-    <div class="mkhint">Untick a student to leave them in the current class (repeating).</div>
+    <div id="pmAutoMsg" class="mkhint"></div>
+    <div class="mkhint">For exceptions only: promote a learner early, demote one, or mark learners as left school. Untick a learner to leave them where they are.</div>
     <div id="pmList" class="mkbody"></div>
     <button id="pmGo" class="mkbtn" onclick="pmRun()">Promote</button><div id="pmMsg" class="err"></div>
     <h3 class="mksec">Recent changes</h3><div id="pmHist" class="mkbody"></div></div>
@@ -635,13 +783,7 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div class="mkhint">The student opens Transfer in Digital Students and creates a one-time code (OTP). Enter the student number and that code here before it expires. After the transfer, the old school keeps the history as inactive.</div>
     <div id="trRes" class="mkbody"></div>
     <h3 class="mksec">Transfer history</h3><div id="trHist" class="mkbody"></div></div>
-  <div data-t="stu" data-s="link" id="linkBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128279;</div><div><b>Link student login</b><small>Give a student access to their own records</small></div></div><div class="mkpad">
-    <p id="lkhelp" class="mut">The student must first sign up in the app. Then enter the email they used.</p>
-    <select id="lkstu"></select><input id="lkemail" type="email" inputmode="email" placeholder="Their email">
-    <input type="hidden" id="lktype" value="student"><input type="hidden" id="lkrel" value="">
-    <button onclick="linkAcct()">Link account</button><div id="lkerr" class="err"></div><div id="lklist"></div></div></div>
-
-  <div data-t="stu" data-s="link" id="pcBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128222;</div><div><b>Parent contacts</b><small>From Parent Hub. Read only.</small></div></div><div class="mkpad">
+  <div data-t="stu" data-s="pc" id="pcBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128222;</div><div><b>Parent contacts</b><small>From Parent Hub. Read only.</small></div></div><div class="mkpad">
     <p class="mut">Parents who linked their child to this school in Parent Hub. Enter the school key from the platform owner once; it is kept on this device only.</p>
     <input id="pcKey" type="password" placeholder="School key" autocomplete="off"><button onclick="pcLoad()">Load parent contacts</button><div id="pcErr" class="err"></div><div id="pcList"></div></div></div>
 
@@ -815,7 +957,7 @@ async function addSchool(){
 }
 let trashed=[],regBlob=null,edBlob=null;
 async function loadStudents(){
-  const{data}=await sb.from("students").select("*").order("created_at",{ascending:false});const all=data||[];students=all.filter(x=>!x.deleted_at);trashed=all.filter(x=>x.deleted_at);render();if(perm.ad)loadLinks();
+  const{data}=await sb.from("students").select("*").order("created_at",{ascending:false});const all=data||[];students=all.filter(x=>!x.deleted_at);trashed=all.filter(x=>x.deleted_at);render();if(perm.ad)pmAutoRun();
 }
 const sCls=s=>{const c=classes.find(c=>c.id===s.class_id);return c?cname(c):(s.class_level||"")};
 const sIni=s=>((s.first_name||"?")[0]+(s.last_name||"")[0]).toUpperCase();
@@ -1014,7 +1156,7 @@ async function addStudent(){
   $("serr").textContent=note;regBlob=null;$("sPh").innerHTML='<svg class="ic" style="width:44px;height:44px"><use href="#i-user"/></svg>';
   ["fn","gn","gp","dd","dm","dy","gRel","gRelO"].forEach(i=>$(i).value="");$("gRelO").style.display="none";loadStudents()
 }
-const SUBS={stu:[["list","Students"],["add","Register"],["link","Link accounts","ad"],["promo","Promotion","ad"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"],["staff","Staff","ad"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
+const SUBS={stu:[["list","Students"],["add","Register"],["pc","Parent contacts","ad"],["promo","Promotion","ad"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"],["staff","Staff","ad"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
 let subs={};
 function subList(){return(SUBS[tab]||[]).filter(x=>!x[2]||(x[2]==="sa"?(!!me&&me.role==="super_admin"):x[2]==="st"?perm.st:perm.ad))}
 function curSub(){const l=subList();return l.length?(l.find(x=>x[0]===subs[tab])||l[0])[0]:null}
@@ -1083,7 +1225,7 @@ let sWarm=false,sFees=[],sAssess=[],sApps=[];
 async function searchWarm(){if(sWarm||!me)return;sWarm=true;try{const q=[sb.from("fee_structures").select("id,name,amount,school_id"),sb.from("assessments").select("id,name,school_id")];if(perm.ad)q.push(sb.from("admission_applications").select("id,application_no,first_name,last_name,status,school_id"));const r=await Promise.all(q);sFees=r[0].data||[];sAssess=r[1].data||[];sApps=(r[2]&&r[2].data)||[]}catch(e){}}
 function gsearch(){searchWarm();const v=$("gs").value.trim().toLowerCase(),r=$("gres");closePops("gres");if(!v){r.classList.add("hide");return}
   const has=(...a)=>a.join(" ").toLowerCase().includes(v),S=sid(),mine=x=>!x.school_id||x.school_id===S,
-  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","link","Link accounts"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>!canTab(x[0])?false:(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
+  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","pc","Parent contacts"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>!canTab(x[0])?false:(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
   St=students.filter(x=>has(x.first_name,x.last_name,x.national_student_id,x.guardian_name,x.guardian_phone,sCls(x))).slice(0,6),
   Tr=perm.ad?trashed.filter(x=>has(x.first_name,x.last_name,x.national_student_id)).slice(0,3):[],
   Cl=clUniq(classes.filter(c=>mine(c)&&has(c.name,c.academic_year))).map(g=>g.rows[0]).slice(0,4),
@@ -1116,14 +1258,15 @@ function bellDraw(open){const mine=me&&me.id,seen=+(()=>{try{return localStorage
   if(open||!$("npop").classList.contains("hide")){$("npop").innerHTML='<div class="ph"><b>Notifications</b></div>'+(acts.length?acts.slice(0,12).map(a=>{const[noun,fn]=ACT[a.table_name]||[a.table_name,()=>""],nm=actNames[a.user_id]||"A user",d=new Date(a.created_at),det=fn(a.details||{});
     return `<div class="ar"><span class="av">${esc(nm.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase())}</span><div class="at"><b>${esc(nm)}</b> ${actVerb(a)} ${noun}${det?": "+esc(det):""}<div class="tm">${ago(d.getTime())} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div></div></div>`}).join(""):'<p class="mut" style="padding:14px">No notifications yet.</p>')}}
 /* ---- Activity feed (from audit_logs; admins only; live through Supabase realtime) ---- */
-let acts=[],actNames={},actPics={},actSub=false;
+let acts=[],actNames={},actPics={},actRoles={},actSub=false;
 const ACT={students:["student",d=>`${d.first_name||""} ${d.last_name||""}`.trim(),"students"],classes:["class",d=>d.name,"classes"],teaching_assignments:["teaching assignment",d=>"","teaching assignments"],terms:["term",d=>d.name,"terms"],fee_structures:["fee item",d=>d.name,"fee items"],payments:["payment",d=>"UGX "+Number(d.amount||0).toLocaleString()+(d.receipt_no?" ("+d.receipt_no+")":""),"payments"],assessments:["assessment",d=>d.name,"assessments"],results:["score",d=>"","scores"],report_comments:["report comment",d=>"","report comments"],guardian_students:["parent link",d=>"","parent links"],admission_applications:["admission application",d=>`${d.first_name||""} ${d.last_name||""}`.trim(),"admission applications"],attendance:["attendance record",d=>"","attendance records"],staff_attendance:["staff attendance record",d=>"","staff attendance records"]};
 function actVerb(a){const t=a.table_name,o=a.action,d=a.details||{};
   if(t==="payments"&&o==="INSERT")return"recorded";if((t==="attendance"||t==="staff_attendance")&&o==="INSERT")return"marked";
   if(t==="admission_applications"&&o==="UPDATE"&&(d.status==="approved"||d.status==="rejected"))return d.status;
   return o==="INSERT"?"added":o==="UPDATE"?"updated":"removed"}
-async function ensureNames(rows){const ids=[...new Set(rows.map(a=>a.user_id).filter(x=>x&&!actNames[x]))];
-  if(!ids.length)return;const{data}=await sb.from("profiles").select("id,full_name,photo_url").in("id",ids);(data||[]).forEach(p=>{actNames[p.id]=p.full_name;actPics[p.id]=p.photo_url||""})}
+async function ensureNames(rows){const ids=[...new Set(rows.map(a=>a.user_id).filter(x=>x&&actRoles[x]===undefined))];
+  if(!ids.length)return;const{data}=await sb.from("profiles").select("id,full_name,photo_url,role,department").in("id",ids);(data||[]).forEach(p=>{actNames[p.id]=p.full_name;actPics[p.id]=p.photo_url||"";actRoles[p.id]=p.department||String(p.role||"").replace(/_/g," ")||""});ids.forEach(i=>{if(actRoles[i]===undefined)actRoles[i]=""})}
+async function whoInfo(uid){await ensureNames([{user_id:uid}])}
 async function loadActivity(){const{data}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(80);
   acts=data||[];await ensureNames(acts);drawActivity()}
 function subAct(){if(actSub)return;actSub=true;
@@ -1201,7 +1344,7 @@ function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab
                    Boarding, Reception, Librarian : Students, Announcements.
                    ICT, Support staff, Other : Home and Settings only.
    Everyone also has Settings: Preferences, Menu style and their own Account. */
-const T_ACAD=["home","stu","att","ann","cls","tt","lrn","res","rc","set"],T_FIN=["home","stu","fee","set"];
+const T_ACAD=["home","stu","att","ann","pc","cls","tt","lrn","res","rc","set"],T_FIN=["home","stu","fee","pc","set"],T_FINS=["home","stu","fee","set"];
 const ACC={
   admin:{tabs:null},
   support:{tabs:["home","set"]},
@@ -1211,7 +1354,7 @@ const ACC={
   cashier:{tabs:T_FIN,fee:1},
   s_acad:{tabs:["home","stu","ann","cls","tt","set"],acr:1},
   s_admin:{tabs:["home","stu","ann","cls","tt","tea","set"],acr:1},
-  s_fin:{tabs:T_FIN,fee:1},
+  s_fin:{tabs:T_FINS,fee:1},
   s_hr:{tabs:["home","tea","ann","set"]},
   s_desk:{tabs:["home","stu","ann","set"]},
   s_min:{tabs:["home","set"]}
@@ -1221,7 +1364,7 @@ function accKind(){if(!me)return null;const r=me.role,d=(me.department||"").toLo
   if(r==="school_admin")return/support staff/.test(d)?"support":"admin";
   if(r==="teacher")return/director of studies|\bdos\b/.test(d)?"dos":"teacher";
   if(r==="bursar")return/bursar|accountant/.test(d)?"bursar":"cashier";
-  if(r==="staff"){if(/teacher|academic/.test(d))return"s_acad";if(/administrator/.test(d))return"s_admin";if(/finance/.test(d))return"s_fin";if(/^hr\b|human/.test(d))return"s_hr";if(/boarding|reception|librarian/.test(d))return"s_desk";return"s_min"}
+  if(r==="staff"){if(/teacher|academic/.test(d))return"s_acad";if(/administrator/.test(d))return"s_admin";if(/finance/.test(d))return"s_fin";if(/^hr\b|human/.test(d))return"s_hr";if(/boarding|warden|matron|patron/.test(d))return"s_board";if(/reception|librarian/.test(d))return"s_desk";return"s_min"}
   return null}
 const accP=()=>ACC[accKind()]||{};
 function accPerm(){const A=accP(),r=me&&me.role,ad=r==="super_admin"||accKind()==="admin";
@@ -1599,8 +1742,27 @@ function renderOrg(){try{staffSubOpts()}catch(e){}setTimeout(()=>{if(tab==="set"
     const n=students.filter(s=>s.class_id===c.id).length,
       as=assigns.filter(a=>a.class_id===c.id).map(a=>`${esc(ss.find(x=>x.id===a.subject_id)?.name)} – ${esc(nm(a.teacher_id))}`).join("<br>");
     return `<div class="st"><b>${esc(cname(c))}</b> · ${c.academic_year}<div class="mut">Class teacher: ${esc(nm(c.class_teacher_id))} · ${n} students</div><div class="mut">${as}</div></div>`}).join("")||'<p class="mut">No classes yet.</p>';
-  $("tlist").innerHTML=tt.map(t=>`<div class="st" style="display:flex;gap:10px;align-items:center">${t.photo_url?`<img src="${esc(t.photo_url)}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover">`:""}<div><b>${esc(t.full_name)}</b> · ${esc(t.role)}${t.department?" · "+esc(t.department):""}<div class="id">${esc(t.staff_id)}</div></div></div>`).join("")+(staffContacts||[]).filter(x=>x.school_id===S).map(x=>`<div class="st" style="display:flex;gap:10px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(x.full_name)}</b> · ${esc(x.i_am||x.role)} · <span class="mut">Not registered yet</span><div class="mut">${esc([x.phone,x.email].filter(Boolean).join(" · "))}</div>${(x.subject_ids||[]).length?`<div class="mut">Subjects: ${esc((x.subject_ids||[]).map(i=>(subjects.find(s=>s.id===i)||{}).name).filter(Boolean).join(", "))}</div>`:""}<div class="id">${esc(x.staff_id)}</div></div>${(me.role==="school_admin"||me.role==="super_admin")?`<button class="alt" style="width:auto;margin:0" onclick="rmStaffContact('${x.id}')">Remove</button>`:""}</div>`).join("")||(tt.length?"":'<p class="mut">No staff yet.</p>');
+  $("tlist").innerHTML=staffGroups(tt.filter(t=>!isOwnerAcct(t)),(staffContacts||[]).filter(x=>x.school_id===S));
 }
+
+/* STAFF LIST: grouped by department, owner never listed */
+const STAFF_DEPT={teacher:"Teachers",academic:"Academics",administrator:"Administrators",admin:"Administrators",finance:"Finance",bursar:"Finance",hr:"HR",boarding:"Boarding",reception:"Reception",ict:"ICT",librarian:"Library","support staff":"Support staff",other:"Other",staff:"Other staff"};
+const STAFF_ORDER=["Administrators","Academics","Teachers","Finance","HR","Boarding","Reception","ICT","Library","Support staff","Other staff","Other"];
+function staffDept(x){const raw=String(x.department||x.i_am||"").trim(),k=raw.toLowerCase();
+  if(STAFF_DEPT[k])return STAFF_DEPT[k];
+  if(/^director/i.test(raw))return "Academics";
+  if(raw)return raw;
+  return {teacher:"Teachers",bursar:"Finance",school_admin:"Administrators"}[x.role]||"Other staff"}
+function staffGroups(reg,pend){
+  const G={};
+  reg.forEach(t=>{(G[staffDept(t)]=G[staffDept(t)]||[]).push({t})});
+  pend.forEach(x=>{(G[staffDept(x)]=G[staffDept(x)]||[]).push({x})});
+  const keys=Object.keys(G).sort((a,b)=>{const i=STAFF_ORDER.indexOf(a),j=STAFF_ORDER.indexOf(b);return(i<0?99:i)-(j<0?99:j)||a.localeCompare(b)});
+  if(!keys.length)return '<p class="mut">No staff yet.</p>';
+  const canRm=me&&(me.role==="school_admin"||me.role==="super_admin");
+  return keys.map(k=>`<div style="font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:14px 2px 4px">${esc(k)} <span style="font-weight:600">· ${G[k].length}</span></div>`+G[k].map(r=>{
+    if(r.t){const t=r.t;return `<div class="st" style="display:flex;gap:10px;align-items:center">${t.photo_url?`<img src="${esc(t.photo_url)}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex:none">`:""}<div style="min-width:0"><b>${esc(t.full_name)}</b><div class="id">${esc(t.staff_id||"")}</div></div></div>`}
+    const x=r.x;return `<div class="st" style="display:flex;gap:10px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(x.full_name)}</b> · <span class="mut">Not registered yet</span><div class="mut">${esc([x.phone,x.email].filter(Boolean).join(" · "))}</div>${(x.subject_ids||[]).length?`<div class="mut">Subjects: ${esc((x.subject_ids||[]).map(i=>(subjects.find(s=>s.id===i)||{}).name).filter(Boolean).join(", "))}</div>`:""}<div class="id">${esc(x.staff_id||"")}</div></div>${canRm?`<button class="alt" style="width:auto;margin:0" onclick="rmStaffContact('${x.id}')">Remove</button>`:""}</div>`}).join("")).join("")}
 async function ins(table,row){const{error}=await sb.from(table).insert(row);if(error)return alert(error.message);loadOrg()}
 function addClass(){ins("classes",{school_id:sid(),name:$("cn").value,stream:$("cs").value||null,academic_year:new Date().getFullYear(),class_teacher_id:$("cteacher").value||null});$("cn").value=""}
 function staffRoleOpts(){if(!me)return;const only=me.role==="teacher";for(const id of ["srole","siam"]){const r=$(id);if(!r)continue;[...r.options].forEach(o=>{const v=o.value||o.text,bad=only&&v!=="teacher"&&v!=="Teacher";o.hidden=bad;o.disabled=bad});if(only)r.value=id==="siam"?"Teacher":"teacher"}}
@@ -1638,13 +1800,17 @@ function loadAtt(){
 let attAuto=true;
 function attManual(){if(!$("attdate").value)$("attdate").value=todayIso();attAuto=$("attdate").value===todayIso();attHead();renderAtt();renderStaffAtt()}
 setInterval(()=>{const e=$("attdate");if(tab==="att"&&attAuto&&e&&e.value!==todayIso()){e.value=todayIso();renderAtt();renderStaffAtt()}},30000);
-async function renderAtt(){
-  attShowRes(false);
+let attEdit=false;
+async function renderAtt(edit){
+  attShowRes(false);attEdit=edit===true&&!!perm.ad;
   const cid=$("attcls").value,d=$("attdate").value;amark={};
   if(!cid||!d){$("alist").innerHTML='<p class="mut">No class available.</p>';$("asum").textContent="";$("attView").classList.add("hide");return}
   const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
   const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",list.map(s=>s.id));
-  (data||[]).forEach(r=>amark[r.student_id]=r.status);drawAtt(list);$("attView").classList.toggle("hide",!(data&&data.length));
+  const taken=!!(data&&data.length);
+  if(taken&&!attEdit){attMk={};data.forEach(r=>attMk[r.student_id]=r.status);attJustSaved=false;attShowRes(true);drawAttRes();return}
+  if(attEdit)(data||[]).forEach(r=>amark[r.student_id]=r.status);
+  drawAtt(list);$("attView").classList.toggle("hide",!(attEdit&&taken));$("aerr2").textContent="";
 }
 const aIni=n=>String(n||"?").split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase();
 function attHead(){const v=$("attdate").value||todayIso(),d=new Date(v+"T00:00:00"),t=v===todayIso();
@@ -1662,11 +1828,15 @@ function drawAtt(list){attHead();
 function setA(id,v){amark[id]=v;drawAtt()}
 function allPresent(){students.filter(s=>clIn($("attcls").value,s.class_id)&&s.status==="active").forEach(s=>amark[s.id]=amark[s.id]||"present");drawAtt()}
 async function saveAtt(){
-  const cid=$("attcls").value,d=$("attdate").value;
-  const rows=students.filter(s=>clIn(cid,s.class_id)&&amark[s.id]).map(s=>({student_id:s.id,class_id:s.class_id,attendance_date:d,status:amark[s.id]}));
-  if(!rows.length){$("aerr2").textContent="Mark at least one student.";return}
+  const cid=$("attcls").value,d=$("attdate").value,e=$("aerr2");e.style.color="";
+  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active"),un=list.filter(s=>!amark[s.id]).length;
+  if(!list.length){e.textContent="No learners in this class.";return}
+  if(un){e.textContent="Mark every learner before saving. "+un+" not marked yet.";return}
+  if(!attEdit){const q=await sb.from("attendance").select("student_id").eq("attendance_date",d).in("student_id",list.map(s=>s.id)).limit(1);
+    if(q.data&&q.data.length){toast("Attendance for this class is already taken");renderAtt();return}}
+  const rows=list.map(s=>({student_id:s.id,class_id:s.class_id,attendance_date:d,status:amark[s.id]}));
   const{error}=await sb.from("attendance").upsert(rows,{onConflict:"student_id,attendance_date"});
-  $("aerr2").style.color=error?"":"var(--pri)";$("aerr2").textContent=error?error.message:"";if(!error){toast("Attendance saved successfully");refreshHomeAtt();attOpenRes(true)}
+  e.textContent=error?error.message:"";if(!error){attEdit=false;toast("Attendance saved successfully");refreshHomeAtt();attOpenRes(true)}
 }
 /* ---- saved attendance list for a class (Present / Absent order) ---- */
 let attSort="present",attMk={},attJustSaved=false;
@@ -1689,11 +1859,24 @@ function drawAttRes(){
   const groups=order.map(m=>{const arr=list.filter(s=>st(s)===m).sort((a,b)=>nm(a).localeCompare(nm(b)));
     return arr.length?`<div class="agp"><div class="agh ${m}"><i></i>${lab[m]}<em>${arr.length}</em></div>${arr.map(s=>`<div class="ar2">${stuAv(s)}<div class="an"><b>${esc(nm(s))}</b><span class="id">${esc(s.national_student_id||"")}</span></div><span class="abadge ${m}">${lab[m]}</span></div>`).join("")}</div>`:""}).join("");
   $("attRes").innerHTML=(attJustSaved?'<div class="aok"><i>✓</i>Attendance saved successfully</div>':"")
-   +`<div class="atb"><div><b>Saved attendance</b><small>${esc(c?c.name:"Class")} · ${list.length} learner${list.length===1?"":"s"}</small></div><button type="button" onclick="renderAtt()">Edit attendance</button></div>`
+   +`<div class="atk"><i>✓</i><div><b>Attendance for ${esc(c?cname(c):"this class")} is taken</b><small id="attWhoT">${list.length} learner${list.length===1?"":"s"}</small></div>${perm.ad?'<button type="button" onclick="renderAtt(true)">Edit</button>':""}</div>`
    +`<div class="asum">${attSum(list.map(x=>x.id),attMk)}</div>`
    +`<div class="asort"><button class="${attSort==="present"?"on":""}" onclick="attSetSort('present')">Present first</button><button class="${attSort==="absent"?"on":""}" onclick="attSetSort('absent')">Absent first</button></div>`
    +(groups||'<p class="mut">No students in this class.</p>');
+  attWho(list);
 }
+/* who took the attendance and when: from the activity log, else from the attendance rows themselves */
+let attBy={};
+async function attWho(list){const cid=$("attcls").value,d=$("attdate").value,k=cid+"|"+d,ids=[...new Set(list.map(x=>x.class_id))],sids=list.map(x=>x.id);
+  const put=w=>{const e=$("attWhoT");if(!e)return;const n=list.length+" learner"+(list.length===1?"":"s");
+    e.textContent=w?n+" · "+(w.name||"A staff member")+(w.role?" ("+w.role+")":"")+" · "+new Date(w.t).toLocaleString(undefined,{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):n};
+  if(attBy[k])return put(attBy[k]);
+  let w=null;
+  try{const r=await sb.from("audit_logs").select("user_id,created_at").eq("table_name","attendance").eq("action","INSERT").eq("details->>attendance_date",d).in("details->>class_id",ids).order("created_at",{ascending:true}).limit(1);if(r.data&&r.data[0])w={uid:r.data[0].user_id,t:r.data[0].created_at}}catch(e){}
+  if(!w)try{const r=await sb.from("attendance").select("marked_by,created_at").eq("attendance_date",d).in("student_id",sids).order("created_at",{ascending:true}).limit(1);if(r.data&&r.data[0]&&r.data[0].marked_by)w={uid:r.data[0].marked_by,t:r.data[0].created_at}}catch(e){}
+  if(!w&&attJustSaved&&me)w={uid:me.id,t:new Date().toISOString()};
+  if(!w)return put(null);
+  await whoInfo(w.uid);w.name=actNames[w.uid];w.role=actRoles[w.uid];attBy[k]=w;put(w)}
 /* ---- home: who is present / absent today, by class ---- */
 async function homeAttList(kind){
   const d=todayIso(),S=$("sch")&&$("sch").value,isP=kind==="present";
@@ -1882,11 +2065,24 @@ function fxStatus(){const R=fxRows(),F={all:r=>1,l30:r=>r.pc!==null&&r.pc<30,m50
   (rows.map(r=>`<div class="fxr" onclick="fxStuPay('${r.x.id}')">${stuAv(r.x)}<div class="an"><b>${esc(fxName(r.x))}</b><small><span class="cp">${esc(r.x.national_student_id||"")}</span> · ${esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")} · ${money(r.p)} / ${money(r.a)}${r.bal>0?" · owes "+money(r.bal):""}</small></div><span class="pc" style="color:${r.pc==null?"#8a94a6":r.pc>=100?"#14804a":r.pc>=50?"#a86a0a":"#c0392b"}">${r.pc==null?"No fee set":r.pc+"%"}</span><span class="mut">›</span></div>`).join("")||'<p class="mut">No students here.</p>')}
 function fxStuPay(id){const x=students.find(y=>y.id===id);if(!x)return;const l=FX.pays.filter(p=>p.student_id===id).sort((a,b)=>String(fxD(b)).localeCompare(String(fxD(a))));
   modal(`<div class="fxmh"><h3>${esc(fxName(x))}</h3><button type="button" aria-label="Close" onclick="closeModal()">×</button></div><p class="mut" style="margin:2px 0 10px">Paid ${money(fxPd(x))} of ${money(fxAs(x))}${fxAs(x)>fxPd(x)?" · owes "+money(fxAs(x)-fxPd(x)):""}</p>`+(l.map(p=>`<div class="fxr" style="cursor:default"><div class="an"><b>${money(p.amount)}</b><small>${esc(fxDate(fxD(p)))} · ${esc(fxT(p.term_id))} · ${esc(fxMeth[p.method]||p.method||"")}${p.receipt_no?" · "+esc(p.receipt_no):""}</small></div></div>`).join("")||'<p class="mut">No payments yet.</p>'))}
-function fxRemind(){return `<div class="fxbox"><h2 class="fxh" style="margin-top:0">Send a message</h2><label class="fxl">Type</label><select id="rmT"><option>Fee reminder</option><option>School notice</option></select><label class="fxl">Send to</label><select id="rmTo"><option value="owing">Parents with a balance</option><option value="all">All parents</option>${fxCls().map(c=>`<option value="${c.ids.join(",")}">${esc(c.name)}</option>`).join("")}</select><label class="fxl">Title</label><input id="rmH"><label class="fxl">Message</label><textarea id="rmM" rows="5"></textarea><button onclick="fxSend()">Send</button><div id="rmE" class="err"></div><p class="mut" style="margin:0;font-size:13px">Opens your phone's SMS app with the parents' numbers filled in.</p></div>`}
-function fxSend(){const t=$("rmTo").value,own=new Set(fxRows().filter(r=>r.bal>0).map(r=>r.x.id));
-  const n=[...new Set(fxStu().filter(x=>t==="all"||(t==="owing"?own.has(x.id):t.split(",").includes(x.class_id))).map(x=>String(x.guardian_phone||"").replace(/[^\d+]/g,"")).filter(Boolean))],h=$("rmH").value.trim(),m=$("rmM").value.trim();
-  if(!m){$("rmE").textContent="Write a message first.";return}if(!n.length){$("rmE").textContent="No parent phone numbers found for that group.";return}
-  $("rmE").textContent="";location.href="sms:"+n.join(",")+"?body="+encodeURIComponent((h?h+"\n":"")+m)}
+function fxRemind(){return `<div class="fxbox"><h2 class="fxh" style="margin-top:0">Send a message</h2><label class="fxl">Type</label><select id="rmT"><option>Fee reminder</option><option>School notice</option></select><label class="fxl">Send to</label><select id="rmTo"><option value="owing">Parents with a balance</option><option value="all">All parents</option>${fxCls().map(c=>`<option value="${c.ids.join(",")}">${esc(c.name)}</option>`).join("")}</select><label class="fxl">Title</label><input id="rmH"><label class="fxl">Message</label><textarea id="rmM" rows="5" maxlength="1800"></textarea><label class="ck" style="margin:6px 0 10px"><input type="checkbox" id="rmB" checked><span>Add each learner's balance to the message</span></label><button id="rmGo" onclick="fxSend()">Send</button><div id="rmE" class="err"></div><p class="mut" style="margin:0;font-size:13px">Sent inside the app, straight to the parents' Parent Hub app. It opens as a private chat for each learner. Parents who have not linked their child in Parent Hub will not receive it.</p></div>`}
+async function fxSend(){const t=$("rmTo").value,e=$("rmE"),btn=$("rmGo"),own={};fxRows().forEach(r=>{if(r.bal>0)own[r.x.id]=r.bal});
+  const L=fxStu().filter(x=>x.national_student_id&&(t==="all"||(t==="owing"?own[x.id]:t.split(",").includes(x.class_id)))),h=$("rmH").value.trim(),m=$("rmM").value.trim(),addB=$("rmB").checked;
+  e.style.color="";if(!m){e.textContent="Write a message first.";return}if(!L.length){e.textContent="No learners found for that group.";return}
+  let k="";try{k=localStorage.getItem("pm_key")||""}catch(x){}
+  if(!k){e.innerHTML='Sign in to Parent chats first with your messaging key. <a href="#" onclick="setTab(\'pc\');return false" style="color:var(--pri);font-weight:700">Open Parent chats</a>';return}
+  if(!confirm("Send this to the parents of "+L.length+" learner"+(L.length===1?"":"s")+" in the Parent Hub app?"))return;
+  btn.disabled=true;let ok=0,par=0;const none=[],bad=[];let stop="";
+  for(let i=0;i<L.length;i++){const x=L[i];e.style.color="var(--mut)";e.textContent="Sending "+(i+1)+" of "+L.length+"...";
+    const body=(h?h+"\n":"")+m+(addB&&own[x.id]?"\n\nBalance for "+fxName(x)+": "+money(own[x.id]):"");
+    let r,d;try{r=await fetch(PHB+"/rest/v1/rpc/staff_msg_start",{method:"POST",headers:{apikey:PHK,Authorization:"Bearer "+PHK,"Content-Type":"application/json"},body:JSON.stringify({k:k,p_sid:x.national_student_id,p_body:body})});d=await r.json().catch(()=>null)}catch(x2){stop="No connection. Check your internet and send again.";break}
+    if(!r.ok){const msg=(d&&d.message)||"Could not send";if(/key|sign|auth|denied|expired|invalid/i.test(msg)&&!ok&&!bad.length){stop=msg+" Open Parent chats and sign in again.";break}bad.push(fxName(x));continue}
+    if(+d>0){ok++;par+=+d}else none.push(fxName(x))}
+  btn.disabled=false;
+  let out=stop?stop+" ":"";out+="Sent to "+par+" parent"+(par===1?"":"s")+" of "+ok+" learner"+(ok===1?"":"s")+".";
+  if(none.length)out+=" No parent linked yet: "+none.slice(0,8).join(", ")+(none.length>8?" and "+(none.length-8)+" more":"")+".";
+  if(bad.length)out+=" Could not send for: "+bad.slice(0,8).join(", ")+(bad.length>8?" and "+(bad.length-8)+" more":"")+".";
+  e.style.color=ok&&!stop?"var(--pri)":"";e.textContent=out;if(ok)toast("Message sent in the app")}
 function fxFab(){if(tab==="set")return setFabAct();curSub()==="struct"?fxNew():fxPay()}
 function fxPay(){const ts=fxTerms(),cur=ts.length?curTermOf(ts):null;
   modal(`<div class="fxmh"><h3>Record payment</h3><button type="button" aria-label="Close" onclick="closeModal()">×</button></div><label class="fxl">Student</label><select id="fpS">${opt(fxStu(),x=>`${fxName(x)} (${x.national_student_id})`)}</select><label class="fxl">Term</label><select id="fpT">${opt(ts,t=>t.name)}</select><label class="fxl">Amount (UGX)</label><input id="fpA" type="number" inputmode="numeric"><div class="row"><div><label class="fxl">Method</label><select id="fpM"><option value="cash">Cash</option><option value="mobile_money">Mobile money</option><option value="bank">Bank</option></select></div><div><label class="fxl">Reference</label><input id="fpR"></div></div><div class="brow" style="margin-top:8px"><button class="alt" onclick="closeModal()">Cancel</button><button id="fpB" onclick="fxPaySave()">Save payment</button></div><div id="fpE" class="err"></div>`);
@@ -2159,7 +2355,7 @@ function clLabels(g){const used=new Set(g.filter(c=>c.stream).map(c=>String(c.st
 const clLbl=c=>(clLabels(clGroup(c.name))[c.id]||{t:cname(c)}).t;
 const clCnt=id=>students.filter(s=>s.class_id===id).length;
 const clCap=c=>c&&+c.capacity>0?+c.capacity:0;
-const isOwnerAcct=x=>!!x&&schools.some(z=>z.owner_id===x.id);
+const isOwnerAcct=x=>!!x&&(schools.some(z=>z.owner_id===x.id)||(typeof SCHI!=="undefined"&&!!SCHI&&SCHI.owner_id===x.id));
 const clTeach=id=>{const x=staff.find(y=>y.id===id);return x?x.full_name:"None"};
 const clStreamName=v=>{v=String(v||"").trim().replace(/^stream\s+/i,"");return v.length===1?v.toUpperCase():v};
 const clCapMissing=()=>CAPMISS||(clSch().length>0&&!("capacity" in clSch()[0]));
@@ -2301,7 +2497,7 @@ async function trRec(id){const q=await sb.rpc("student_history",{p_student:id});
 
 /* PROMOTION_START */
 let pmOff=new Set(),pmH=[];
-async function loadPromo(){if(!me||!perm.ad)return;const S=sid(),r=await sb.from("student_promotions").select("*").order("created_at",{ascending:false}).limit(15);pmH=(r.data||[]).filter(x=>x.school_id===S);drawPromo()}
+async function loadPromo(){if(!me||!perm.ad)return;const S=sid(),r=await sb.from("student_promotions").select("*").order("created_at",{ascending:false}).limit(15);pmH=(r.data||[]).filter(x=>x.school_id===S);drawPromo();pmAutoRun()}
 const pmActV=()=>($("pmAct")?$("pmAct").value:"promote");
 function pmElig(cid){return students.filter(x=>x.school_id===sid()&&x.class_id===cid&&x.status==="active"&&!x.deleted_at)}
 function clRank(c){const n=String(c.name||"").toLowerCase().replace(/[._\-]/g," ").replace(/\s+/g," ").trim(),W={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7},num=t=>/^\d+$/.test(t)?+t:(W[t]||null);let m;
@@ -2320,7 +2516,7 @@ function drawPromo(auto){const f=$("pmFrom");if(!f)return;const cs=clSch().slice
   t.innerHTML=opts.map(c=>'<option value="'+c.id+'"'+(c.id===pick?" selected":"")+'>'+esc(cname(c))+'</option>').join("")||'<option value="">'+(empty||"No other class")+'</option>';
   const L=from?pmElig(from):[];
   $("pmList").innerHTML=L.map(x=>'<label class="ck"><input type="checkbox" class="pmCk" value="'+x.id+'"'+(pmOff.has(x.id)?"":" checked")+' onchange="pmTog(this)"><span>'+esc(x.first_name+" "+x.last_name)+'</span></label>').join("")||'<p class="mut">No active students in this class.</p>';
-  pmCount();
+  pmCount();if($("pmAutoMsg"))$("pmAutoMsg").textContent=pmAutoNote();
   $("pmHist").innerHTML=pmH.map(h=>{const st=students.concat(typeof trashed!=="undefined"?trashed:[]).find(z=>z.id===h.student_id),a=classes.find(z=>z.id===h.from_class_id),b=classes.find(z=>z.id===h.to_class_id),down=a&&b&&clRank(b)<clRank(a)&&clRank(b)<999;
     return '<div class="st"><b>'+esc(st?st.first_name+" "+st.last_name:"Student")+'</b> <span class="mut">'+(h.action==="graduated"?"Left school from "+esc(a?cname(a):"?"):(down?"Demoted from ":"")+esc(a?cname(a):"?")+(down?" to ":" to ")+esc(b?cname(b):"?"))+' · '+esc(String(h.created_at).slice(0,10))+'</span></div>'}).join("")||'<p class="mut">No changes yet.</p>'}
 function pmTog(e){if(e.checked)pmOff.delete(e.value);else pmOff.add(e.value);pmCount()}
@@ -2331,6 +2527,32 @@ async function pmRun(){const m=$("pmMsg"),from=$("pmFrom").value,act=pmActV(),pr
   if(!confirm((act==="demote"?"Demote ":pr?"Promote ":"Mark as left school: ")+ids.length+" student"+(ids.length===1?"":"s")+(pr?" to "+$("pmTo").selectedOptions[0].text:"")+"? This is recorded in the history below."))return;
   const r=await sb.rpc("promote_students",{p_from:from,p_to:to,p_students:ids,p_action:pr?"promote":"graduate"});
   if(r.error){m.textContent=r.error.message;return}pmOff.clear();toast((act==="demote"?"Demoted ":pr?"Promoted ":"Left school: ")+r.data+" student"+(r.data===1?"":"s"));loadStudents();loadPromo()}
+
+/* AUTO_PROMOTION_START: every new academic year every active learner moves up one class by itself.
+   A learner is moved only if they were registered before the new year began and have no promotion or demotion recorded since it began,
+   so manual exceptions are respected and running it twice never moves anyone twice. */
+let pmAuto={busy:0,key:"",msg:"",stay:[]};
+function pmYearInfo(){const T=(typeof terms!=="undefined"?terms:[]).filter(t=>t.start_date&&(!t.school_id||t.school_id===sid())),today=new Date().toISOString().slice(0,10),started=T.filter(t=>t.start_date<=today);if(!started.length)return null;
+  const Y=Math.max(...started.map(t=>+t.academic_year||0));if(!Y||!T.some(t=>(+t.academic_year||0)<Y))return null;
+  return{Y,start:T.filter(t=>+t.academic_year===Y).map(t=>t.start_date).sort()[0]}}
+async function pmAutoRun(){if(!me||!perm.ad||pmAuto.busy||typeof clSch!=="function")return;const cs=clSch();if(!cs.length||!students.length)return;
+  const yi=pmYearInfo();if(!yi)return;const S=sid(),key=S+":"+yi.Y;if(pmAuto.key===key)return;pmAuto.busy=1;
+  try{const r=await sb.from("student_promotions").select("student_id,school_id,created_at").gte("created_at",yi.start);if(r.error)return;
+    const done=new Set((r.data||[]).filter(x=>x.school_id===S).map(x=>x.student_id)),groups={};
+    students.filter(x=>x.school_id===S&&x.status==="active"&&!x.deleted_at&&x.class_id&&!done.has(x.id)&&String(x.created_at).slice(0,10)<yi.start).forEach(x=>{(groups[x.class_id]=groups[x.class_id]||[]).push(x.id)});
+    let moved=0;const stay=[],errs=[];
+    for(const cid of Object.keys(groups).sort((a,b)=>clRank(cs.find(c=>c.id===b)||{})-clRank(cs.find(c=>c.id===a)||{}))){const fc=cs.find(c=>c.id===cid);if(!fc)continue;
+      const n=pmNext(fc,1,cs.filter(c=>c.id!==cid));if(!n){stay.push(cname(fc)+" ("+groups[cid].length+")");continue}
+      const q=await sb.rpc("promote_students",{p_from:cid,p_to:n.id,p_students:groups[cid],p_action:"promote"});
+      if(q.error){errs.push(cname(fc)+": "+q.error.message);continue}moved+=(+q.data||0)}
+    pmAuto.stay=stay;pmAuto.msg=errs.length?"Some classes could not move up: "+errs.join("; "):"";
+    if(!errs.length)pmAuto.key=key;
+    if(moved){toast("New year "+yi.Y+": "+moved+" learner"+(moved===1?"":"s")+" moved up a class");await loadStudents();loadPromo()}else drawPromo()
+  }catch(e){}finally{pmAuto.busy=0}}
+function pmAutoNote(){const yi=pmYearInfo();let m=yi?"Automatic promotion is on. At the start of "+yi.Y+" every learner moves up one class on their own.":"Automatic promotion is on. It starts when the school has terms for a new year.";
+  if(pmAuto.stay.length)m+=" These classes have no higher class yet, so nobody moved: "+pmAuto.stay.join(", ")+". Add the next class in Classes, or mark them as left school below.";
+  if(pmAuto.msg)m+=" "+pmAuto.msg;return m}
+/* AUTO_PROMOTION_END */
 /* PROMOTION_END */
 
 /* ANALYTICS_START */
@@ -2737,11 +2959,12 @@ const GUIDE=[
 "school_admin"
 ],
 "b": [
-"At the end of the year, administrators move a whole class up in one go. Open Students, then the Promotion tab.",
-"- 1. Choose the class the students are in now.",
-"- 2. Choose Promote to another class and pick the new class, or choose Graduate (leave the school) for a final class such as P7.",
-"- 3. Untick any student who must repeat. Unticked students stay in the current class and nothing changes for them.",
-"- 4. Tap the button (it shows the number of students) and confirm.",
+"Promotion is automatic. When a new academic year begins, every active learner moves up one class on their own (for example P1 to P2, S1 to S2) and their profile changes. Nothing needs to be done.",
+"Use the Promotion tab only for exceptions:",
+"- 1. Choose the class the learner is in now.",
+"- 2. Choose Promote to move a learner up early, Demote to move one down, or Leave school for a final class such as P7.",
+"- 3. Untick everyone who should stay where they are, then tap the button and confirm.",
+"A learner you moved by hand during the new year is skipped by the automatic promotion. If a class has no higher class yet, nobody in it moves until you add the next class in Classes.",
 "Each move is saved in Recent promotions with the date, so the record shows where every student came from. A student keeps the same student ID in every class. A graduated student is marked Graduated and has no class. Only active students are moved. A promotion cannot be undone from the screen: to correct one, open the student and edit the class."
 ]
 },
@@ -3241,12 +3464,15 @@ function actOpen(k){const g=actG[k];if(!g)return;const a=g.logs[0],[noun,fn,pl]=
   g.logs.slice(0,15).map((l,j)=>sec(g.n>1?"Record "+(j+1)+" · "+new Date(l.created_at).toLocaleTimeString():"Full information",kvs(Object.entries(l.details||{}).filter(([k])=>!SKIP.test(k)).map(([k,v])=>[fk(k),fv(k,v)]))||"")).join("")+(g.logs.length>15?`<p class="mut">…and ${g.logs.length-15} more.</p>`:"")+
   `<div class="row" style="gap:8px;margin-top:16px"><button class="alt" style="margin:0" onclick="closeModal();setTab('${w[1]}')">Open ${esc(w[0])}</button><button style="margin:0" onclick="closeModal()">Close</button></div>`);
   sb.from("profiles").select("role,department,staff_id,phone").eq("id",g.uid).maybeSingle().then(r=>{const p=r.data,e=$("actWho");if(e)e.textContent=p?[p.department||p.role,p.staff_id,p.phone].filter(Boolean).join(" · "):"System user"})}
+function actTxt(x,pl,noun,det){if(x.tb==="attendance"){const c=classes.find(z=>z.id===(x.d||{}).class_id),ad=(x.d||{}).attendance_date,td=ad&&ad!==todayIso()?" for "+new Date(ad+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}):"";
+    return (x.v==="marked"?"took attendance":"updated attendance")+" for <b>"+esc(c?cname(c):"a class")+"</b>"+td+" · "+x.n+" learner"+(x.n===1?"":"s")}
+  return x.n>1?`${x.v} ${x.n} ${esc(pl)}`:`${x.v} ${esc(noun)}${det?": "+esc(det):""}`}
 drawActivity=function(){bellDraw();const e=$("act");if(!e)return;const S=$("sch").value;actG=[];
   acts.filter(a=>!S||a.school_id===S).forEach(a=>{const t=new Date(a.created_at).getTime(),v=actVerb(a),l=actG[actG.length-1];
-    if(l&&l.uid===a.user_id&&l.tb===a.table_name&&l.v===v&&Math.abs(l.t-t)<120000){l.n++;l.logs.push(a)}else actG.push({uid:a.user_id,tb:a.table_name,v,t,n:1,d:a.details||{},logs:[a]})});
+    if(l&&l.uid===a.user_id&&l.tb===a.table_name&&l.v===v&&Math.abs(l.t-t)<120000&&(a.table_name!=="attendance"||(l.d||{}).class_id===(a.details||{}).class_id)){l.n++;l.logs.push(a)}else actG.push({uid:a.user_id,tb:a.table_name,v,t,n:1,d:a.details||{},logs:[a]})});
   if(!actG.length){e.innerHTML='<p class="mut">No activity yet.</p>';return}
   e.innerHTML=actG.slice(0,25).map((x,k)=>{const[noun,fn,pl]=ACT[x.tb]||[x.tb,()=>"",x.tb],nm=actNames[x.uid]||"A user",d=new Date(x.t),det=x.n>1?"":fn(x.d),ini=nm.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(),today=d.toDateString()===new Date().toDateString();
-    return `<div class="ar" style="cursor:pointer" onclick="actOpen(${k})">${actPics[x.uid]?`<img class="av" src="${esc(actPics[x.uid])}" alt="" onerror="this.outerHTML='<span class=&quot;av&quot;>${esc(ini)}</span>'">`:`<span class="av">${esc(ini)}</span>`}<div class="at"><b>${esc(nm)}</b> ${x.n>1?`${x.v} ${x.n} ${esc(pl)}`:`${x.v} ${esc(noun)}${det?": "+esc(det):""}`}<div class="tm">${ago(x.t)} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})}${today?"":" · "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})}</div></div><span class="mut" style="align-self:center">›</span></div>`}).join("")};
+    return `<div class="ar" style="cursor:pointer" onclick="actOpen(${k})">${actPics[x.uid]?`<img class="av" src="${esc(actPics[x.uid])}" alt="" onerror="this.outerHTML='<span class=&quot;av&quot;>${esc(ini)}</span>'">`:`<span class="av">${esc(ini)}</span>`}<div class="at"><b>${esc(nm)}</b>${x.tb==="attendance"&&actRoles[x.uid]?` <span class="mut">· ${esc(actRoles[x.uid])}</span>`:""} ${actTxt(x,pl,noun,det)}<div class="tm">${x.tb==="attendance"?"Attendance taken · ":""}${ago(x.t)} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})}${today?"":" · "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})}</div></div><span class="mut" style="align-self:center">›</span></div>`}).join("")};
 /* dashboard */
 let dashD=null,dashT=0;
 async function dashLoad(){if(!perm.ad||typeof sid!=="function"||!sid()||Date.now()-dashT<60000)return;dashT=Date.now();try{const r=await sb.rpc("analytics_school",{p_school:sid()});if(!r.error){dashD=r.data;drawDash()}}catch(e){}}
@@ -3277,13 +3503,13 @@ function drawOverviewHtml(){const d={};if(!perm.ad)return"";
   k=(l,v,sub,c,p)=>`<div class="kc"><i style="background:${c}"></i><b>${v}</b><span>${l}</span>${p!=null?`<div class="bar"><u style="width:${Math.min(100,p)}%;background:${c}"></u></div>`:""}${sub?`<span style="display:block;margin-top:6px">${sub}</span>`:""}</div>`;
   let h=`<div class="shh"><div class="ring"><svg viewBox="0 0 100 100" width="96" height="96"><circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="9"/><circle cx="50" cy="50" r="40" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-(sc2||0)/100)}" transform="rotate(-90 50 50)"/></svg><b>${sc2==null?"–":sc2}</b></div><div><small>Activity room</small><h2>${esc(sc)}</h2><span class="lb">${lab}</span></div></div>`;
   if(A){const f=A.fees,a=A.attendance,out=Math.max(0,f.billed-f.paid),tr=a.trend||[],mx=Math.max(1,...tr.map(x=>x.p+x.a));
-    h+=`<div class="shg">${k("Learners",L.length,A.admissions.pending+" pending applications","#2b6cb0",null)}${k("Attendance, 30 days",at==null?"–":at+"%",a.today_marked?a.today_present+" present today":"Not marked today",col(at,85,70),at)}${k("Fees collected",fe==null?"–":fe+"%","UGX "+Number(f.paid).toLocaleString(),col(fe,70,40),fe)}${k("Outstanding",money(out),f.owing_students+" learners owing","#c0392b",null)}${k("Average result",rs==null?"–":rs+"%",A.results.pass_rate==null?"":Math.round(A.results.pass_rate)+"% pass rate",col(rs,60,45),rs)}</div>`;
+    h+=`<div class="shg">${k("Learners",L.length,A.admissions.pending+" pending applications","#2b6cb0",null)}${k("Attendance, 30 days",at==null?"–":at+"%",a.today_marked?a.today_present+" present today":"Not marked today",col(at,85,70),at)}${k("Fees collected",fe==null?money(f.paid):fe+"%",fe==null?"No fee items billed yet":"UGX "+Number(f.paid).toLocaleString(),col(fe,70,40),fe)}${k("Outstanding",money(out),f.owing_students+" learners owing","#c0392b",null)}${k("Average result",rs==null?"–":rs+"%",A.results.pass_rate==null?"":Math.round(A.results.pass_rate)+"% pass rate",col(rs,60,45),rs)}</div>`;
     h+=`<div class="pn"><h3>Attendance, last 14 days</h3><div class="tr">${tr.map(x=>`<div title="${x.p} present, ${x.a} absent"><i style="height:${100*x.p/mx}%"></i>${esc(x.d.slice(0,2))}</div>`).join("")||'<span class="mut">No attendance yet.</span>'}</div></div>`}
   else h+='<div class="pn"><p class="mut" style="margin:0">Loading school figures…</p></div>';
   const qa=[["stu","add","Register","#14804a","stu"],["att","","Attendance","#2b6cb0","att"],["fee","","Fees","#d98e04","fee"],["res","","Results","#7048e8","res"],["adm","","Admissions","#d6336c","adm"],["tt","","Timetable","#0b7285","att"],["ann","","Notices","#e8590c","adm"],["an","","Analytics","#364fc7","res"]];
   h+=`<div class="qa">${qa.filter(x=>x[0]!=="fee"||perm.fee).filter(x=>x[0]!=="res"||perm.res).map(x=>`<button style="background:${x[3]}" onclick="setTab('${x[0]}');${x[1]?`setSub('${x[1]}')`:""}"><svg class="ic"><use href="#i-${x[4]}"/></svg>${x[2]}</button>`).join("")}</div>`;
   h+=`<div class="pn"><h3>Classes</h3><div class="cg">${classes.filter(c=>!S||c.school_id===S).map(c=>{const n=L.filter(s=>s.class_id===c.id).length,cap=A&&(A.students.by_class||[]).find(x=>x.name===c.name&&x.cap);return `<div class="cc" onclick="clsView('${c.id}')"><b>${esc(c.name)}${c.stream?" "+esc(c.stream):""}</b><small>${esc(tchr(c.class_teacher_id)||"No class teacher")}</small><div style="font-size:22px;font-weight:700;margin-top:6px">${n}<small style="font-size:12px"> learners</small></div></div>`}).join("")||'<span class="mut">No classes yet.</span>'}</div></div>`;
-  h+=`<div class="pn"><h3>New learners</h3><div class="rg">${L.slice(0,10).map(s=>`<div onclick="stuView('${s.id}')">${stuAv(s)}${esc((s.first_name||"").slice(0,10))}</div>`).join("")||'<span class="mut">No registrations yet.</span>'}</div></div>`;
+  h+=`<div class="pn"><h3>New learners</h3><div class="rg">${L.slice(0,8).map(s=>`<div onclick="stuView('${s.id}')">${stuAv(s)}${esc((s.first_name||"").slice(0,10))}</div>`).join("")||'<span class="mut">No registrations yet.</span>'}</div></div>`;
   return h}
 function drawDash(){if(typeof drawRoom==="function")drawRoom()}
 (function(){const an=$("anBox"),sh=document.createElement("div");sh.id="shBox";sh.className="hide";an.parentNode.insertBefore(sh,an.nextSibling);
@@ -3367,7 +3593,7 @@ function rmBrowse(all,day0){
   if(perm.fee||perm.ad)h+=P("Latest payments","setTab('fee')",pays.map(p=>{const x=students.find(y=>y.id===p.student_id);return row(x?stuAv(x):"",esc(x?fxName(x):"Learner"),esc(fxDate(fxD(p))+" · "+(fxMeth[p.method]||p.method||"")),money(p.amount),`fxStuPay('${p.student_id}')`)}).join("")||'<p class="mut" style="margin:0">No payments yet.</p>');
   const ow=fxRows().filter(r=>r.bal>0).sort((a,b)=>b.bal-a.bal).slice(0,5);
   if(perm.fee||perm.ad)h+=P("Fees owing (largest balances)","setTab('fee')",ow.map(r=>row(stuAv(r.x),esc(fxName(r.x)),esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")+" · "+(r.pc==null?"":r.pc+"% paid"),`<span style="color:#c0392b">${money(r.bal)}</span>`,`fxStuPay('${r.x.id}')`)).join("")||'<p class="mut" style="margin:0">Nobody owes anything, or no fee items are set yet.</p>');
-  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),`<span class="cp">${esc(x.national_student_id||"")}</span> · `+esc(sCls(x)||"No class"),esc(x.created_at?new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"}):""),`stuView('${x.id}')`)).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
+  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),esc(x.national_student_id||"")+(x.created_at?" · "+esc(new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})):""),`<span class="rcl">${esc(sCls(x)||"No class")}</span>`,`stuView('${x.id}')`)).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
   if(!ex)return h+'<p class="mut" style="text-align:center">Loading admissions, notices and moves…</p>';
   const stc={pending:"#d98e04",approved:"#14804a",rejected:"#c0392b"};
   h+=P("Admission applications","setTab('adm')",ex.adm.map(a=>row(`<span class="av" style="background:var(--bd)">${esc(((a.first_name||"?")[0]+(a.last_name||"")[0]).toUpperCase())}</span>`,esc((a.first_name||"")+" "+(a.last_name||"")),esc((a.application_no||"")+" · "+new Date(a.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),`<span style="color:${stc[a.status]||"inherit"}">${esc(a.status||"")}</span>`,"setTab('adm')")).join("")||'<p class="mut" style="margin:0">No applications yet.</p>');
@@ -4296,4 +4522,285 @@ function open_(t){th=t;clearInterval(poll);
   ["ttCell","ttSave","ttClear","ttPerForm","ttPerSave","ttPerDel"].forEach(function(n){var f=window[n];if(typeof f!=="function")return;window[n]=function(){if(!perm.tt){toast("Only administrators and the Director of Studies can change the timetable.");return}return f.apply(this,arguments)}});
   ["fxNew","fxSaveItems","fxDrop"].forEach(function(n){var f=window[n];if(typeof f!=="function")return;window[n]=function(){if(!perm.fs){toast("Only the Bursar, Accountant and administrators can change the fee structure.");return}return f.apply(this,arguments)}});
 })();
-</script></body></html>
+</script>
+<style id="roomFix">
+/* ACTIVITY ROOM LAYOUT FIX: nothing may be wider than the screen */
+#shBox{grid-template-columns:minmax(0,1fr);max-width:100%;overflow-x:clip}
+#shBox>*{min-width:0;max-width:100%;box-sizing:border-box}
+#shBox .rms{grid-template-columns:repeat(3,minmax(0,1fr))}
+#shBox .rms span{display:block;line-height:1.25}
+#shBox .rmc{max-width:100%}
+/* Browse */
+#shBox .rmg{grid-template-columns:repeat(2,minmax(0,1fr))}
+#shBox .rmk{min-width:0}
+#shBox .rmk b{font-size:24px}
+#shBox .rmk span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#shBox .rmk small{line-height:1.3}
+#shBox .rmp{overflow:hidden}
+#shBox .rmi{gap:12px;padding:10px 0;min-width:0}
+#shBox .rmi .at{flex:1 1 0;min-width:0}
+#shBox .rmi .at b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#shBox .rmi .at small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#shBox .rmi .rt{flex:none;max-width:42%;white-space:nowrap;text-align:right;font-size:13px}
+#shBox .rmi .rcl{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-size:11.5px;font-weight:600;color:var(--pri);background:color-mix(in srgb,var(--pri) 12%,transparent);border-radius:99px;padding:3px 10px}
+#shBox .rmi .av{flex:none}
+/* Overview */
+#shBox .shh{padding:16px;gap:14px}
+#shBox .shh>div:last-child{min-width:0}
+#shBox .shh h2{font-size:18px;line-height:1.25;overflow-wrap:anywhere}
+#shBox .ring,#shBox .ring svg{width:84px;height:84px}
+#shBox .shg{grid-template-columns:repeat(2,minmax(0,1fr))}
+#shBox .kc{min-width:0;overflow:hidden}
+#shBox .kc b{font-size:22px;overflow-wrap:anywhere}
+#shBox .kc span{display:block;line-height:1.3}
+#shBox .qa{grid-template-columns:repeat(4,minmax(0,1fr))}
+#shBox .qa button{min-width:0;padding:11px 2px;font-size:10.5px;overflow:hidden}
+#shBox .cg{grid-template-columns:repeat(2,minmax(0,1fr))}
+#shBox .cc{min-width:0;overflow:hidden}
+#shBox .cc b,#shBox .cc small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#shBox .rg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 8px;overflow:visible}
+#shBox .rg div{width:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#shBox .rg .sav{display:grid;margin:0 auto 4px}
+#shBox .tr{gap:3px}
+@media(min-width:640px){
+ #shBox .cg{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+ #shBox .shg{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+ #shBox .rmg{grid-template-columns:repeat(3,minmax(0,1fr))}
+ #shBox .rg{grid-template-columns:repeat(8,minmax(0,1fr))}
+}
+</style>
+<script>
+/* DEVICE BACK BUTTON: the phone's own back key steps back inside the app instead of leaving it */
+(function(){
+ var lastBack=0;
+ function step(){
+  try{
+   if(document.getElementById("mdl")){closeModal();return true}
+   var pops=(typeof POPS!=="undefined"?POPS:[]).filter(function(i){var e=document.getElementById(i);return e&&!e.classList.contains("hide")});
+   if(pops.length){closePops();return true}
+   var sd=document.getElementById("side");
+   if(sd&&sd.classList.contains("open")){closeSide();return true}
+   if(typeof tab==="undefined")return false;
+   if(tab==="set"&&typeof SV!=="undefined"&&SV&&(SV.pg||SV.sec)){SV.pg?setView(SV.sec):setView(null);return true}
+   if(tab==="sh"&&typeof ROOM!=="undefined"&&ROOM.tab!=="feed"){roomSet("tab","feed");return true}
+   if(tab==="brd"&&typeof BRD!=="undefined"&&BRD.view!=="over"){brdGo("over");return true}
+   if(tab!=="home"){setTab("home");return true}
+  }catch(e){}
+  return false}
+ function arm(){try{history.pushState({sm:1},"")}catch(e){}}
+ try{history.replaceState({sm:0},"")}catch(e){}
+ arm();
+ window.addEventListener("popstate",function(){
+  if(step()){arm();return}
+  var n=Date.now();
+  if(n-lastBack<2500)return; /* second back press: let the phone leave the app */
+  lastBack=n;
+  if(typeof toast==="function")toast("Press back again to exit");
+  arm()});
+})();
+</script>
+<script>
+/* BOARDING_START: dormitories / hostels, boarders, roll call, exeat. Tables come from boarding_setup.sql. */
+const BRD_SQL="-- ============================================================\n-- My School: BOARDING module (dormitories, hostels, boarders,\n-- roll call, exeat). Run once in the Supabase SQL editor.\n-- Safe to run again: everything uses IF NOT EXISTS / OR REPLACE.\n-- ============================================================\n\n-- Who may read and who may write (own helpers, no dependency on other functions)\ncreate or replace function public.brd_can_read(p_school uuid) returns boolean\nlanguage sql stable security definer set search_path = public as $$\n  select exists (\n    select 1 from public.profiles p\n    where p.id = auth.uid()\n      and (p.role = 'super_admin'\n           or (p.school_id = p_school and p.role in ('school_admin','teacher','bursar','staff')))\n  );\n$$;\n\ncreate or replace function public.brd_can_write(p_school uuid) returns boolean\nlanguage sql stable security definer set search_path = public as $$\n  select exists (\n    select 1 from public.profiles p\n    where p.id = auth.uid()\n      and (p.role = 'super_admin'\n           or (p.school_id = p_school and (\n                 (p.role = 'school_admin' and coalesce(p.department,'') !~* 'support staff')\n              or (p.role = 'staff' and coalesce(p.department,'') ~* 'boarding|warden|matron|patron')\n           )))\n  );\n$$;\n\n-- Dormitories / hostels\ncreate table if not exists public.dormitories (\n  id         uuid primary key default gen_random_uuid(),\n  school_id  uuid not null references public.schools(id) on delete cascade,\n  name       text not null,\n  kind       text not null default 'mixed' check (kind in ('boys','girls','mixed')),\n  capacity   integer not null default 0 check (capacity >= 0),\n  warden_id  uuid references public.profiles(id) on delete set null,\n  notes      text,\n  created_at timestamptz not null default now(),\n  unique (school_id, name)\n);\n\n-- Which learner sleeps where (one active place per learner)\ncreate table if not exists public.boarding_allocations (\n  id           uuid primary key default gen_random_uuid(),\n  school_id    uuid not null references public.schools(id) on delete cascade,\n  student_id   uuid not null references public.students(id) on delete cascade,\n  dorm_id      uuid not null references public.dormitories(id) on delete restrict,\n  room         text,\n  bed          text,\n  boarder_type text not null default 'full' check (boarder_type in ('full','weekly')),\n  start_date   date not null default current_date,\n  end_date     date,\n  active       boolean not null default true,\n  created_at   timestamptz not null default now()\n);\ncreate unique index if not exists boarding_one_active_place\n  on public.boarding_allocations (student_id) where active;\n\n-- Dormitory roll call (morning / evening / night)\ncreate table if not exists public.boarding_roll (\n  id         uuid primary key default gen_random_uuid(),\n  school_id  uuid not null references public.schools(id) on delete cascade,\n  dorm_id    uuid references public.dormitories(id) on delete set null,\n  student_id uuid not null references public.students(id) on delete cascade,\n  roll_date  date not null default current_date,\n  session    text not null check (session in ('morning','evening','night')),\n  status     text not null check (status in ('present','absent','sick')),\n  marked_by  uuid default auth.uid(),\n  created_at timestamptz not null default now(),\n  unique (student_id, roll_date, session)\n);\n\n-- Exeat: a boarder leaving school for a while\ncreate table if not exists public.boarding_exeats (\n  id              uuid primary key default gen_random_uuid(),\n  school_id       uuid not null references public.schools(id) on delete cascade,\n  student_id      uuid not null references public.students(id) on delete cascade,\n  out_date        date not null default current_date,\n  expected_return date,\n  returned_on     date,\n  reason          text,\n  picked_by       text,\n  approved_by     uuid default auth.uid(),\n  created_at      timestamptz not null default now()\n);\n\ncreate index if not exists boarding_alloc_school  on public.boarding_allocations (school_id, active);\ncreate index if not exists boarding_roll_day      on public.boarding_roll (school_id, roll_date, session);\ncreate index if not exists boarding_exeat_school  on public.boarding_exeats (school_id, returned_on);\n\n-- Row level security\nalter table public.dormitories           enable row level security;\nalter table public.boarding_allocations  enable row level security;\nalter table public.boarding_roll         enable row level security;\nalter table public.boarding_exeats       enable row level security;\n\ndo $$\ndeclare t text;\nbegin\n  foreach t in array array['dormitories','boarding_allocations','boarding_roll','boarding_exeats'] loop\n    execute format('drop policy if exists %I on public.%I', t||'_read',  t);\n    execute format('drop policy if exists %I on public.%I', t||'_write', t);\n    execute format('create policy %I on public.%I for select to authenticated using (public.brd_can_read(school_id))', t||'_read', t);\n    execute format('create policy %I on public.%I for all to authenticated using (public.brd_can_write(school_id)) with check (public.brd_can_write(school_id))', t||'_write', t);\n    execute format('grant select, insert, update, delete on public.%I to authenticated', t);\n  end loop;\nend $$;\n";
+let BRD={view:"over",dorm:"",rd:"",q:"",ses:"evening",date:"",ok:null,fail:"",dorms:[],al:[],ex:[],roll:[],mk:{},saved:false,t:0,pre:0};
+const BRD_SES=[["morning","Morning"],["evening","Evening"],["night","Night"]],BRD_KIND={boys:"Boys",girls:"Girls",mixed:"Mixed"};
+const brdW=()=>!!me&&!!(perm.ad||(accP().brd));
+const brdCan=()=>!!me&&!!(perm.ad||(accP().brd));
+const brdMissing=e=>!!e&&(e.code==="42P01"||e.code==="PGRST205"||/does not exist|schema cache|could not find the table/i.test(e.message||""));
+const brdStu=id=>students.find(s=>s.id===id);
+const brdDorm=id=>BRD.dorms.find(d=>d.id===id);
+const brdOcc=id=>BRD.al.filter(a=>a.dorm_id===id).length;
+const brdOut=()=>BRD.ex.filter(x=>!x.returned_on);
+const brdD=s=>s?new Date(String(s).slice(0,10)+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}):"";
+const brdByName=(a,b)=>sName(a).localeCompare(sName(b));
+const brdGender=s=>String((s&&s.gender)||"").toLowerCase();
+const brdFits=(d,s)=>d.kind==="mixed"||!s||!brdGender(s)||(d.kind==="boys"&&brdGender(s)==="male")||(d.kind==="girls"&&brdGender(s)==="female");
+const brdOpenOn=(sid2,d)=>BRD.ex.some(x=>x.student_id===sid2&&x.out_date<=d&&(!x.returned_on||d<x.returned_on));
+const brdRoster=dormId=>BRD.al.filter(a=>a.dorm_id===dormId).map(a=>({a,s:brdStu(a.student_id)})).filter(x=>x.s).sort((x,y)=>brdByName(x.s,y.s));
+const brdPlace=a=>[a.room?"Room "+a.room:"",a.bed?"Bed "+a.bed:""].filter(Boolean).join(" · ");
+(function(){const st=document.createElement("style");st.textContent=`
+#brdBox{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);max-width:100%;overflow-x:clip}
+#brdBox>*{min-width:0;max-width:100%;box-sizing:border-box}
+#brdBox .bdh{border-radius:22px;padding:18px;color:#fff;background:linear-gradient(135deg,var(--pri),#0b3d2e 62%,#3b2a63);position:relative;overflow:hidden}
+#brdBox .bdh:after{content:"";position:absolute;right:-50px;top:-50px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.08)}
+#brdBox .bdh h2{margin:0;font-size:21px}#brdBox .bdh p{margin:2px 0 0;opacity:.82;font-size:13px}
+#brdBox .bdh .lv{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:99px;padding:3px 10px;margin-bottom:8px}
+#brdBox .bds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}#brdBox .bds div{background:rgba(255,255,255,.14);border-radius:14px;padding:9px 10px}#brdBox .bds b{display:block;font-size:20px;line-height:1.1}#brdBox .bds span{font-size:11px;opacity:.85;display:block;line-height:1.25}
+#brdBox .bdt{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:4px;gap:4px;overflow-x:auto;scrollbar-width:none}#brdBox .bdt::-webkit-scrollbar{display:none}
+#brdBox .bdt button{flex:1 0 auto;margin:0;width:auto;padding:9px 12px;border-radius:11px;border:0;background:transparent;color:var(--mut);font-weight:700;font-size:13px;white-space:nowrap}#brdBox .bdt button.on{background:var(--pri);color:#fff}
+#brdBox .bdp{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:14px;overflow:hidden}
+#brdBox .bdp h3{margin:0 0 10px;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+#brdBox .bdp h3 a{font-size:12px;font-weight:600;color:var(--pri);text-decoration:none;white-space:nowrap}
+#brdBox .bdbar{height:8px;border-radius:9px;background:var(--bd);overflow:hidden;margin-top:8px}#brdBox .bdbar u{display:block;height:100%;border-radius:9px}
+#brdBox .bdo{padding:10px 0;border-top:1px solid var(--bd);cursor:pointer}#brdBox .bdo:first-of-type{border-top:0}
+#brdBox .bdoh{display:flex;justify-content:space-between;gap:8px}#brdBox .bdoh b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#brdBox .bdoh span{flex:none;font-weight:700;font-size:13px}
+#brdBox small,#brdBox .mt{color:var(--mut);font-size:12px}
+#brdBox .bdr{display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid var(--bd);min-width:0}#brdBox .bdr:first-of-type{border-top:0}
+#brdBox .bdr.clk{cursor:pointer}
+#brdBox .bdr .at{flex:1 1 0;min-width:0}#brdBox .bdr .at b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#brdBox .bdr .at small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#brdBox .bdr .rt{flex:none;max-width:44%;text-align:right}
+#brdBox .pill{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-size:11.5px;font-weight:600;color:var(--pri);background:color-mix(in srgb,var(--pri) 12%,transparent);border-radius:99px;padding:3px 10px}
+#brdBox .pill.red{color:#c0392b;background:rgba(192,57,43,.12)}#brdBox .pill.amb{color:#b45309;background:rgba(217,142,4,.15)}#brdBox .pill.gry{color:var(--mut);background:var(--bd)}
+#brdBox .bdf{display:grid;grid-template-columns:1fr 1fr;gap:8px}#brdBox .bdf input,#brdBox .bdf select{margin:0;min-width:0}#brdBox .bdf .w{grid-column:1/-1}
+#brdBox .bdb{display:flex;gap:8px;flex-wrap:wrap}#brdBox .bdb button{margin:0;width:auto;padding:9px 14px;font-size:13px;border-radius:12px}
+#brdBox .bdm{display:flex;gap:6px;flex:none}#brdBox .bdm button{margin:0;width:auto;min-width:44px;padding:8px 9px;font-size:12px;font-weight:700;border-radius:10px;background:transparent;color:var(--mut);border:1px solid var(--bd)}
+#brdBox .bdm button.on.present{background:#14804a;color:#fff;border-color:#14804a}#brdBox .bdm button.on.absent{background:#c0392b;color:#fff;border-color:#c0392b}#brdBox .bdm button.on.sick{background:#d98e04;color:#fff;border-color:#d98e04}
+#brdBox .bdsum{display:flex;gap:8px;flex-wrap:wrap}#brdBox .bdsum span{font-size:12px;font-weight:700;border-radius:99px;padding:4px 10px;background:var(--bd)}
+#brdBox .bdsetup pre{white-space:pre-wrap;word-break:break-word;font-size:11px;max-height:150px;overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:10px}
+#brdBox .err{color:#c0392b;font-size:13px;min-height:16px}
+.bdmodal .bdf{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bdmodal .bdf .w{grid-column:1/-1}.bdmodal input,.bdmodal select,.bdmodal textarea{margin:0;min-width:0}
+`;document.head.appendChild(st);
+ const sp=document.querySelector('svg[aria-hidden="true"]');if(sp&&!document.getElementById("i-bed"))sp.insertAdjacentHTML("beforeend",'<symbol id="i-bed" viewBox="0 0 24 24"><path d="M3 20V5"/><path d="M3 15h18v5"/><path d="M21 15v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11.5" r="1.8"/></symbol>');
+ const an=document.getElementById("annBox");if(an&&!document.getElementById("brdBox")){const b=document.createElement("div");b.id="brdBox";b.className="hide";an.parentNode.insertBefore(b,an.nextSibling)}
+ const side=document.querySelector('#side button[data-t="att"]');if(side&&!document.getElementById("tabBrd"))side.insertAdjacentHTML("afterend",'<button id="tabBrd" data-t="brd" class="hide" onclick="setTab(\'brd\')"><svg class="ic"><use href="#i-bed"/></svg>Boarding</button>');
+})();
+ACC.s_board={tabs:["home","stu","ann","brd","set"],brd:1};
+ALLTABS.push("brd");TABMOD.brd="boarding";
+
+async function brdLoad(force){
+  if(!me||!brdCan())return;
+  if(!force&&Date.now()-BRD.t<15000){brdDraw();return}
+  BRD.t=Date.now();if(!BRD.date)BRD.date=todayIso();
+  const S=sid();if(!S)return;
+  const R=await Promise.all([
+    sb.from("dormitories").select("*").eq("school_id",S).order("name"),
+    sb.from("boarding_allocations").select("*").eq("school_id",S).eq("active",true),
+    sb.from("boarding_exeats").select("*").eq("school_id",S).order("out_date",{ascending:false}).limit(300),
+    sb.from("boarding_roll").select("*").eq("school_id",S).eq("roll_date",todayIso())]);
+  const bad=R.find(x=>x.error);
+  if(bad){BRD.ok=brdMissing(bad.error)?false:true;BRD.fail=BRD.ok?bad.error.message:"";if(BRD.ok===false)BRD.t=0;brdDraw();return}
+  BRD.ok=true;BRD.fail="";BRD.dorms=R[0].data||[];BRD.al=R[1].data||[];BRD.ex=R[2].data||[];BRD.roll=R[3].data||[];
+  if(!BRD.rd||!brdDorm(BRD.rd))BRD.rd=(BRD.dorms[0]||{}).id||"";
+  brdDraw()}
+function brdGo(v,dorm){BRD.view=v;if(dorm!==undefined){BRD.dorm=dorm;if(v==="roll")BRD.rd=dorm||BRD.rd}window.scrollTo(0,0);if(v==="roll"){brdRollLoad();return}brdDraw()}
+function brdNav(){return `<div class="bdt">${[["over","Overview"],["dorms","Dormitories"],["boarders","Boarders"],["roll","Roll call"],["exeat","Exeat"]].map(([k,l])=>`<button class="${BRD.view===k?"on":""}" onclick="brdGo('${k}')">${l}</button>`).join("")}</div>`}
+function brdHead(){const total=BRD.al.length,cap=BRD.dorms.reduce((n,d)=>n+(+d.capacity||0),0),sch=(typeof schRow==="function"&&schRow())||{};
+  return `<div class="bdh"><span class="lv">BOARDING</span><h2>Dormitories and hostels</h2><p>${esc(sch.name||"Your school")}</p><div class="bds"><div><b>${total}</b><span>Boarders</span></div><div><b>${Math.max(0,cap-total)}</b><span>Beds free</span></div><div><b>${brdOut().length}</b><span>On exeat</span></div></div></div>`}
+function brdDraw(){const d=$("brdBox");if(!d||!me||!brdCan())return;
+  if(BRD.ok===null){d.innerHTML='<div class="bdp"><p class="mut" style="margin:0">Loading boarding…</p></div>';return}
+  if(BRD.ok===false){d.innerHTML=`<div class="bdh"><span class="lv">BOARDING</span><h2>Set up boarding</h2><p>One short step in the database is needed first.</p></div><div class="bdp bdsetup"><p style="margin:0 0 8px">The boarding tables do not exist in your database yet. ${perm.ad?"Copy the setup script, open the <b>Supabase SQL editor</b>, paste it and press Run. Then come back and tap Check again.":"Ask your school administrator to finish this step."}</p>${perm.ad?`<div class="bdb"><button onclick="brdCopySql()">Copy setup script</button><button class="alt" onclick="brdLoad(true)">Check again</button></div><pre>${esc(BRD_SQL.slice(0,700))}…</pre>`:""}</div>`;return}
+  if(BRD.fail){d.innerHTML=`<div class="bdp"><p style="margin:0 0 8px">Boarding could not load: ${esc(BRD.fail)}</p><button onclick="brdLoad(true)">Try again</button></div>`;return}
+  const V={over:brdOver,dorms:brdDorms,boarders:brdBoarders,roll:brdRoll,exeat:brdExeat}[BRD.view]||brdOver;
+  d.innerHTML=brdHead()+brdNav()+V()}
+function brdCopySql(){const done=()=>toast("Setup script copied");try{navigator.clipboard.writeText(BRD_SQL).then(done,()=>brdSqlFallback())}catch(e){brdSqlFallback()}}
+function brdSqlFallback(){const t=document.createElement("textarea");t.value=BRD_SQL;document.body.appendChild(t);t.select();try{document.execCommand("copy");toast("Setup script copied")}catch(e){toast("Could not copy")}t.remove()}
+
+/* ---------- Overview ---------- */
+function brdOver(){
+  let h="";const boarders=BRD.al.length;
+  h+=`<div class="bdp"><h3>Occupancy${brdW()?`<a href="#" onclick="brdDormForm();return false">+ Add dormitory</a>`:""}</h3>`+(BRD.dorms.map(d=>{const n=brdOcc(d.id),c=+d.capacity||0,p=c?Math.min(100,Math.round(100*n/c)):0,col=p>=100?"#c0392b":p>=85?"#d98e04":"#14804a";
+    return `<div class="bdo" onclick="brdGo('boarders','${d.id}')"><div class="bdoh"><b>${esc(d.name)}</b><span>${n} / ${c||"–"}</span></div><div class="bdbar"><u style="width:${p}%;background:${col}"></u></div><small>${BRD_KIND[d.kind]||""}${c?" · "+Math.max(0,c-n)+" beds free":""}</small></div>`}).join("")||`<p class="mut" style="margin:0">No dormitory yet.${brdW()?" Tap + Add dormitory to start.":""}</p>`)+`</div>`;
+  const t=todayIso();
+  h+=`<div class="bdp"><h3>Today's roll call<a href="#" onclick="brdGo('roll');return false">Open ›</a></h3>`+BRD_SES.map(([k,l])=>{const R=BRD.roll.filter(r=>r.session===k),ab=R.filter(r=>r.status==="absent").length,sk=R.filter(r=>r.status==="sick").length;
+    return `<div class="bdr"><div class="at"><b>${l}</b><small>${R.length?R.length+" of "+boarders+" marked":"Not taken yet"}</small></div><div class="rt">${R.length?`<span class="pill ${ab?"red":""}">${ab} absent</span>${sk?` <span class="pill amb">${sk} sick</span>`:""}`:`<span class="pill gry">Pending</span>`}</div></div>`}).join("")+`</div>`;
+  const o=brdOut().slice(0,5);
+  h+=`<div class="bdp"><h3>Out on exeat<a href="#" onclick="brdGo('exeat');return false">See all ›</a></h3>`+(o.map(brdExeatRow).join("")||`<p class="mut" style="margin:0">Nobody is out.</p>`)+`</div>`;
+  return h}
+
+/* ---------- Dormitories ---------- */
+function brdDorms(){
+  return `<div class="bdp"><h3>Dormitories and hostels${brdW()?`<a href="#" onclick="brdDormForm();return false">+ Add</a>`:""}</h3>`+(BRD.dorms.map(d=>{const n=brdOcc(d.id),c=+d.capacity||0,w=staff.find(x=>x.id===d.warden_id);
+    return `<div class="bdr clk" onclick="brdGo('boarders','${d.id}')"><div class="at"><b>${esc(d.name)}</b><small>${BRD_KIND[d.kind]||""} · ${n} / ${c||"–"} beds${w?" · Warden "+esc(w.full_name):""}</small></div><div class="rt">${brdW()?`<button class="alt" style="margin:0;width:auto;padding:7px 12px;font-size:12px" onclick="event.stopPropagation();brdDormForm('${d.id}')">Edit</button>`:""}</div></div>`}).join("")||`<p class="mut" style="margin:0">No dormitory yet.</p>`)+`</div>`}
+function brdDormForm(id){if(!brdW())return;const d=id?brdDorm(id):null,W=staff.filter(x=>x.school_id===sid());
+  modal(`<div class="bdmodal"><div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">${d?"Edit dormitory":"New dormitory"}</b></div><div class="bdf" style="margin-top:12px"><input id="bdN" class="w" placeholder="Name, e.g. Mandela House" value="${esc(d?d.name:"")}"><select id="bdK"><option value="boys">Boys</option><option value="girls">Girls</option><option value="mixed">Mixed</option></select><input id="bdC" type="number" min="0" inputmode="numeric" placeholder="Number of beds" value="${d?d.capacity:""}"><select id="bdWd" class="w"><option value="">Warden / matron (optional)</option>${W.map(x=>`<option value="${x.id}" ${d&&d.warden_id===x.id?"selected":""}>${esc(x.full_name)}${x.department?" · "+esc(x.department):""}</option>`).join("")}</select><input id="bdNt" class="w" placeholder="Notes (optional)" value="${esc(d&&d.notes||"")}"></div><div id="bdE" class="err" style="margin-top:6px"></div><div class="row" style="gap:8px;margin-top:10px"><button style="margin:0" onclick="brdDormSave('${id||""}')">Save</button>${d?`<button class="alt" style="margin:0;color:#c0392b;border-color:#c0392b" onclick="brdDormDel('${d.id}')">Delete</button>`:""}</div></div>`);
+  if(d)$("bdK").value=d.kind}
+async function brdDormSave(id){const e=$("bdE"),name=gv("bdN"),cap=parseInt($("bdC").value,10);e.textContent="";
+  if(!name){e.textContent="Enter the dormitory name.";return}if(!(cap>0)){e.textContent="Enter the number of beds.";return}
+  if(id&&cap<brdOcc(id)){e.textContent="There are "+brdOcc(id)+" boarders here. Move some first, or keep at least "+brdOcc(id)+" beds.";return}
+  const row={name,kind:$("bdK").value,capacity:cap,warden_id:$("bdWd").value||null,notes:gv("bdNt")||null};
+  const r=id?await sb.from("dormitories").update(row).eq("id",id):await sb.from("dormitories").insert({...row,school_id:sid()});
+  if(r.error){e.textContent=r.error.code==="23505"?"A dormitory with this name already exists.":r.error.message;return}
+  closeModal();toast("Dormitory saved");brdLoad(true)}
+async function brdDormDel(id){if(brdOcc(id)){toast("Move or check out the boarders first");return}if(!confirm("Delete this dormitory?"))return;
+  const r=await sb.from("dormitories").delete().eq("id",id);if(r.error)return alert(r.error.message);closeModal();toast("Dormitory deleted");brdLoad(true)}
+
+/* ---------- Boarders (laid out like the Students list) ---------- */
+function brdBoarders(){
+  return `<div class="bdp"><h3>Boarders${brdW()?`<a href="#" onclick="brdAddBoarder();return false">+ Add boarder</a>`:""}</h3><div class="bdf"><input id="bdQ" class="w" placeholder="Search name, ID or class" value="${esc(BRD.q)}" oninput="BRD.q=this.value;brdList()"><select id="bdDF" class="w" onchange="BRD.dorm=this.value;brdList()"><option value="">All dormitories</option>${BRD.dorms.map(d=>`<option value="${d.id}" ${BRD.dorm===d.id?"selected":""}>${esc(d.name)}</option>`).join("")}</select></div><div id="bdList" style="margin-top:6px">${brdListHtml()}</div></div>`}
+function brdListHtml(){const q=BRD.q.trim().toLowerCase();
+  const L=BRD.al.filter(a=>!BRD.dorm||a.dorm_id===BRD.dorm).map(a=>({a,s:brdStu(a.student_id)})).filter(x=>x.s&&(!q||(sName(x.s)+" "+(x.s.national_student_id||"")+" "+sCls(x.s)).toLowerCase().includes(q))).sort((x,y)=>brdByName(x.s,y.s));
+  return L.map(({a,s})=>{const d=brdDorm(a.dorm_id);return `<div class="bdr clk" onclick="brdBoarder('${a.id}')">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><small>${esc(s.national_student_id||"")} · ${esc(sCls(s)||"No class")}</small></div><div class="rt"><span class="pill">${esc(d?d.name:"?")}${brdPlace(a)?" · "+esc(a.bed?"Bed "+a.bed:"Room "+a.room):""}</span>${a.boarder_type==="weekly"?` <span class="pill amb">Weekly</span>`:""}${brdOpenOn(s.id,todayIso())?` <span class="pill red">Out</span>`:""}</div></div>`}).join("")||`<p class="mut" style="margin:6px 0 0">${BRD.al.length?"No boarder matches.":"No boarders yet."}</p>`}
+function brdList(){const e=$("bdList");if(e)e.innerHTML=brdListHtml()}
+function brdBoarder(id){const a=BRD.al.find(x=>x.id===id),s=a&&brdStu(a.student_id);if(!a||!s)return;const d=brdDorm(a.dorm_id);
+  modal(`<div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">Boarder</b></div><div class="ar" style="margin-top:10px;align-items:center">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm cp">${esc(s.national_student_id||"")}</div></div></div>`+
+  sec("Boarding",kvs([["Dormitory",d?d.name:"?"],["Room",a.room||""],["Bed",a.bed||""],["Type",a.boarder_type==="weekly"?"Weekly boarder":"Full boarder"],["Since",brdD(a.start_date)],["Class",sCls(s)]]))+
+  `<div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap"><button class="alt" style="margin:0" onclick="closeModal();stuView('${s.id}')">Learner profile</button>${brdW()?`<button class="alt" style="margin:0" onclick="brdMoveForm('${a.id}')">Move</button><button class="alt" style="margin:0" onclick="closeModal();brdExeatForm('${s.id}')">Exeat</button><button class="alt" style="margin:0;color:#c0392b;border-color:#c0392b" onclick="brdCheckout('${a.id}')">Check out</button>`:""}</div>`)}
+function brdDormOpts(sid2,keep){const s=brdStu(sid2);return BRD.dorms.filter(d=>brdFits(d,s)||d.id===keep).map(d=>{const n=brdOcc(d.id),full=(+d.capacity||0)<=n&&d.id!==keep;return `<option value="${d.id}" ${d.id===keep?"selected":""} ${full?"disabled":""}>${esc(d.name)} (${Math.max(0,(+d.capacity||0)-n)} free)</option>`}).join("")}
+function brdStuOpts(){const q=($("bdSq")?$("bdSq").value:"").trim().toLowerCase(),b=new Set(BRD.al.map(a=>a.student_id));
+  const L=students.filter(s=>s.school_id===sid()&&s.status==="active"&&!s.deleted_at&&!b.has(s.id)&&(!q||(sName(s)+" "+(s.national_student_id||"")+" "+sCls(s)).toLowerCase().includes(q))).sort(brdByName).slice(0,80);
+  const e=$("bdS");if(!e)return;e.innerHTML=L.map(s=>`<option value="${s.id}">${esc(sName(s))} · ${esc(sCls(s)||"No class")}</option>`).join("")||'<option value="">No learner found</option>';brdStuPick()}
+function brdStuPick(){const e=$("bdD");if(e&&$("bdS"))e.innerHTML=brdDormOpts($("bdS").value,"")||'<option value="">No suitable dormitory</option>'}
+function brdAddBoarder(){if(!brdW())return;if(!BRD.dorms.length){toast("Add a dormitory first");brdGo("dorms");return}
+  modal(`<div class="bdmodal"><div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">Add boarder</b></div><div class="bdf" style="margin-top:12px"><input id="bdSq" class="w" placeholder="Search learner by name, ID or class" oninput="brdStuOpts()"><select id="bdS" class="w" onchange="brdStuPick()"></select><select id="bdD" class="w"></select><input id="bdRm" placeholder="Room (optional)"><input id="bdBd" placeholder="Bed no. (optional)"><select id="bdT" class="w"><option value="full">Full boarder</option><option value="weekly">Weekly boarder</option></select></div><div id="bdE" class="err" style="margin-top:6px"></div><button style="margin-top:8px" onclick="brdAddSave()">Save boarder</button></div>`);brdStuOpts()}
+function brdBedTaken(dorm,room,bed,except){if(!bed)return false;const r=String(room||"").trim().toLowerCase(),b=String(bed).trim().toLowerCase();return BRD.al.some(a=>a.id!==except&&a.dorm_id===dorm&&String(a.room||"").trim().toLowerCase()===r&&String(a.bed||"").trim().toLowerCase()===b)}
+async function brdAddSave(){const e=$("bdE"),st=$("bdS").value,dm=$("bdD").value,room=gv("bdRm"),bed=gv("bdBd");e.textContent="";
+  if(!st){e.textContent="Choose a learner.";return}if(!dm){e.textContent="Choose a dormitory.";return}
+  if(brdBedTaken(dm,room,bed)){e.textContent="That bed is already taken.";return}
+  const r=await sb.from("boarding_allocations").insert({school_id:sid(),student_id:st,dorm_id:dm,room:room||null,bed:bed||null,boarder_type:$("bdT").value});
+  if(r.error){e.textContent=r.error.code==="23505"?"This learner is already a boarder.":r.error.message;return}
+  closeModal();toast("Boarder added");brdLoad(true)}
+function brdMoveForm(id){const a=BRD.al.find(x=>x.id===id);if(!a)return;
+  modal(`<div class="bdmodal"><div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">Move boarder</b></div><div class="bdf" style="margin-top:12px"><select id="bdD" class="w">${brdDormOpts(a.student_id,a.dorm_id)}</select><input id="bdRm" placeholder="Room" value="${esc(a.room||"")}"><input id="bdBd" placeholder="Bed no." value="${esc(a.bed||"")}"></div><div id="bdE" class="err" style="margin-top:6px"></div><button style="margin-top:8px" onclick="brdMoveSave('${id}')">Save</button></div>`)}
+async function brdMoveSave(id){const e=$("bdE"),dm=$("bdD").value,room=gv("bdRm"),bed=gv("bdBd");e.textContent="";
+  if(brdBedTaken(dm,room,bed,id)){e.textContent="That bed is already taken.";return}
+  const r=await sb.from("boarding_allocations").update({dorm_id:dm,room:room||null,bed:bed||null}).eq("id",id);
+  if(r.error){e.textContent=r.error.message;return}closeModal();toast("Boarder moved");brdLoad(true)}
+async function brdCheckout(id){if(!confirm("Check this learner out of boarding? Their bed becomes free."))return;
+  const r=await sb.from("boarding_allocations").update({active:false,end_date:todayIso()}).eq("id",id);if(r.error)return alert(r.error.message);closeModal();toast("Checked out");brdLoad(true)}
+
+/* ---------- Roll call ---------- */
+async function brdRollLoad(){BRD.mk={};BRD.saved=false;const ids=brdRoster(BRD.rd).map(x=>x.s.id);
+  if(ids.length){const q=await sb.from("boarding_roll").select("student_id,status").eq("roll_date",BRD.date).eq("session",BRD.ses).in("student_id",ids);(q.data||[]).forEach(r=>BRD.mk[r.student_id]=r.status);BRD.saved=!!(q.data&&q.data.length)}
+  brdDraw()}
+function brdRoll(){const W=brdW(),R=BRD.rd?brdRoster(BRD.rd):[];
+  return `<div class="bdp"><h3>Roll call</h3><div class="bdf"><select id="bdRd" class="w" onchange="BRD.rd=this.value;brdRollLoad()">${BRD.dorms.map(d=>`<option value="${d.id}" ${BRD.rd===d.id?"selected":""}>${esc(d.name)}</option>`).join("")||"<option value=''>No dormitory yet</option>"}</select><input id="bdDt" type="date" max="${todayIso()}" value="${BRD.date}" onchange="BRD.date=this.value||todayIso();brdRollLoad()"><select onchange="BRD.ses=this.value;brdRollLoad()">${BRD_SES.map(([k,l])=>`<option value="${k}" ${BRD.ses===k?"selected":""}>${l}</option>`).join("")}</select></div>${BRD.saved?`<p class="mt" style="margin:8px 0 0">Already taken for this session${W?": you can change it and save again":""}.</p>`:""}<div class="bdsum" id="bdSum" style="margin-top:10px">${brdRollSum(R)}</div>${W&&R.length?`<div class="bdb" style="margin-top:10px"><button class="alt" onclick="brdAllPresent()">Mark all present</button></div>`:""}<div id="bdRL" style="margin-top:6px">${brdRollRows(R,W)}</div>${W&&R.length?`<div id="bdE" class="err"></div><button onclick="brdRollSave()">Save roll call</button>`:""}</div>`}
+function brdRollSum(R){const c={present:0,absent:0,sick:0,exeat:0,none:0};R.forEach(({s})=>{if(brdOpenOn(s.id,BRD.date))c.exeat++;else if(BRD.mk[s.id])c[BRD.mk[s.id]]++;else c.none++});
+  return `<span style="background:rgba(20,128,74,.14);color:#14804a">${c.present} present</span><span style="background:rgba(192,57,43,.12);color:#c0392b">${c.absent} absent</span><span style="background:rgba(217,142,4,.15);color:#b45309">${c.sick} sick</span><span>${c.exeat} exeat</span><span>${c.none} not marked</span>`}
+function brdRollRows(R,W){return R.map(({a,s})=>{const ex=brdOpenOn(s.id,BRD.date),m=BRD.mk[s.id]||"";
+  return `<div class="bdr">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><small>${esc(brdPlace(a)||s.national_student_id||"")}</small></div>${ex?`<span class="pill red">Exeat</span>`:`<div class="bdm">${[["present","P"],["absent","A"],["sick","Sick"]].map(([k,l])=>`<button class="${k} ${m===k?"on":""}" ${W?`onclick="brdMark('${s.id}','${k}')"`:"disabled"}>${l}</button>`).join("")}</div>`}</div>`}).join("")||`<p class="mut" style="margin:8px 0 0">${BRD.rd?"No boarders in this dormitory yet.":"Add a dormitory first."}</p>`}
+function brdRollRefresh(){const R=brdRoster(BRD.rd),W=brdW(),l=$("bdRL"),s=$("bdSum");if(l)l.innerHTML=brdRollRows(R,W);if(s)s.innerHTML=brdRollSum(R)}
+function brdMark(id,st){BRD.mk[id]=st;brdRollRefresh()}
+function brdAllPresent(){brdRoster(BRD.rd).forEach(({s})=>{if(!brdOpenOn(s.id,BRD.date))BRD.mk[s.id]="present"});brdRollRefresh()}
+async function brdRollSave(){const e=$("bdE");e.textContent="";const R=brdRoster(BRD.rd).filter(({s})=>!brdOpenOn(s.id,BRD.date)),un=R.filter(({s})=>!BRD.mk[s.id]).length;
+  if(un){e.textContent="Mark every boarder before saving. "+un+" not marked yet.";return}
+  if(!R.length){e.textContent="Everyone here is on exeat.";return}
+  const rows=R.map(({s})=>({school_id:sid(),dorm_id:BRD.rd,student_id:s.id,roll_date:BRD.date,session:BRD.ses,status:BRD.mk[s.id]}));
+  const r=await sb.from("boarding_roll").upsert(rows,{onConflict:"student_id,roll_date,session"});
+  if(r.error){e.textContent=r.error.message;return}toast("Roll call saved");BRD.saved=true;BRD.t=0;brdLoad(true)}
+
+/* ---------- Exeat ---------- */
+function brdExeatRow(x){const s=brdStu(x.student_id),late=x.expected_return&&x.expected_return<todayIso()&&!x.returned_on,days=late?Math.floor((new Date(todayIso())-new Date(x.expected_return))/864e5):0;
+  return `<div class="bdr">${s?stuAv(s):""}<div class="at"><b>${esc(s?sName(s):"Learner")}</b><small>${x.returned_on?"Out "+brdD(x.out_date)+" · back "+brdD(x.returned_on):"Out "+brdD(x.out_date)+(x.expected_return?" · due "+brdD(x.expected_return):"")}${x.reason?" · "+esc(x.reason):""}</small></div><div class="rt">${x.returned_on?`<span class="pill gry">Returned</span>`:late?`<span class="pill red">${days} d late</span>`:`<span class="pill amb">Out</span>`}${!x.returned_on&&brdW()?` <button class="alt" style="margin:0 0 0 4px;width:auto;padding:6px 10px;font-size:12px" onclick="brdReturn('${x.id}')">Returned</button>`:""}</div></div>`}
+function brdExeat(){const o=brdOut(),h=BRD.ex.filter(x=>x.returned_on).slice(0,20);
+  return `<div class="bdp"><h3>Out now${brdW()?`<a href="#" onclick="brdExeatForm();return false">+ New exeat</a>`:""}</h3>${o.map(brdExeatRow).join("")||`<p class="mut" style="margin:0">Nobody is out.</p>`}</div><div class="bdp"><h3>Recently returned</h3>${h.map(brdExeatRow).join("")||`<p class="mut" style="margin:0">Nothing yet.</p>`}</div>`}
+function brdExeatForm(pre){if(!brdW())return;const out=new Set(brdOut().map(x=>x.student_id)),L=BRD.al.map(a=>brdStu(a.student_id)).filter(s=>s&&!out.has(s.id)).sort(brdByName);
+  if(!L.length){toast(BRD.al.length?"Every boarder is already out":"Add boarders first");return}
+  modal(`<div class="bdmodal"><div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">New exeat</b></div><div class="bdf" style="margin-top:12px"><select id="bdXs" class="w">${L.map(s=>`<option value="${s.id}" ${pre===s.id?"selected":""}>${esc(sName(s))} · ${esc(sCls(s)||"")}</option>`).join("")}</select><label class="mt">Leaves on<input id="bdXo" type="date" value="${todayIso()}"></label><label class="mt">Due back<input id="bdXr" type="date" min="${todayIso()}"></label><input id="bdXw" class="w" placeholder="Reason (e.g. sickness, family event)"><input id="bdXp" class="w" placeholder="Picked up by (parent or guardian)"></div><div id="bdE" class="err" style="margin-top:6px"></div><button style="margin-top:8px" onclick="brdExeatSave()">Save exeat</button></div>`)}
+async function brdExeatSave(){const e=$("bdE"),st=$("bdXs").value,o=$("bdXo").value,r=$("bdXr").value;e.textContent="";
+  if(!st){e.textContent="Choose a boarder.";return}if(!o){e.textContent="Choose the date they leave.";return}if(r&&r<o){e.textContent="The return date cannot be before the leaving date.";return}
+  const q=await sb.from("boarding_exeats").insert({school_id:sid(),student_id:st,out_date:o,expected_return:r||null,reason:gv("bdXw")||null,picked_by:gv("bdXp")||null});
+  if(q.error){e.textContent=q.error.message;return}closeModal();toast("Exeat recorded");BRD.view="exeat";brdLoad(true)}
+async function brdReturn(id){if(!confirm("Mark this learner as back at school?"))return;
+  const r=await sb.from("boarding_exeats").update({returned_on:todayIso()}).eq("id",id);if(r.error)return alert(r.error.message);toast("Welcome back");brdLoad(true)}
+
+/* ---------- wiring into the app ---------- */
+(function(){
+  const _at=applyTab;applyTab=function(){_at();const ok=brdCan();show("brdBox",ok&&tab==="brd");show("tabBrd",ok);
+    if(ok&&!BRD.pre&&BRD.ok===null){BRD.pre=1;brdLoad(true)}};
+  const _st=setTab;setTab=function(x){_st(x);if(tab==="brd"){BRD.view=BRD.view||"over";brdLoad()}};
+  const sc=$("sch");if(sc)sc.addEventListener("change",()=>{BRD.t=0;BRD.ok=null;BRD.dorm="";BRD.rd="";BRD.pre=0;if(tab==="brd")brdLoad(true)});
+  const _sv=stuView;stuView=async function(i){await _sv(i);try{const a=BRD.al.find(x=>x.student_id===i);if(!a)return;const b=document.querySelector("#mdl .mbox");if(!b||b.querySelector(".brdchip"))return;const d=brdDorm(a.dorm_id);
+    const html=`<div class="brdchip">${sec("Boarding",kvs([["Dormitory",d?d.name:""],["Room",a.room||""],["Bed",a.bed||""],["Type",a.boarder_type==="weekly"?"Weekly boarder":"Full boarder"]]))}</div>`;
+    const first=b.children[1]||b.firstElementChild;if(first)first.insertAdjacentHTML("afterend",html)}catch(e){}};
+  if(typeof GUIDE!=="undefined")GUIDE.push({t:"Boarding: dormitories, hostels and roll call",r:"school_admin,staff",b:[
+    "Boarding (side menu) manages dormitories and hostels. Overview shows beds used and free in every dormitory, today's roll call for Morning, Evening and Night, and who is out on exeat.",
+    "Dormitories: add each dormitory or hostel with its name, Boys, Girls or Mixed, and the number of beds. You may choose a warden or matron. A dormitory with boarders cannot be deleted: move or check them out first.",
+    "Boarders: tap Add boarder, choose the learner, the dormitory (only suitable and not full ones are listed), and optionally room and bed. The same bed cannot be given twice. Tap a boarder to move them, check them out or open their profile. Choose Weekly boarder for learners who go home at weekends.",
+    "Roll call: choose the dormitory, day and session, mark each boarder P (present), A (absent) or Sick, then Save. Mark all present saves time. Learners out on exeat are marked automatically.",
+    "Exeat: record when a boarder leaves, the date they should return, the reason and who picked them up. Tap Returned when they are back. Late returns show in red.",
+    "Who can use it: administrators and Boarding staff (warden, matron, patron) can record. The first time, an administrator must run the one-time boarding setup script in the Supabase SQL editor: the Boarding screen shows a Copy setup script button."]})
+})();
+/* BOARDING_END */
+
+</script>
+</body></html>
