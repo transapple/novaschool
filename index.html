@@ -781,7 +781,7 @@ async function load(){
     me={id:null,full_name:"Layout preview",role:"super_admin",school_id:null};
     $("me").innerHTML="";
     show("pending",false);
-    perm={ad:true,st:true,view:true,fee:true,res:true};applyTab();
+    perm={ad:true,st:true,view:true,fee:true,res:true,acr:true,tt:true,fs:true};applyTab();
     show("portal",false);
     try{await loadSchools();await loadStudents();await loadOrg()}catch(e){}
     return;
@@ -790,9 +790,9 @@ async function load(){
   if(!data){me=null;$("me").innerHTML='<b>Account found, but no profile yet.</b><div class="mut">Sign out and sign in again, or give the school office your email.</div>';return}
   me=data;
   $("me").innerHTML=`${me.photo_url?`<img src="${esc(me.photo_url)}" alt="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;float:left;margin-right:12px">`:""}<b>${esc(me.full_name)}</b><div class="mut">Role: ${esc(me.role==="staff"&&me.department?me.department:me.role)}</div>`;
-  const sa=me.role==="super_admin", ad=sa||me.role==="school_admin";
+  const sa=me.role==="super_admin", ad=sa||(me.role==="school_admin"&&!/support staff/i.test(me.department||""));
   show("pending",me.role==="pending");if(me.role==="pending")loadStaffMatch();show("staffHome",me.role==="staff");if(me.role==="staff")drawStaffHome();
-  perm={ad,st:ad||me.role==="teacher",view:["super_admin","school_admin","teacher","bursar"].includes(me.role),fee:ad||me.role==="bursar",res:ad||me.role==="teacher"};applyTab();
+  perm=accPerm();applyTab();
   acc=null;if(!sa&&me.school_id){const{data:a}=await sb.rpc("my_access");acc=a||null}applyTab();
   show("portal",me.role==="student");if(me.role==="student")loadPortal();
   if(!sa&&me.school_id){const{data:sc}=await sb.from("schools").select("*").eq("id",me.school_id).maybeSingle();SCHI=sc||null}
@@ -1014,7 +1014,7 @@ async function addStudent(){
   $("serr").textContent=note;regBlob=null;$("sPh").innerHTML='<svg class="ic" style="width:44px;height:44px"><use href="#i-user"/></svg>';
   ["fn","gn","gp","dd","dm","dy","gRel","gRelO"].forEach(i=>$(i).value="");$("gRelO").style.display="none";loadStudents()
 }
-const SUBS={stu:[["list","Students"],["add","Register"],["link","Link accounts","ad"],["promo","Promotion","ad"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"],["staff","Staff","ad"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","ad"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
+const SUBS={stu:[["list","Students"],["add","Register"],["link","Link accounts","ad"],["promo","Promotion","ad"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"],["staff","Staff","ad"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
 let subs={};
 function subList(){return(SUBS[tab]||[]).filter(x=>!x[2]||(x[2]==="sa"?(!!me&&me.role==="super_admin"):x[2]==="st"?perm.st:perm.ad))}
 function curSub(){const l=subList();return l.length?(l.find(x=>x[0]===subs[tab])||l[0])[0]:null}
@@ -1083,10 +1083,10 @@ let sWarm=false,sFees=[],sAssess=[],sApps=[];
 async function searchWarm(){if(sWarm||!me)return;sWarm=true;try{const q=[sb.from("fee_structures").select("id,name,amount,school_id"),sb.from("assessments").select("id,name,school_id")];if(perm.ad)q.push(sb.from("admission_applications").select("id,application_no,first_name,last_name,status,school_id"));const r=await Promise.all(q);sFees=r[0].data||[];sAssess=r[1].data||[];sApps=(r[2]&&r[2].data)||[]}catch(e){}}
 function gsearch(){searchWarm();const v=$("gs").value.trim().toLowerCase(),r=$("gres");closePops("gres");if(!v){r.classList.add("hide");return}
   const has=(...a)=>a.join(" ").toLowerCase().includes(v),S=sid(),mine=x=>!x.school_id||x.school_id===S,
-  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","link","Link accounts"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
+  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","link","Link accounts"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>!canTab(x[0])?false:(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
   St=students.filter(x=>has(x.first_name,x.last_name,x.national_student_id,x.guardian_name,x.guardian_phone,sCls(x))).slice(0,6),
   Tr=perm.ad?trashed.filter(x=>has(x.first_name,x.last_name,x.national_student_id)).slice(0,3):[],
-  Cl=classes.filter(c=>mine(c)&&has(cname(c),c.academic_year)).slice(0,4),
+  Cl=clUniq(classes.filter(c=>mine(c)&&has(c.name,c.academic_year))).map(g=>g.rows[0]).slice(0,4),
   Su=subjects.filter(c=>mine(c)&&has(c.name,c.code)).slice(0,4),
   Sf=staff.filter(x=>mine(x)&&has(x.full_name,x.staff_id,x.role,x.department)).slice(0,5),
   Te=terms.filter(t=>mine(t)&&has(t.name,t.academic_year)).slice(0,3),
@@ -1098,7 +1098,7 @@ function gsearch(){searchWarm();const v=$("gs").value.trim().toLowerCase(),r=$("
   r.innerHTML=grp("Go to",M,x=>`<button onclick="gGo('${x[0]}','${x[1]}')">${x[2]}</button>`)
    +grp("Students",St,x=>`<button onclick="gStu('${x.id}')">${esc(x.first_name)} ${esc(x.last_name)} <span class="id">${esc(x.national_student_id)}</span> <span class="mut">${esc(sCls(x))}</span></button>`)
    +grp("Trash",Tr,x=>go("stu","trash",esc(x.first_name+" "+x.last_name),esc(x.national_student_id)))
-   +grp("Classes",Cl,c=>go("cls","",esc(cname(c)),c.academic_year))
+   +grp("Classes",Cl,c=>go("cls","",esc(c.name),c.academic_year))
    +grp("Subjects",Su,c=>go("ss","subjects",esc(c.name),esc(c.code||"")))
    +grp("Staff",Sf,x=>go("tea","",esc(x.full_name),esc(x.role)))
    +grp("Terms",Te,t=>go("ss","terms",esc(t.name+" "+t.academic_year)))
@@ -1176,20 +1176,72 @@ document.addEventListener("click",e=>{if(Date.now()<lpRowSw&&e.target.closest&&e
 function renderHome(){drawLogo();const h=$("hero");if(h){const hr=new Date().getHours(),g=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening",o=$("sch"),sn=o&&o.selectedOptions&&o.selectedOptions[0]?o.selectedOptions[0].text:"";
   h.innerHTML=`<small id="greet">${g}</small><h2>${schoolLogo()?`<img src="${esc(schoolLogo())}" alt="" style="width:20px;height:20px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px">`:""}${esc(sn||(SCHI&&SCHI.name)||"Welcome")}</h2><div id="hterm" class="hterm"></div><div class="hrow"><p>${new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p><div id="clock" class="clock"></div></div>`;tick();fitHero();drawHeroTerm()}
   const k=(n,l,i,c)=>`<div class="kpi"><span class="chip ${c}"><svg class="ic"><use href="#i-${i}"/></svg></span><div><b>${n}</b><span class="l">${l}</span></div></div>`;
-  const e=$("stats");if(e){const A=homeAtt||{};e.innerHTML=`<div><b>${students.length}</b><span>Students</span></div><div><b>${classes.length}</b><span>Classes</span></div><div><b>${staff.length}</b><span>Staff</span></div><div class="clk" onclick="homeAttList('present')"><b>${A.p==null?"–":A.p}</b><span>Learners present</span></div><div class="clk" onclick="homeAttList('absent')"><b>${A.a==null?"–":A.a}</b><span>Learners absent</span></div><div><b>${A.sp==null?"–":A.sp}</b><span>Staff present</span></div>`}
+  const e=$("stats");if(e){const A=homeAtt||{};e.innerHTML=`<div><b>${students.length}</b><span>Students</span></div><div><b>${clUniq(classes).length}</b><span>Classes</span></div><div><b>${staff.length}</b><span>Staff</span></div><div class="clk" onclick="homeAttList('present')"><b>${A.p==null?"–":A.p}</b><span>Learners present</span></div><div class="clk" onclick="homeAttList('absent')"><b>${A.a==null?"–":A.a}</b><span>Learners absent</span></div><div><b>${A.sp==null?"–":A.sp}</b><span>Staff present</span></div>`}
   loadHomeAtt();
   const r=$("recent");if(r)r.innerHTML=students.length?`<div class="tw"><table class="dt"><tbody>${students.slice(0,5).map(x=>`<tr><td class="id">${esc(x.national_student_id)}</td><td><b>${esc(x.first_name)} ${esc(x.last_name)}</b></td><td>${esc(classes.find(c=>c.id===x.class_id)?.name||x.class_level||"")}</td></tr>`).join("")}</tbody></table></div>`:'<p class="mut">No registrations yet.</p>'}
 function closeSide(){$("side").classList.remove("open");$("ov").classList.remove("on")}
 function openSide(){$("side").classList.add("open");$("ov").classList.add("on")}
-function setTab(t){tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="adm")loadAdm();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadPromo();loadTr()}if(t==="ann")loadAnn();if(t==="lrn")loadLrn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
+function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="adm")loadAdm();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadPromo();loadTr()}if(t==="ann")loadAnn();if(t==="lrn")loadLrn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
+/* ACCESS MATRIX: every department and every "I am". One place decides what each person sees and may change.
+   tabs = what they can open (null = everything). Flags: res = write Results and Report cards, tt = write Timetable, fee = open Fees,
+   fs = change fee structure, st = Attendance and Digital learning, acr = see Academic settings, acadW = Academic settings pages they may CHANGE.
+   Anything not granted is read only or hidden. School settings, Admissions, Analytics and Teachers and staff admin are for Administrators only.
+   ADMINISTRATORS  Head teacher, Deputy head teacher, Assistant head teacher, Other : everything.
+                   Support staff : Home and Settings only.
+   ACADEMICS       Teacher, Other : Students, Attendance, Announcements, Classes, Digital learning, Settings; WRITE Results and Report cards;
+                   Timetable and Academic settings read only.
+                   Director of Studies : as Teacher, and also WRITE Timetable, Subjects, Exam types, Grades (not Terms or Classes).
+   FINANCE         Bursar, Accountant : Students (view), Fees, change fee structure.
+                   Cashier, Other : Students (view), Fees; fee structure read only.
+   STAFF ACCOUNT  (read only, never write)
+                   Teacher, Academic : Students, Announcements, Classes, Timetable, Academic settings.
+                   Administrator : the same plus Teachers and staff.
+                   Finance : Students, Fees (no fee structure).
+                   HR : Teachers and staff, Announcements.
+                   Boarding, Reception, Librarian : Students, Announcements.
+                   ICT, Support staff, Other : Home and Settings only.
+   Everyone also has Settings: Preferences, Menu style and their own Account. */
+const T_ACAD=["home","stu","att","ann","cls","tt","lrn","res","rc","set"],T_FIN=["home","stu","fee","set"];
+const ACC={
+  admin:{tabs:null},
+  support:{tabs:["home","set"]},
+  teacher:{tabs:T_ACAD,st:1,res:1,acr:1,acadW:[]},
+  dos:{tabs:T_ACAD,st:1,res:1,acr:1,tt:1,acadW:["subjects","exam","grades"]},
+  bursar:{tabs:T_FIN,fee:1,fs:1},
+  cashier:{tabs:T_FIN,fee:1},
+  s_acad:{tabs:["home","stu","ann","cls","tt","set"],acr:1},
+  s_admin:{tabs:["home","stu","ann","cls","tt","tea","set"],acr:1},
+  s_fin:{tabs:T_FIN,fee:1},
+  s_hr:{tabs:["home","tea","ann","set"]},
+  s_desk:{tabs:["home","stu","ann","set"]},
+  s_min:{tabs:["home","set"]}
+};
+function accKind(){if(!me)return null;const r=me.role,d=(me.department||"").toLowerCase();
+  if(r==="super_admin")return"admin";
+  if(r==="school_admin")return/support staff/.test(d)?"support":"admin";
+  if(r==="teacher")return/director of studies|\bdos\b/.test(d)?"dos":"teacher";
+  if(r==="bursar")return/bursar|accountant/.test(d)?"bursar":"cashier";
+  if(r==="staff"){if(/teacher|academic/.test(d))return"s_acad";if(/administrator/.test(d))return"s_admin";if(/finance/.test(d))return"s_fin";if(/^hr\b|human/.test(d))return"s_hr";if(/boarding|reception|librarian/.test(d))return"s_desk";return"s_min"}
+  return null}
+const accP=()=>ACC[accKind()]||{};
+function accPerm(){const A=accP(),r=me&&me.role,ad=r==="super_admin"||accKind()==="admin";
+  const view=["super_admin","school_admin","teacher","bursar"].includes(r)||(r==="staff"&&!!A.tabs&&A.tabs.some(t=>t!=="home"&&t!=="set"));
+  return{ad,st:ad||!!A.st,view,fee:ad||!!A.fee,res:ad||!!A.res,acr:ad||!!A.acr,tt:ad||!!A.tt,fs:ad||!!A.fs}}
+const ALLTABS=["home","an","stu","adm","att","ann","pc","cls","tt","lrn","tea","res","rc","fee","ss","set","sch"];
+const isDOS=()=>!!me&&me.role==="teacher"&&/director of studies|\bdos\b/i.test(me.department||"");
+const isSupAdmin=()=>!!me&&me.role==="school_admin"&&/support staff/i.test(me.department||"");
+/* who may change each Academic settings page: administrators everything; the Director of Studies subjects, exam types and grades; other teachers read only */
+const AW=a=>!!me&&(!!perm.ad||(accP().acadW||[]).includes(a));
+const canTab=t=>{if(!me)return true;const a=accP().tabs;return !a||a.includes(t)};
 function applyTab(){
+  if(me&&!canTab(tab))tab="home";
   show("homeBox",perm.view&&tab==="home");show("side",perm.view);document.body.classList.toggle("withside",!!perm.view);show("sbox",!!perm.view);show("bell",!!perm.view);drawAvatar();show("hFee",perm.fee);show("hRes",perm.res);show("hRC",perm.res);show("hAdm",perm.ad);
   const sa=!!me&&me.role==="super_admin";show("schoolBox",sa&&tab==="sch");show("tabSch",sa);show("hSch",sa);
   
   document.querySelectorAll("#side button[data-t],#bnav button[data-t]").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));applySub();renderHome();drawActivity();show("actBox",!!perm.ad&&cfg.feed);show("setBox",tab==="set");show("ssBox",false);show("tabSS",false);show("bFee",perm.fee);
   show("stuBox",perm.ad&&tab==="stu");show("listBox",perm.view&&tab==="stu");show("trashBox",perm.ad&&tab==="stu");
-  show("classBox",perm.view&&tab==="cls");show("attBox",perm.view&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("promoBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("staffAtt",perm.ad);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
-  show("adminCls",perm.ad);show("adminTea",perm.st);staffRoleOpts();applyAccess();
+  show("classBox",perm.view&&tab==="cls");show("attBox",!!perm.st&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("promoBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("staffAtt",perm.ad);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
+  show("adminCls",perm.ad);show("adminTea",perm.st);ALLTABS.forEach(t=>{if(!canTab(t))document.querySelectorAll('[onclick*="setTab(\''+t+'\')"],[data-t="'+t+'"]:is(button,a)').forEach(e=>e.classList.add("hide"))});staffRoleOpts();applyAccess();
 }
 /* AUTH_START: sign in and create account with the school ID given by the platform admin. Layout untouched: this is a full-screen overlay only. */
 let authFails=0,authLock=0;let authMode="in",authBusy=false,authMsg="",authVals=(()=>{try{if(remOn()){const r=JSON.parse(localStorage.getItem("dsr_login")||"{}");return{s:r.s||"",e:r.e||""}}}catch(e){}return{s:"",e:""}})(),authOpt=null,authBlob=null,authPrev="",authF={kids:[{id:"",rel:"father"}],subj:[],cls:[]};
@@ -1500,7 +1552,7 @@ async function loadOrg(){
     sb.from("subjects").select("*").order("name"),
     sb.from("teaching_assignments").select("*"),
     sb.from("profiles").select("id,full_name,role,staff_id,school_id,photo_url,department").in("role",["teacher","bursar","school_admin","staff"]),sb.from("exam_types").select("*"),sb.from("grade_scales").select("*"),sb.from("staff_contacts").select("*").order("created_at",{ascending:false})]);
-  staffContacts=(sc&&sc.data)||[];exTypes=(xt&&xt.data)||[];gradeScale=(gs&&gs.data)||[];classes=c.data||[];subjects=s.data||[];assigns=a.data||[];staff=p.data||[];renderOrg();render();loadTerms();loadReqs();
+  staffContacts=(sc&&sc.data)||[];exTypes=(xt&&xt.data)||[];gradeScale=(gs&&gs.data)||[];classes=clSortAll(c.data||[]);subjects=s.data||[];assigns=a.data||[];staff=(p.data||[]).filter(x=>!isOwnerAcct(x));renderOrg();render();loadTerms();loadReqs();
 }
 /* JOIN_REQUESTS: the school super admin approves people who created an account with the school ID */
 async function loadReqs(){
@@ -1514,7 +1566,7 @@ async function loadReqs(){
     <div class="mut">Wants to join as ${esc(ro)}${x.department?" · "+esc(x.department):""}</div>
     ${(i.subjects||[]).length?`<div class="mut">Subjects: ${(i.subjects||[]).map(nmS).map(esc).join(", ")}</div><div class="mut">Classes: ${(i.classes||[]).map(nmC).map(esc).join(", ")}</div>`:""}
     ${(i.children||[]).length?`<div class="mut">Children: ${i.children.map(k=>esc(k.id)+" ("+esc(k.rel)+")").join(", ")}</div>`:""}
-    ${i.student_id?`<div class="mut">Student ID: ${esc(i.student_id)}</div>`:""}
+    ${i.student_id?`<div class="mut">Student ID: <span class="cp">${esc(i.student_id)}</span></div>`:""}
     <div style="margin-top:6px"><button class="pri" onclick="decideReq('${x.id}',1)">Approve</button> <button onclick="decideReq('${x.id}',0)">Reject</button></div></div></div>`}).join("")}
 async function decideReq(id,ok){
   if(!ok&&!confirm("Reject this request?"))return;
@@ -1523,7 +1575,18 @@ async function decideReq(id,ok){
   if(ok&&data&&data.warnings&&data.warnings.length)alert("Approved. Note: "+data.warnings.join("; "));
   loadOrg();loadReqs();loadReqData().then(()=>{loadAccts().then(setRender)})}
 const opt=(a,f)=>a.map(x=>`<option value="${x.id}">${esc(f(x))}</option>`).join("");
-const cname=c=>c.name+(c.stream?" "+c.stream:"");
+const clKey=n=>String(n||"").trim().replace(/\s+/g," ").toLowerCase();
+/* Newest class first: P.7, P.6 ... P.1 (then Baby/Middle/Top last). Unknown names go to the end. */
+const clOrd=c=>{const r=clRank(c);return r>=999?-1:r};
+const clCmp=(a,b)=>clOrd(b)-clOrd(a)||String(a.stream||"").localeCompare(String(b.stream||""),undefined,{numeric:true})||String(a.created_at||a.id).localeCompare(String(b.created_at||b.id));
+const clIds=id=>{const c=classes.find(k=>k.id===id);return c?classes.filter(k=>k.school_id===c.school_id&&clKey(k.name)===clKey(c.name)).map(k=>k.id):[id]};
+const clIn=(cid,x)=>!!cid&&(cid===x||clIds(cid).includes(x));
+const clOpts=cs=>clUniq(cs).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
+const clSortAll=l=>(l||[]).slice().sort(clCmp);
+/* one entry per class name: {name,ids,id(first),rows}, newest class first */
+function clUniq(list){const m=new Map();(list||[]).forEach(c=>{const k=clKey(c.name);if(!m.has(k))m.set(k,{name:String(c.name||"").trim(),ids:[],rows:[]});const g=m.get(k);g.ids.push(c.id);g.rows.push(c)});
+  return[...m.values()].map(g=>({...g,id:g.ids[0]})).sort((a,b)=>clCmp(a.rows[0],b.rows[0]))}
+const cname=c=>{let st=c.stream;if(!st){const g=classes.filter(x=>x.school_id===c.school_id&&clKey(x.name)===clKey(c.name));if(g.length>1){const l=clLabels(g.slice().sort(clCmp))[c.id];st=l&&l.l}}return c.name+(st?" "+st:"")};
 function renderOrg(){try{staffSubOpts()}catch(e){}setTimeout(()=>{if(tab==="set"&&SV&&SV.sec==="acad")setRender()},0);
   const S=sid(),cs=classes.filter(c=>c.school_id===S),ss=subjects.filter(x=>x.school_id===S),
     tt=staff.filter(x=>x.school_id===S),teachers=tt.filter(x=>x.role==="teacher"),
@@ -1567,7 +1630,8 @@ const seg=(opts,cur,fn,id)=>`<div class="seg">${opts.map(([v,l])=>`<button class
 function loadAtt(){
   const S=sid();let cs=classes.filter(c=>c.school_id===S);
   if(me.role==="teacher"){const mine=new Set(assigns.filter(a=>a.teacher_id===me.id).map(a=>a.class_id));cs=cs.filter(c=>c.class_teacher_id===me.id||mine.has(c.id))}
-  $("attcls").innerHTML=opt(cs,cname);
+  {let U=clUniq(cs);if(me.role==="teacher"){const ct=g=>g.rows.some(c=>c.class_teacher_id===me.id);U=U.filter(ct).concat(U.filter(g=>!ct(g)))}
+  $("attcls").innerHTML=U.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");if(U.length)$("attcls").value=U[0].id}
   attAuto=true;$("attdate").value=todayIso();attHead();
   renderAtt();renderStaffAtt();
 }
@@ -1578,7 +1642,7 @@ async function renderAtt(){
   attShowRes(false);
   const cid=$("attcls").value,d=$("attdate").value;amark={};
   if(!cid||!d){$("alist").innerHTML='<p class="mut">No class available.</p>';$("asum").textContent="";$("attView").classList.add("hide");return}
-  const list=students.filter(s=>s.class_id===cid&&s.status==="active");
+  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
   const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",list.map(s=>s.id));
   (data||[]).forEach(r=>amark[r.student_id]=r.status);drawAtt(list);$("attView").classList.toggle("hide",!(data&&data.length));
 }
@@ -1591,15 +1655,15 @@ function attSum(ids,mk){const n=ids.length,p=ids.filter(i=>mk[i]==="present"||mk
   return n?`<div class="top"><div class="pc">${pct}%<small>attended</small></div><div class="mut">${p+a} of ${n} marked</div></div><div class="bar"><i style="width:${w(p)}%;background:#1a9d5a"></i><i style="width:${w(a)}%;background:#c0392b"></i></div><div class="chips"><span class="g">✓ ${p} Present</span><span class="r">✕ ${a} Absent</span><span>${u} Not marked</span></div>`:""}
 function attRows(list,mk,fn,idf,nameOf,subOf,avOf){return list.map(x=>{const m=mk[x.id]==="late"?"present":mk[x.id]||"";return `<div class="arow ${m}">${avOf(x)}<div class="an"><b>${esc(nameOf(x))}</b><span class="id">${esc(subOf(x)||"")}</span></div><div class="atog"><button class="a${m==="absent"?" on":""}" aria-label="Absent" onclick="${fn}('${x.id}','absent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button><button class="p${m==="present"?" on":""}" aria-label="Present" onclick="${fn}('${x.id}','present')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2L18.5 7.5"/></svg></button></div></div>`}).join("")}
 function drawAtt(list){attHead();
-  list=list||students.filter(s=>s.class_id===$("attcls").value&&s.status==="active");
+  list=list||students.filter(s=>clIn($("attcls").value,s.class_id)&&s.status==="active");
   $("alist").innerHTML=attRows(list,amark,"setA","id",x=>x.first_name+" "+x.last_name,x=>x.national_student_id,x=>stuAv(x))||'<p class="mut">No students in this class.</p>';
   const ids=list.map(x=>x.id);$("asum").innerHTML=attSum(ids,amark);$("asum").style.display=ids.length?"":"none";
   const m=ids.filter(i=>amark[i]).length;$("aprog").textContent=ids.length?m+" of "+ids.length+" marked":""}
 function setA(id,v){amark[id]=v;drawAtt()}
-function allPresent(){students.filter(s=>s.class_id===$("attcls").value&&s.status==="active").forEach(s=>amark[s.id]=amark[s.id]||"present");drawAtt()}
+function allPresent(){students.filter(s=>clIn($("attcls").value,s.class_id)&&s.status==="active").forEach(s=>amark[s.id]=amark[s.id]||"present");drawAtt()}
 async function saveAtt(){
   const cid=$("attcls").value,d=$("attdate").value;
-  const rows=students.filter(s=>s.class_id===cid&&amark[s.id]).map(s=>({student_id:s.id,class_id:cid,attendance_date:d,status:amark[s.id]}));
+  const rows=students.filter(s=>clIn(cid,s.class_id)&&amark[s.id]).map(s=>({student_id:s.id,class_id:s.class_id,attendance_date:d,status:amark[s.id]}));
   if(!rows.length){$("aerr2").textContent="Mark at least one student.";return}
   const{error}=await sb.from("attendance").upsert(rows,{onConflict:"student_id,attendance_date"});
   $("aerr2").style.color=error?"":"var(--pri)";$("aerr2").textContent=error?error.message:"";if(!error){toast("Attendance saved successfully");refreshHomeAtt();attOpenRes(true)}
@@ -1609,7 +1673,7 @@ let attSort="present",attMk={},attJustSaved=false;
 function attShowRes(on){const a=$("attMark"),b=$("attRes");if(on)$("attView").classList.add("hide");if(a)a.classList.toggle("hide",!!on);if(b)b.classList.toggle("hide",!on)}
 async function attOpenRes(saved){
   const cid=$("attcls").value,d=$("attdate").value;if(!cid||!d)return;
-  const list=students.filter(s=>s.class_id===cid&&s.status==="active");
+  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
   attMk={};
   if(list.length){const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",list.map(s=>s.id));(data||[]).forEach(r=>attMk[r.student_id]=r.status)}
   attJustSaved=saved===true;attShowRes(true);drawAttRes();window.scrollTo(0,0);
@@ -1617,7 +1681,7 @@ async function attOpenRes(saved){
 function attSetSort(v){attSort=v;attJustSaved=false;drawAttRes()}
 function drawAttRes(){
   const cid=$("attcls").value,c=classes.find(x=>x.id===cid);
-  const list=students.filter(s=>s.class_id===cid&&s.status==="active");
+  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
   const st=s=>{const m=attMk[s.id];return m==="late"?"present":m||""};
   const nm=s=>(s.first_name||"")+" "+(s.last_name||"");
   const order=attSort==="present"?["present","absent",""]:["absent","present",""];
@@ -1625,7 +1689,7 @@ function drawAttRes(){
   const groups=order.map(m=>{const arr=list.filter(s=>st(s)===m).sort((a,b)=>nm(a).localeCompare(nm(b)));
     return arr.length?`<div class="agp"><div class="agh ${m}"><i></i>${lab[m]}<em>${arr.length}</em></div>${arr.map(s=>`<div class="ar2">${stuAv(s)}<div class="an"><b>${esc(nm(s))}</b><span class="id">${esc(s.national_student_id||"")}</span></div><span class="abadge ${m}">${lab[m]}</span></div>`).join("")}</div>`:""}).join("");
   $("attRes").innerHTML=(attJustSaved?'<div class="aok"><i>✓</i>Attendance saved successfully</div>':"")
-   +`<div class="atb"><div><b>Saved attendance</b><small>${esc(c?cname(c):"Class")} · ${list.length} learner${list.length===1?"":"s"}</small></div><button type="button" onclick="renderAtt()">Edit attendance</button></div>`
+   +`<div class="atb"><div><b>Saved attendance</b><small>${esc(c?c.name:"Class")} · ${list.length} learner${list.length===1?"":"s"}</small></div><button type="button" onclick="renderAtt()">Edit attendance</button></div>`
    +`<div class="asum">${attSum(list.map(x=>x.id),attMk)}</div>`
    +`<div class="asort"><button class="${attSort==="present"?"on":""}" onclick="attSetSort('present')">Present first</button><button class="${attSort==="absent"?"on":""}" onclick="attSetSort('absent')">Absent first</button></div>`
    +(groups||'<p class="mut">No students in this class.</p>');
@@ -1640,7 +1704,7 @@ async function homeAttList(kind){
   const hit=x=>{const m=mk[x.id];return isP?(m==="present"||m==="late"):m==="absent"};
   const sel=list.filter(hit),by={};
   sel.forEach(x=>{(by[x.class_id||""]=by[x.class_id||""]||[]).push(x)});
-  const cl=Object.keys(by).sort((a,b)=>{const ca=classes.find(c=>c.id===a),cb=classes.find(c=>c.id===b);return(ca?cname(ca):"zzz").localeCompare(cb?cname(cb):"zzz")});
+  const cl=Object.keys(by).sort((a,b)=>{const ca=classes.find(c=>c.id===a),cb=classes.find(c=>c.id===b);return ca&&cb?clCmp(ca,cb):ca?-1:cb?1:0});
   const dt=new Date(d+"T00:00:00").toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const body=cl.length?cl.map(id=>{const c=classes.find(x=>x.id===id),arr=by[id].sort((a,b)=>((a.first_name||"")+(a.last_name||"")).localeCompare((b.first_name||"")+(b.last_name||"")));
     return `<div class="hc">${esc(c?cname(c):"No class")}<span>${arr.length}</span></div>`+arr.map(x=>`<div class="hstu">${stuAv(x)}<div class="an"><b>${esc((x.first_name||"")+" "+(x.last_name||""))}</b><span class="id">${esc(x.national_student_id||"")}</span></div><span class="abadge ${isP?"present":"absent"}">${isP?"Present":"Absent"}</span></div>`).join("")}).join(""):`<p class="mut">No learners ${isP?"present":"absent"} today yet.</p>`;
@@ -1746,9 +1810,9 @@ async function loadFin(){
 }
 function renderFin(){
   const S=sid(),cs=classes.filter(c=>c.school_id===S),ss=students.filter(s=>s.school_id===S&&s.status==="active");
-  $("fcls").innerHTML='<option value="">All classes</option>'+opt(cs,cname);
+  $("fcls").innerHTML='<option value="">All classes</option>'+clUniq(cs).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
   $("pstu").innerHTML=opt(ss,s=>`${s.first_name} ${s.last_name} (${s.national_student_id})`);
-  $("flist").innerHTML=fees.map(f=>`<div class="st">${esc(f.name)} · <b>${money(f.amount)}</b> <span class="mut">${esc(cs.find(c=>c.id===f.class_id)?.name||"All classes")}</span></div>`).join("")||'<p class="mut">No fee items yet.</p>';
+  $("flist").innerHTML=fees.map(f=>`<div class="st">${esc(f.name)} · <b>${money(f.amount)}</b> <span class="mut">${esc((cs.find(c=>c.id===f.class_id)||{}).name||"All classes")}</span></div>`).join("")||'<p class="mut">No fee items yet.</p>';
   drawBal();
 }
 function drawBal(){
@@ -1776,7 +1840,7 @@ async function addPay(){
 let FX={fees:[],pays:[],inv:[],term:"",sort:"new",cls:"",flt:"all",hterm:""},fxN=0;
 const fxD=r=>r.created_at||r.paid_at||r.payment_date||r.paid_on||"",fxDate=v=>v?new Date(v).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}):"",
   fxTerms=()=>terms.filter(t=>t.school_id===sid()),fxT=id=>{const t=terms.find(x=>x.id===id);return t?t.name:""},fxName=x=>(x.first_name||"")+" "+(x.last_name||""),
-  fxStu=()=>students.filter(x=>x.school_id===sid()&&x.status==="active"),fxCls=()=>classes.filter(c=>c.school_id===sid()).sort((a,b)=>cname(a).localeCompare(cname(b))),
+  fxStu=()=>students.filter(x=>x.school_id===sid()&&x.status==="active"),fxCls=()=>clUniq(classes.filter(c=>c.school_id===sid())),fxIds=id=>{const c=classes.find(k=>k.id===id);return c?clUniq(classes.filter(k=>k.school_id===c.school_id&&clKey(k.name)===clKey(c.name)))[0].ids:[id]},fxItems=ids=>{const m=new Map();FX.fees.filter(f=>ids.includes(f.class_id)).forEach(f=>{const k=f.term_id+"|"+clKey(f.name)+"|"+Number(f.amount);if(!m.has(k))m.set(k,{...f,_ids:[]});m.get(k)._ids.push(f.id)});return[...m.values()]},
   fxCn=id=>{const c=classes.find(k=>k.id===id);return c?String(c.name||"").trim().toLowerCase():""},
   fxAs=(x,t)=>{const mine=fxCn(x.class_id),st=FX.fees.filter(f=>(!t||f.term_id===t)&&(!f.class_id||f.class_id===x.class_id||(mine&&fxCn(f.class_id)===mine))).reduce((a,f)=>a+Number(f.amount),0),
     inv=(FX.inv||[]).filter(b=>b.student_id===x.id&&(!t||b.term_id===t)).reduce((a,b)=>a+Number(b.billed||0),0);return Math.max(st,inv)},
@@ -1788,37 +1852,39 @@ async function loadFeeX(){const S=sid();if(!S||typeof sb==="undefined")return;
 function drawFeeX(){const e=$("feeX");if(!e)return;const c=curSub();e.innerHTML=c==="struct"?fxStruct():c==="health"?fxHealth():c==="status"?fxStatus():c==="remind"?fxRemind():fxHist()}
 function fxHist(){const ts=fxTerms(),so=FX.sort;let r=FX.pays.filter(p=>!FX.term||p.term_id===FX.term).sort((a,b)=>so==="amt"?b.amount-a.amount:so==="old"?String(fxD(a)).localeCompare(String(fxD(b))):String(fxD(b)).localeCompare(String(fxD(a))));
   return `<div class="fxbox"><div class="row"><div><label class="fxl">Filter by term</label><select onchange="FX.term=this.value;drawFeeX()"><option value="">All terms</option>${fxTO(ts,FX.term)}</select></div><div><label class="fxl">Sort by</label><select onchange="FX.sort=this.value;drawFeeX()"><option value="new" ${so==="new"?"selected":""}>Newest</option><option value="old" ${so==="old"?"selected":""}>Oldest</option><option value="amt" ${so==="amt"?"selected":""}>Highest amount</option></select></div></div></div>`+
-  (r.length?`<div class="fxbox" style="padding:8px;overflow-x:auto"><table class="fxt"><thead><tr><th>DATE</th><th>STUDENT</th><th>TERM</th><th>AMOUNT</th><th>METHOD</th></tr></thead><tbody>${r.map(p=>{const x=students.find(y=>y.id===p.student_id);return `<tr><td>${esc(fxDate(fxD(p)))}</td><td>${x?esc(fxName(x))+`<small>${esc(x.national_student_id||"")}</small>`:""}</td><td>${esc(fxT(p.term_id))}</td><td>${money(p.amount)}</td><td>${esc(fxMeth[p.method]||p.method||"")}</td></tr>`}).join("")}</tbody></table></div>`:'<p class="mut">No payments yet. Tap + to record one.</p>')}
+  (r.length?`<div class="fxbox" style="padding:8px;overflow-x:auto"><table class="fxt"><thead><tr><th>DATE</th><th>STUDENT</th><th>TERM</th><th>AMOUNT</th><th>METHOD</th></tr></thead><tbody>${r.map(p=>{const x=students.find(y=>y.id===p.student_id);return `<tr><td>${esc(fxDate(fxD(p)))}</td><td>${x?esc(fxName(x))+`<small class="cp">${esc(x.national_student_id||"")}</small>`:""}</td><td>${esc(fxT(p.term_id))}</td><td>${money(p.amount)}</td><td>${esc(fxMeth[p.method]||p.method||"")}</td></tr>`}).join("")}</tbody></table></div>`:'<p class="mut">No payments yet. Tap + to record one.</p>')}
 function fxStruct(){
-  if(FX.cls){const c=classes.find(x=>x.id===FX.cls),it=FX.fees.filter(f=>f.class_id===FX.cls);
-    return `<div class="fxbk" onclick="FX.cls='';drawFeeX()">‹ Fee structure</div><h2 class="fxh">${esc(c?cname(c):"")} — Fee Items</h2>`+(it.length?it.map(f=>`<div class="fxcard" style="cursor:default"><div class="fxm"><b>${esc(f.name)}</b><small>${esc(fxT(f.term_id))} · ${money(f.amount)}</small></div><button class="fxx" aria-label="Delete item" onclick="fxDrop('${f.id}')">✕</button></div>`).join(""):'<p class="mut">No fee items yet. Tap + to add.</p>')}
-  return `<h2 class="fxh">Fee Structure</h2><p class="mut" style="margin:0 0 12px">Select a class to view or set up its fee items.</p>`+(fxCls().map(c=>{const it=FX.fees.filter(f=>f.class_id===c.id),t=it.reduce((a,f)=>a+Number(f.amount),0);return `<div class="fxcard" onclick="FX.cls='${c.id}';drawFeeX()"><span class="fxic"><svg class="ic"><use href="#i-fee"/></svg></span><div class="fxm"><b>${esc(cname(c))}</b><small>${it.length} fee item${it.length===1?"":"s"}${it.length?" · "+money(t):""}</small></div><span>›</span></div>`}).join("")||'<p class="mut">Add classes first.</p>')}
-async function fxDrop(id){if(!confirm("Delete this fee item?"))return;const{error}=await sb.from("fee_structures").delete().eq("id",id);if(error)return alert(error.message);loadFeeX()}
+  if(FX.cls){const c=classes.find(x=>x.id===FX.cls),it=fxItems(fxIds(FX.cls));
+    return `<div class="fxbk" onclick="FX.cls='';drawFeeX()">‹ Fee structure</div><h2 class="fxh">${esc(c?c.name:"")} — Fee Items</h2>`+(it.length?it.map(f=>`<div class="fxcard" style="cursor:default"><div class="fxm"><b>${esc(f.name)}</b><small>${esc(fxT(f.term_id))} · ${money(f.amount)}</small></div><button class="fxx" aria-label="Delete item" onclick="fxDrop('${f._ids.join(",")}')">✕</button></div>`).join(""):'<p class="mut">No fee items yet. Tap + to add.</p>')}
+  return `<h2 class="fxh">Fee Structure</h2><p class="mut" style="margin:0 0 12px">Select a class to view or set up its fee items.</p>`+(fxCls().map(c=>{const it=fxItems(c.ids),t=it.reduce((a,f)=>a+Number(f.amount),0);return `<div class="fxcard" onclick="FX.cls='${c.id}';drawFeeX()"><span class="fxic"><svg class="ic"><use href="#i-fee"/></svg></span><div class="fxm"><b>${esc(c.name)}</b><small>${it.length} fee item${it.length===1?"":"s"}${it.length?" · "+money(t):""}</small></div><span>›</span></div>`}).join("")||'<p class="mut">Add classes first.</p>')}
+async function fxDrop(id){if(!confirm("Delete this fee item?"))return;const{error}=await sb.from("fee_structures").delete().in("id",String(id).split(","));if(error)return alert(error.message);loadFeeX()}
 function fxNew(){const ts=fxTerms(),cur=ts.length?curTermOf(ts):null;
-  modal(`<div class="fxmh"><h3>New fee items</h3><button type="button" aria-label="Close" onclick="closeModal()">×</button></div><label class="fxl">Class</label><select id="fxC">${opt(fxCls(),cname)}</select><label class="fxl">Term</label><select id="fxTm">${opt(ts,t=>t.name)}</select><div class="row" style="grid-template-columns:1.6fr 1fr 44px;margin-top:8px"><span class="fxl">Item name</span><span class="fxl">Amount</span><span></span></div><div id="fxRows"></div><button type="button" class="fxadd" onclick="fxRow()">+ Add another item</button><div class="fxtot"><b>Total</b><b id="fxSum">UGX 0</b></div><div class="brow"><button class="alt" onclick="closeModal()">Cancel</button><button onclick="fxSaveItems()">Add items</button></div><div id="fxE" class="err"></div>`);
+  modal(`<div class="fxmh"><h3>New fee items</h3><button type="button" aria-label="Close" onclick="closeModal()">×</button></div><label class="fxl">Class</label><select id="fxC">${opt(fxCls(),c=>c.name)}</select><label class="fxl">Term</label><select id="fxTm">${opt(ts,t=>t.name)}</select><div class="row" style="grid-template-columns:1.6fr 1fr 44px;margin-top:8px"><span class="fxl">Item name</span><span class="fxl">Amount</span><span></span></div><div id="fxRows"></div><button type="button" class="fxadd" onclick="fxRow()">+ Add another item</button><div class="fxtot"><b>Total</b><b id="fxSum">UGX 0</b></div><div class="brow"><button class="alt" onclick="closeModal()">Cancel</button><button onclick="fxSaveItems()">Add items</button></div><div id="fxE" class="err"></div>`);
   if(FX.cls)$("fxC").value=FX.cls;if(cur)$("fxTm").value=cur.id;fxRow()}
 function fxRow(){const d=document.createElement("div");d.className="fxrw";d.innerHTML='<input placeholder="e.g. Tuition"><input type="number" inputmode="numeric" placeholder="0" oninput="fxSum()"><button type="button" aria-label="Clear row" onclick="fxClr(this)">×</button>';$("fxRows").appendChild(d)}
 function fxClr(b){b.parentNode.parentNode.children.length>1?b.parentNode.parentNode.removeChild(b.parentNode):b.parentNode.querySelectorAll("input").forEach(i=>i.value="");fxSum()}
 function fxSum(){let t=0;document.querySelectorAll("#fxRows .fxrw input[type=number]").forEach(i=>t+=+i.value||0);$("fxSum").textContent=money(t)}
 async function fxSaveItems(){const r=[...document.querySelectorAll("#fxRows .fxrw")].map(x=>({name:x.children[0].value.trim(),amount:+x.children[1].value||0})).filter(x=>x.name&&x.amount>0);
   if(!r.length){$("fxE").textContent="Add at least one item with a name and an amount.";return}
-  const{error}=await sb.from("fee_structures").insert(r.map(x=>({school_id:sid(),term_id:$("fxTm").value,class_id:$("fxC").value||null,name:x.name,amount:x.amount})));
+  const ids=fxIds($("fxC").value),tm=$("fxTm").value,have=new Set(fxItems(ids).map(f=>f.term_id+"|"+clKey(f.name)+"|"+Number(f.amount))),nw=r.filter(x=>!have.has(tm+"|"+clKey(x.name)+"|"+x.amount));
+  if(!nw.length){$("fxE").textContent="Those fee items already exist for this class.";return}
+  const{error}=await sb.from("fee_structures").insert(nw.map(x=>({school_id:sid(),term_id:tm,class_id:$("fxC").value||null,name:x.name,amount:x.amount})));
   if(error){$("fxE").textContent=error.message;return}closeModal();toast("Fee items added");loadFeeX();loadFin()}
 function fxHealth(){const ts=fxTerms(),t=FX.hterm,st=fxStu();let B=0,P=0;
-  const per=fxCls().map(c=>{const ss=st.filter(x=>x.class_id===c.id),b=ss.reduce((a,x)=>a+fxAs(x,t),0),p=ss.reduce((a,x)=>a+fxPd(x,t),0);B+=b;P+=p;return{c,b,p,n:ss.length}}),pc=(p,b)=>b?(p>=b?100:Math.min(99,Math.floor(p/b*100))):0;
+  const per=fxCls().map(c=>{const ss=st.filter(x=>c.ids.includes(x.class_id)),b=ss.reduce((a,x)=>a+fxAs(x,t),0),p=ss.reduce((a,x)=>a+fxPd(x,t),0);B+=b;P+=p;return{c,b,p,n:ss.length}}),pc=(p,b)=>b?(p>=b?100:Math.min(99,Math.floor(p/b*100))):0;
   return `<h2 class="fxh">Fees Health</h2><div class="fxbox"><label class="fxl">Term</label><select onchange="FX.hterm=this.value;drawFeeX()"><option value="">All terms</option>${fxTO(ts,t)}</select><div class="fxs" style="margin-top:12px"><div><b>${money(B)}</b><span>Billed</span></div><div><b style="color:#14804a">${money(P)}</b><span>Collected</span></div><div><b style="color:#c0392b">${money(Math.max(0,B-P))}</b><span>Outstanding</span></div></div><b style="font-size:22px;color:var(--pri)">${pc(P,B)}%</b> <span class="mut">collected overall</span><div class="fxbar"><i style="width:${pc(P,B)}%"></i></div></div>`+
-  per.map(x=>`<div class="fxbox" style="padding:12px 14px"><div style="display:flex;justify-content:space-between"><b>${esc(cname(x.c))}</b><b>${pc(x.p,x.b)}%</b></div><div class="mut" style="font-size:13px">${x.n} learner${x.n===1?"":"s"} · ${money(x.p)} of ${money(x.b)}</div><div class="fxbar"><i style="width:${pc(x.p,x.b)}%"></i></div></div>`).join("")}
+  per.map(x=>`<div class="fxbox" style="padding:12px 14px"><div style="display:flex;justify-content:space-between"><b>${esc(x.c.name)}</b><b>${pc(x.p,x.b)}%</b></div><div class="mut" style="font-size:13px">${x.n} learner${x.n===1?"":"s"} · ${money(x.p)} of ${money(x.b)}</div><div class="fxbar"><i style="width:${pc(x.p,x.b)}%"></i></div></div>`).join("")}
 const fxPc=(p,a)=>!a?null:p>=a?100:Math.min(99,Math.floor(p/a*100));
 function fxRows(){return fxStu().map(x=>{const a=fxAs(x),p=fxPd(x);return{x,a,p,pc:fxPc(p,a),bal:Math.max(0,a-p),none:!a}}).filter(r=>r.pc!==null||r.p>0)}
 function fxStatus(){const R=fxRows(),F={all:r=>1,l30:r=>r.pc!==null&&r.pc<30,m50:r=>r.pc!==null&&r.pc>=30&&r.pc<75,m75:r=>r.pc!==null&&r.pc>=75&&r.pc<100,f100:r=>r.pc===100},L=[["all","All"],["l30","Below 30%"],["m50","50%"],["m75","75%"],["f100","100%"]];
   const rows=R.filter(F[FX.flt]).sort((a,b)=>(a.pc==null?101:a.pc)-(b.pc==null?101:b.pc));
   return `<h2 class="fxh">Payment Status</h2><p class="mut" style="margin:0 0 10px">Each student's total paid vs. their class's total assigned fees, across all terms. Tap a student to see their payment history.</p><div class="fxch">${L.map(([k,l])=>`<button class="${FX.flt===k?"on":""}" onclick="FX.flt='${k}';drawFeeX()">${l} (${R.filter(F[k]).length})</button>`).join("")}</div>`+
-  (rows.map(r=>`<div class="fxr" onclick="fxStuPay('${r.x.id}')">${stuAv(r.x)}<div class="an"><b>${esc(fxName(r.x))}</b><small>${esc(r.x.national_student_id||"")} · ${esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")} · ${money(r.p)} / ${money(r.a)}${r.bal>0?" · owes "+money(r.bal):""}</small></div><span class="pc" style="color:${r.pc==null?"#8a94a6":r.pc>=100?"#14804a":r.pc>=50?"#a86a0a":"#c0392b"}">${r.pc==null?"No fee set":r.pc+"%"}</span><span class="mut">›</span></div>`).join("")||'<p class="mut">No students here.</p>')}
+  (rows.map(r=>`<div class="fxr" onclick="fxStuPay('${r.x.id}')">${stuAv(r.x)}<div class="an"><b>${esc(fxName(r.x))}</b><small><span class="cp">${esc(r.x.national_student_id||"")}</span> · ${esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")} · ${money(r.p)} / ${money(r.a)}${r.bal>0?" · owes "+money(r.bal):""}</small></div><span class="pc" style="color:${r.pc==null?"#8a94a6":r.pc>=100?"#14804a":r.pc>=50?"#a86a0a":"#c0392b"}">${r.pc==null?"No fee set":r.pc+"%"}</span><span class="mut">›</span></div>`).join("")||'<p class="mut">No students here.</p>')}
 function fxStuPay(id){const x=students.find(y=>y.id===id);if(!x)return;const l=FX.pays.filter(p=>p.student_id===id).sort((a,b)=>String(fxD(b)).localeCompare(String(fxD(a))));
   modal(`<div class="fxmh"><h3>${esc(fxName(x))}</h3><button type="button" aria-label="Close" onclick="closeModal()">×</button></div><p class="mut" style="margin:2px 0 10px">Paid ${money(fxPd(x))} of ${money(fxAs(x))}${fxAs(x)>fxPd(x)?" · owes "+money(fxAs(x)-fxPd(x)):""}</p>`+(l.map(p=>`<div class="fxr" style="cursor:default"><div class="an"><b>${money(p.amount)}</b><small>${esc(fxDate(fxD(p)))} · ${esc(fxT(p.term_id))} · ${esc(fxMeth[p.method]||p.method||"")}${p.receipt_no?" · "+esc(p.receipt_no):""}</small></div></div>`).join("")||'<p class="mut">No payments yet.</p>'))}
-function fxRemind(){return `<div class="fxbox"><h2 class="fxh" style="margin-top:0">Send a message</h2><label class="fxl">Type</label><select id="rmT"><option>Fee reminder</option><option>School notice</option></select><label class="fxl">Send to</label><select id="rmTo"><option value="owing">Parents with a balance</option><option value="all">All parents</option>${fxCls().map(c=>`<option value="${c.id}">${esc(cname(c))}</option>`).join("")}</select><label class="fxl">Title</label><input id="rmH"><label class="fxl">Message</label><textarea id="rmM" rows="5"></textarea><button onclick="fxSend()">Send</button><div id="rmE" class="err"></div><p class="mut" style="margin:0;font-size:13px">Opens your phone's SMS app with the parents' numbers filled in.</p></div>`}
+function fxRemind(){return `<div class="fxbox"><h2 class="fxh" style="margin-top:0">Send a message</h2><label class="fxl">Type</label><select id="rmT"><option>Fee reminder</option><option>School notice</option></select><label class="fxl">Send to</label><select id="rmTo"><option value="owing">Parents with a balance</option><option value="all">All parents</option>${fxCls().map(c=>`<option value="${c.ids.join(",")}">${esc(c.name)}</option>`).join("")}</select><label class="fxl">Title</label><input id="rmH"><label class="fxl">Message</label><textarea id="rmM" rows="5"></textarea><button onclick="fxSend()">Send</button><div id="rmE" class="err"></div><p class="mut" style="margin:0;font-size:13px">Opens your phone's SMS app with the parents' numbers filled in.</p></div>`}
 function fxSend(){const t=$("rmTo").value,own=new Set(fxRows().filter(r=>r.bal>0).map(r=>r.x.id));
-  const n=[...new Set(fxStu().filter(x=>t==="all"||(t==="owing"?own.has(x.id):x.class_id===t)).map(x=>String(x.guardian_phone||"").replace(/[^\d+]/g,"")).filter(Boolean))],h=$("rmH").value.trim(),m=$("rmM").value.trim();
+  const n=[...new Set(fxStu().filter(x=>t==="all"||(t==="owing"?own.has(x.id):t.split(",").includes(x.class_id))).map(x=>String(x.guardian_phone||"").replace(/[^\d+]/g,"")).filter(Boolean))],h=$("rmH").value.trim(),m=$("rmM").value.trim();
   if(!m){$("rmE").textContent="Write a message first.";return}if(!n.length){$("rmE").textContent="No parent phone numbers found for that group.";return}
   $("rmE").textContent="";location.href="sms:"+n.join(",")+"?body="+encodeURIComponent((h?h+"\n":"")+m)}
 function fxFab(){if(tab==="set")return setFabAct();curSub()==="struct"?fxNew():fxPay()}
@@ -1856,9 +1922,9 @@ const isMine=(c,s)=>me.role!=="teacher"||assigns.some(a=>a.class_id===c&&a.subje
 function renderRes(){try{fillRtype()}catch(e){}
   const S=sid(),cs=classes.filter(c=>c.school_id===S);
   const mine=me.role==="teacher"?cs.filter(c=>assigns.some(a=>a.class_id===c.id&&a.teacher_id===me.id)):cs;
-  $("rcls").innerHTML=opt(mine,cname);fillRsub();$("rrcls").innerHTML=opt(cs,cname);
+  $("rcls").innerHTML=clOpts(mine);fillRsub();$("rrcls").innerHTML=clOpts(cs);
   const list=assess.filter(a=>a.school_id===S&&isMine(a.class_id,a.subject_id));
-  $("rasm").innerHTML=opt(list,a=>`${cname(classes.find(c=>c.id===a.class_id)||{name:"?"})} · ${subjects.find(s=>s.id===a.subject_id)?.name} · ${a.name} (/${a.max_score})`);
+  $("rasm").innerHTML=opt(list,a=>`${(classes.find(c=>c.id===a.class_id)||{name:"?"}).name} · ${subjects.find(s=>s.id===a.subject_id)?.name} · ${a.name} (/${a.max_score})`);
   drawScores();drawReport();
 }
 function fillRsub(){
@@ -1873,7 +1939,7 @@ async function addAssess(){
 function drawScores(){
   const a=assess.find(x=>x.id===$("rasm").value);
   if(!a){$("rscores").innerHTML='<p class="mut">Create an assessment first.</p>';return}
-  $("rscores").innerHTML=students.filter(s=>s.class_id===a.class_id&&s.status==="active").map(s=>{
+  $("rscores").innerHTML=students.filter(s=>clIn(a.class_id,s.class_id)&&s.status==="active").map(s=>{
     const r=res.find(x=>x.assessment_id===a.id&&x.student_id===s.id);
     return `<div class="st" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>${esc(s.first_name)} ${esc(s.last_name)}</span><input class="sc" data-s="${s.id}" type="number" min="0" max="${a.max_score}" step="0.5" value="${r?r.score:""}" style="width:90px;margin:0"></div>`}).join("")||'<p class="mut">No students in this class.</p>';
   const sb2=$("scBtn");if(sb2)sb2.style.display=$("rscores").querySelector(".sc")?"":"none";$("rerr").textContent="";
@@ -1892,9 +1958,9 @@ function subAbbr(n){n=String(n||"").trim();const k=n.toLowerCase();
   const w=n.split(/\s+/).filter(x=>x&&!/^(and|of|the|&)$/i.test(x));
   return(w.length>1?w.map(x=>x[0]).join("").slice(0,4):n.slice(0,3)).toUpperCase()}
 function drawReport(){
-  const cid=$("rrcls").value,st=students.filter(s=>s.class_id===cid&&s.status==="active");
+  const cid=$("rrcls").value,st=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
   const rows=st.map(s=>{
-    const by={};res.filter(r=>r.student_id===s.id&&r.class_id===cid).forEach(r=>(by[r.subject_id]=by[r.subject_id]||[]).push(Number(r.percent)));
+    const by={};res.filter(r=>r.student_id===s.id&&clIn(cid,r.class_id)).forEach(r=>(by[r.subject_id]=by[r.subject_id]||[]).push(Number(r.percent)));
     const subs=Object.entries(by).map(([id,v])=>({n:subjects.find(x=>x.id===id)?.name,p:v.reduce((a,b)=>a+b,0)/v.length}));
     return{s,subs,o:subs.length?subs.reduce((a,b)=>a+b.p,0)/subs.length:null}}).sort((a,b)=>(b.o==null?-1:b.o)-(a.o==null?-1:a.o));
   $("rreport").innerHTML=rows.map((r,i)=>`<div class="st"><b>${r.o==null?"–":(i+1)+"."}</b> ${esc(r.s.first_name)} ${esc(r.s.last_name)} ${r.o==null?'<span class="mut">no results</span>':`<b style="float:right">${Math.round(r.o)}% ${gradeFor(Math.round(r.o))}</b>`}<div class="mut">${r.subs.map(x=>`<b>${esc(subAbbr(x.n))}</b> ${Math.round(x.p)} ${gradeFor(Math.round(x.p))}`).join(" · ")}</div></div>`).join("")||'<p class="mut">No students.</p>';
@@ -1904,7 +1970,7 @@ let rcData=null,rcCur=0;
 function loadRCsel(){
   const S=sid();let cs=classes.filter(c=>c.school_id===S);
   if(me.role==="teacher")cs=cs.filter(c=>c.class_teacher_id===me.id);
-  $("rccls").innerHTML=opt(cs,cname);fillTermSel("rctrm",S);
+  $("rccls").innerHTML=clOpts(cs);fillTermSel("rctrm",S);
   loadRC();
 }
 async function loadRC(){
@@ -1967,7 +2033,7 @@ async function saveSchool(p,mid){const m=mid&&$(mid);if(m){m.style.color="";m.te
   const{error}=await sb.rpc("save_school_settings",{p,p_school:pSch()});
   if(error){if(m)m.textContent=error.message;return false}
   await reloadSchool();if(m){m.style.color="var(--pri)";m.textContent="Saved"}toast("Saved");return true}
-async function loadAccts(){if(!perm.ad){ACCS=[];return}const{data,error}=await sb.rpc("school_accounts",{p_school:pSch()});ACCS=error?[]:(data||[])}
+async function loadAccts(){if(!perm.ad){ACCS=[];return}const{data,error}=await sb.rpc("school_accounts",{p_school:pSch()});ACCS=error?[]:(data||[]).filter(a=>!a.is_owner&&!isOwnerAcct(a))}
 async function loadReqData(){if(!perm.ad){REQS=[];return}const{data}=await sb.from("profiles").select("id,full_name,gender,phone,department,photo_url,signup_role,signup_info,school_id").eq("role","pending").not("school_id","is",null);REQS=(data||[]).filter(x=>!isSA()||x.school_id===sid())}
 async function loadExam(){const{data}=await sb.from("exam_types").select("*").order("name");exTypes=data||[]}
 async function loadGrades(){const{data}=await sb.from("grade_scales").select("*").order("min_percent",{ascending:false});gradeScale=data||[]}
@@ -1984,24 +2050,28 @@ function setView(sec,pg){SV={sec:sec||null,pg:pg||null};window.scrollTo(0,0);
   if(sec==="acad"&&pg==="exam")loadExam().then(setRender);
   if(sec==="acad"&&pg==="grades")loadGrades().then(()=>{gradeDraft=null;setRender()});
   if(sec==="school")reloadSchool().then(()=>{if(!pg||pg==="overview")setRender()})}
-function setBack(){if(SV.pg&&perm.ad)setView(SV.sec);else setView(null)}
+function setBack(){if(SV.pg&&(perm.ad||(perm.acr&&SV.sec==="acad")))setView(SV.sec);else setView(null)}
 function setRender(){const e=$("setBox");if(!e||tab!=="set"||!me)return;const{sec,pg}=SV;
   e.innerHTML=!sec?hubHTML():!pg?secHTML(sec):pageHTML(sec,pg);try{fabSync()}catch(x){}
+  if(sec==="acad"&&pg&&!AW(pg)){e.querySelectorAll("[data-hold]").forEach(x=>x.removeAttribute("data-hold"));e.querySelectorAll("p.mut").forEach(x=>{if(/Press and hold/i.test(x.textContent))x.remove()});e.querySelectorAll("input,select,textarea").forEach(x=>x.disabled=true);e.querySelectorAll('button[onclick*="grSave"],button[onclick*="grReset"],button[onclick*="grDel"],button[onclick*="grAdd"],button[onclick*="Form("]').forEach(x=>{if(!x.classList.contains("sbk"))x.remove()});e.querySelectorAll(".grow button,.fabpad").forEach(x=>x.remove())}
   if(sec==="school"&&pg==="rcpt")rcptDraw();if(sec==="acct"&&pg==="manage")acList()}
 function drawSettings(){setRender()}
 const R=(i,c,t,s,f,b)=>`<button class="hrow" onclick="${f}"><span class="chip ${c}">${sIc(i)}</span><span class="ht"><b>${t}</b>${s?`<small>${s}</small>`:""}</span>${b?`<span class="bdg2">${b}</span>`:""}${sIc("chev","hch")}</button>`;
 const BK=(l,f)=>`<button class="sbk" onclick="${f}">${sIc("back")} ${l}</button>`;
 function hubHTML(){let h=`<div class="shead"><h2>Settings</h2><p class="mut">${perm.ad?"Manage your school's academic setup, branding, accounts and registration.":"Your account and how the app looks on this device."}</p></div><div class="card">`;
-  if(perm.ad)h+=R("stu","c1","Academic settings","Terms, classes, subjects, exam types, grades","setView('acad')")+R("sch","c5","School settings","Overview, brand, mission, contact, stamps, receipts, preferences","setView('school')");
+  if(perm.acr)h+=R("stu","c1","Academic settings",perm.ad||isDOS()?"Terms, classes, subjects, exam types, grades":"Terms, classes, subjects, exam types, grades (view only)","setView('acad')");
+  if(perm.ad)h+=R("sch","c5","School settings","Overview, brand, mission, contact, stamps, receipts, preferences","setView('school')");
   else h+=R("set","c2","Preferences","Menu, theme and home screen on this device","setView('school','prefs')");
   h+=R("sliders","c4","Menu style","Side menu or bottom navigation","setView('school','nav')");
   return h+R("tea","c3","Account","Your profile"+(perm.ad?", registrations, accounts, departments":""),"setView('acct')",REQS.length||"")+`</div>`}
-function secHTML(sec){const t=SEC[sec];let h=BK("Settings","setView(null)")+`<div class="shead"><h2>${t[0]}</h2><p class="mut">${t[1]}</p></div>`;
+function secHTML(sec){if((sec==="school"&&!perm.ad)||(sec==="acad"&&!perm.acr))return hubHTML();
+  const t=SEC[sec];let h=BK("Settings","setView(null)")+`<div class="shead"><h2>${t[0]}</h2><p class="mut">${t[1]}</p></div>`;
   if(sec==="acad")h+=`<div class="card">`+R("cal","c1","Terms","","setView('acad','terms')")+R("stu","c1","Classes","","setView('acad','classes')")+R("book","c1","Subjects","","setView('acad','subjects')")+R("exam","c1","Exam types","","setView('acad','exam')")+R("grade","c1","Grades","","setView('acad','grades')")+`</div>`;
   if(sec==="school")h+=`<div class="card">`+R("set","c0","Overview","","setView('school','overview')")+R("brand","c1","Brand","","setView('school','brand')")+R("target","c5","Mission","","setView('school','mission')")+R("mail","c3","Contact","","setView('school','contact')")+R("stamp","c5","Stamps","","setView('school','stamps')")+R("rcpt","c2","Receipts","","setView('school','rcpt')")+R("set","c0","Data backup","","setView('school','backup')")+R("set","c0","Preferences","","setView('school','prefs')")+`</div>`;
   if(sec==="acct"){h+=selfCard();if(perm.ad)h+=`<div class="card">`+R("bell","c0","Pending registrations","People waiting to join","setView('acct','pending')",REQS.length||"")+R("tea","c0","Manage accounts","","setView('acct','manage')")+R("dept","c0","Departments","","setView('acct','depts')")+R("set","c0","Registration controls","","setView('acct','reg')")+`</div>`}
   return h}
-function pageHTML(sec,pg){const t=(PGT[sec]||{})[pg];if(!t)return secHTML(sec);const F={acad:{terms:pgTerms,classes:pgClasses,subjects:pgSubjects,exam:pgExam,grades:pgGrades},school:{overview:pgOverview,brand:pgBrand,mission:pgMission,contact:pgContact,stamps:pgStamps,rcpt:pgReceipts,prefs:pgPrefs,nav:pgNav,backup:pgBackup},acct:{pending:pgPending,manage:pgManage,depts:pgDepts,reg:pgReg}}[sec][pg];
+function pageHTML(sec,pg){if((sec==="school"&&!perm.ad&&pg!=="prefs"&&pg!=="nav")||(sec==="acad"&&!perm.acr))return hubHTML();
+  const t=(PGT[sec]||{})[pg];if(!t)return secHTML(sec);const F={acad:{terms:pgTerms,classes:pgClasses,subjects:pgSubjects,exam:pgExam,grades:pgGrades},school:{overview:pgOverview,brand:pgBrand,mission:pgMission,contact:pgContact,stamps:pgStamps,rcpt:pgReceipts,prefs:pgPrefs,nav:pgNav,backup:pgBackup},acct:{pending:pgPending,manage:pgManage,depts:pgDepts,reg:pgReg}}[sec][pg];
   const back=(!perm.ad&&(pg==="prefs"||pg==="nav"))?BK("Settings","setView(null)"):BK(SEC[sec][0],`setView('${sec}')`);
   return back+`<div class="shead"><h2>${t[0]}</h2><p class="mut">${t[1]}</p></div>`+F()}
 const fld=(id,l,v,ph,ty)=>`<div class="f"><label for="${id}">${l}</label><input id="${id}" type="${ty||"text"}" value="${esc(v||"")}" placeholder="${esc(ph||"")}"></div>`;
@@ -2025,9 +2095,9 @@ const mbtn=(fn,label)=>`<div class="brow" style="margin-top:10px"><button class=
 const kvh=a=>`<div class="kv">${a.map(x=>`<span>${x[0]}</span><span>${esc(x[1]==null||x[1]===""?"Not set":String(x[1]))}</span>`).join("")}</div>`;
 const closeBtn='<button onclick="closeModal()">Close</button>';
 const vh=t=>`<h3 style="text-align:center;margin:0 0 4px">${t}</h3>`;
-const lpHint='<p class="mut" style="text-align:center;margin:6px 0 0">Tap to open. Press and hold to edit or delete.</p><div class="fabpad"></div>';
+const lpHint={toString(){const w=!!SV&&AW(SV.pg);return '<p class="mut" style="text-align:center;margin:6px 0 0">'+(w?'Tap to open. Press and hold to edit or delete.':'Tap to open. You can view this but not change it.')+'</p><div class="fabpad"></div>'}};
 
-function setFabOn(){return !!me&&tab==="set"&&!!perm.ad&&!!SV&&SV.sec==="acad"&&ACADPG.indexOf(SV.pg)>=0}
+function setFabOn(){return !!me&&tab==="set"&&!!SV&&SV.sec==="acad"&&ACADPG.indexOf(SV.pg)>=0&&AW(SV.pg)}
 function fabSync(){show("feeFab",setFabOn()||!!(perm.fee&&tab==="fee"))}
 function setFabAct(){const p=SV.pg;
   if(p==="terms")termForm();
@@ -2045,7 +2115,8 @@ const LPK={
  exam:{t:id=>{const x=exTypes.find(y=>y.id===id);return x?x.name:"Exam type"},s:id=>{const x=exTypes.find(y=>y.id===id);return x&&x.max_score?"Out of "+x.max_score:""},f:["examOpen","examForm","stDelExam"]},
  acct:{t:id=>{const a=ACCS.find(x=>x.id===id);return a?a.full_name:"Account"},s:id=>{const a=ACCS.find(x=>x.id===id);return a?(ROLEN[a.role]||a.role):""},f:["acOpen","acEdit","acDel"]}};
 function holdMenu(t,sub,ed,del){modal(`<div style="position:relative;padding-right:34px;min-height:34px"><button data-lp="skip" aria-label="Close" onclick="closeModal()" style="position:absolute;top:-4px;right:-4px;width:34px;height:34px;margin:0;padding:0;border-radius:50%;background:var(--bg,#f1f3f5);color:var(--tx,#222);border:0;font-size:22px;line-height:1;display:grid;place-items:center">&times;</button><b style="display:block;font-size:17px;padding-top:4px">${esc(t)}</b>${sub?`<div class="mut">${esc(sub)}</div>`:""}</div><div style="display:flex;justify-content:center;gap:12px;margin-top:18px"><button data-lp="skip" onclick="closeModal();${ed}" style="width:auto;min-width:96px;margin:0;padding:9px 22px;border-radius:999px;font-size:14px;font-weight:600">Edit</button><button data-lp="skip" onclick="closeModal();${del}" style="width:auto;min-width:96px;margin:0;padding:9px 22px;border-radius:999px;font-size:14px;font-weight:600;background:transparent;color:#c0392b;border:1.5px solid #c0392b">Delete</button></div>`)}
-function lpMenu(k){const i=k.indexOf(":"),kind=k.slice(0,i),id=decodeURIComponent(k.slice(i+1)),K=LPK[kind];if(!K)return;const a=`decodeURIComponent('${eq(id)}')`;
+const LPPG={term:"terms",strm:"classes",clsg:"classes",subject:"subjects",exam:"exam",grade:"grades"};
+function lpMenu(k){const i=k.indexOf(":"),kind=k.slice(0,i),id=decodeURIComponent(k.slice(i+1)),K=LPK[kind];if(!K)return;if(LPPG[kind]&&!AW(LPPG[kind])){toast("You can only view this. Ask an administrator to change it.");return}const a=`decodeURIComponent('${eq(id)}')`;
   holdMenu(K.t(id),K.s?K.s(id):"",`${K.f[1]}(${a})`,`${K.f[2]}(${a})`)}
 (function(){const T={t:null,fired:false,x:0,y:0};
   document.addEventListener("pointerdown",e=>{const el=e.target.closest&&e.target.closest("[data-hold]");if(!el)return;T.fired=false;T.x=e.clientX;T.y=e.clientY;clearTimeout(T.t);
@@ -2060,7 +2131,7 @@ function lpMenu(k){const i=k.indexOf(":"),kind=k.slice(0,i),id=decodeURIComponen
 function pgTerms(){const S=sid(),ts=terms.filter(t=>t.school_id===S),cur=curTermOf(ts),
   now=cur?(termState(cur)==="current"?"Current term: ":termState(cur)==="upcoming"?"Next term: ":"Last term: ")+cur.name+" "+cur.academic_year+" ("+fmtD(cur.start_date)+" to "+fmtD(cur.end_date)+")":"No term has been set up yet.";
   const list=ts.slice().sort((a,b)=>(a.start_date||"")<(b.start_date||"")?1:-1).map((t,ti)=>{const st=termState(t);
-    return `<div ${lpiA(t.id,ti)} data-hold="term:${t.id}" onclick="termOpen('${t.id}')"><span class="av">${esc(/\d/.test(t.name)?"T"+t.name.replace(/\D/g,""):(t.name||"?")[0])}</span><div class="lm"><b>${esc(t.name)} ${t.academic_year} <span class="tag ${st==="current"?"ok":st==="upcoming"?"":"bad"}">${st==="current"?"Current":st==="upcoming"?"Upcoming":"Ended"}</span></b><small>${fmtD(t.start_date)} to ${fmtD(t.end_date)}</small></div><span class="lc">›</span></div>`}).join("")||'<p class="mut">No terms yet. Tap the + button to add one.</p>';
+    return `<div ${lpiA(t.id,ti)} data-hold="term:${t.id}" onclick="termOpen('${t.id}')"><span class="av">${esc(/\d/.test(t.name)?"T"+t.name.replace(/\D/g,""):(t.name||"?")[0])}</span><div class="lm"><b>${esc(t.name)} ${t.academic_year} <span class="tag ${st==="current"?"ok":st==="upcoming"?"":"bad"}">${st==="current"?"Current":st==="upcoming"?"Upcoming":"Ended"}</span></b><small>${fmtD(t.start_date)} to ${fmtD(t.end_date)}</small></div><span class="lc">›</span></div>`}).join("")||(AW("terms")?'<p class="mut">No terms yet. Tap the + button to add one.</p>':'<p class="mut">No terms yet. An administrator sets these up.</p>');
   return `<div class="card"><div class="anote">${esc(now)}</div><p class="mut">The whole school follows one term. When a term ends the next one starts automatically. Fees, tests and results stay in the term they were created in.</p></div>${list}`+lpHint}
 function termOpen(id){const t=terms.find(x=>x.id===id);if(!t)return;AC.id=id;setRender();const st=termState(t),days=Math.round((new Date(t.end_date)-new Date(t.start_date))/864e5)+1;
   modal(vh(esc(t.name)+" "+t.academic_year)+kvh([["Status",st==="current"?"Current":st==="upcoming"?"Upcoming":"Ended"],["Starts",fmtD(t.start_date)],["Ends",fmtD(t.end_date)],["Length",days>0?days+" days":""]])+closeBtn)}
@@ -2088,6 +2159,7 @@ function clLabels(g){const used=new Set(g.filter(c=>c.stream).map(c=>String(c.st
 const clLbl=c=>(clLabels(clGroup(c.name))[c.id]||{t:cname(c)}).t;
 const clCnt=id=>students.filter(s=>s.class_id===id).length;
 const clCap=c=>c&&+c.capacity>0?+c.capacity:0;
+const isOwnerAcct=x=>!!x&&schools.some(z=>z.owner_id===x.id);
 const clTeach=id=>{const x=staff.find(y=>y.id===id);return x?x.full_name:"None"};
 const clStreamName=v=>{v=String(v||"").trim().replace(/^stream\s+/i,"");return v.length===1?v.toUpperCase():v};
 const clCapMissing=()=>CAPMISS||(clSch().length>0&&!("capacity" in clSch()[0]));
@@ -2095,7 +2167,7 @@ function nextStream(g){const used=g.map(c=>String(c.stream||"").toUpperCase());l
   if(m<0)return g.length?"B":"A";return String.fromCharCode(65+Math.min(25,m+1))}
 function clSel(n){CL.sel=CL.sel===n?null:n;setRender()}
 function pgClasses(){const S=sid(),m=new Map();clSch().forEach(c=>{if(!m.has(c.name))m.set(c.name,[]);m.get(c.name).push(c)});
-  const gt=n=>m.get(n).reduce((t,c)=>{const v=tOf(c);return !t||(v&&v<t)?v:t},""),ix=[...m.keys()],names=ix.slice().sort((a,b)=>{let d=gt(a).localeCompare(gt(b))||ix.indexOf(a)-ix.indexOf(b);return LSORT==="old"?d:-d});
+  const gt=n=>m.get(n).reduce((t,c)=>{const v=tOf(c);return !t||(v&&v<t)?v:t},""),ix=[...m.keys()],names=ix.slice().sort((a,b)=>clOrd({name:b})-clOrd({name:a})||gt(a).localeCompare(gt(b))||ix.indexOf(a)-ix.indexOf(b));
   const warn=clCapMissing()?`<div class="card"><div class="anote">Learner limits need a one-time database update before they can be saved. Run this once in the Supabase SQL editor:</div><p class="mut" style="user-select:all;font-family:monospace;font-size:12.5px">alter table classes add column if not exists capacity integer check (capacity > 0);</p></div>`:"";
   if(!names.length)return warn+`<div class="card"><p class="mut">No classes yet. Tap the + button to add your first class, for example P.3 with a limit of 80 learners per stream.</p></div><div class="fabpad"></div>`;
   if(CL.sel&&!m.has(CL.sel))CL.sel=null;
@@ -2175,7 +2247,7 @@ function subTchDraw(){const box=$("sbTch");if(!box)return;document.querySelector
   const opt=(v,t,sel)=>'<option value="'+v+'"'+(sel?' selected':'')+'>'+t+'</option>';
   box.innerHTML=names.length?names.map(n=>{const v=SBT[n]!==undefined?SBT[n]:"";
     return '<div class="f"><label>'+esc(n)+'</label><select data-c="'+esc(n)+'">'+(v==="__keep"?opt("__keep","Different per stream (keep)",true):"")+opt("","No teacher yet",v==="")+T.map(t=>opt(t.id,esc(t.full_name),v===t.id)).join("")+'</select></div>'}).join("")+(T.length?"":'<p class="mut">No teachers yet. Approve a teacher in Settings, Account first.</p>'):'<p class="mut">Tick a class above to choose its teacher.</p>'}
-function subForm(id){const x=id?subjects.find(y=>y.id===id):null,on=x?subLinked(x.id):new Set(),cs=[...new Set(clSch().slice().sort((p,q)=>tOf(p).localeCompare(tOf(q))).map(c=>c.name))];subTchInit(x&&x.id);
+function subForm(id){const x=id?subjects.find(y=>y.id===id):null,on=x?subLinked(x.id):new Set(),cs=clUniq(clSch()).map(g=>g.name);subTchInit(x&&x.id);
   modal(mh(x?"Edit subject":"Add subject")+fld("sbN","Subject name",x&&x.name,"e.g. Mathematics")+`<div class="f"><label for="sbC">Code</label><input id="sbC" value="${esc(x?x.code:"")}" placeholder="e.g. MTC" maxlength="3" autocapitalize="characters" autocomplete="off" oninput="subCodeIn(this)" style="text-transform:uppercase"></div><div class="f"><label>Linked classes</label><div class="ckl">${cs.map(c=>`<label class="ck"><input type="checkbox" class="sbCl" value="${esc(c)}" ${on.has(c)?"checked":""} onchange="subTchDraw()"><span>${esc(c)}</span></label>`).join("")||'<p class="mut">No classes yet. Add a class first.</p>'}</div></div><div class="f"><label>Teacher for each class</label><div id="sbTch"></div></div>`+mbtn(`subSave(${x?`'${x.id}'`:"null"})`,"Save changes"));subTchDraw()}
 async function subLink(subId,names){const sel=clSch().filter(c=>names.includes(c.name)).map(c=>c.id),cur=assigns.filter(a=>a.subject_id===subId),del=cur.filter(a=>!sel.includes(a.class_id)).map(a=>a.id),add=sel.filter(c=>!cur.some(a=>a.class_id===c));
   if(del.length){const r=await sb.from("teaching_assignments").delete().in("id",del);if(r.error)return r.error.message}
@@ -2237,7 +2309,7 @@ function clRank(c){const n=String(c.name||"").toLowerCase().replace(/[._\-]/g," 
   if((m=n.match(/^(?:primary|p)\s*(\w+)/))&&num(m[1]))return 10+num(m[1]);
   if((m=n.match(/^(?:senior|form|s)\s*(\w+)/))&&num(m[1]))return 20+num(m[1]);
   return 999}
-const pmSort=(a,b)=>clRank(a)-clRank(b)||cname(a).localeCompare(cname(b),undefined,{numeric:true});
+const pmSort=clCmp;
 function pmNext(fc,dir,opts){if(!fc)return null;const r=clRank(fc);if(r>=999)return null;const rs=opts.map(clRank).filter(x=>dir>0?x>r:x<r&&x<999);if(!rs.length)return null;const tr=dir>0?Math.min(...rs):Math.max(...rs),c=opts.filter(x=>clRank(x)===tr);return c.find(x=>(x.stream||"")===(fc.stream||""))||c[0]}
 function drawPromo(auto){const f=$("pmFrom");if(!f)return;const cs=clSch().slice().sort(pmSort),cur=f.value;
   f.innerHTML=cs.map(c=>'<option value="'+c.id+'"'+(c.id===cur?" selected":"")+'>'+esc(cname(c))+' ('+pmElig(c.id).length+' students)</option>').join("")||'<option value="">No classes yet</option>';
@@ -2326,9 +2398,9 @@ function anGoDist(i){const x=(AN.nat.by_district||[])[i];if(!x)return;AN.dsel=x.
 let annL=[];
 const annCard=(a,del)=>'<div class="st"><b>'+esc(a.title)+'</b> <span class="tag">'+esc(a.class_name||"Whole school")+'</span><div class="mut">'+esc(String(a.created_at).slice(0,10))+(a.author?" · "+esc(a.author):"")+'</div><div style="white-space:pre-wrap;margin-top:4px">'+esc(a.body)+'</div>'+(del?'<button class="alt" style="width:auto;margin-top:6px" onclick="annDel(\''+a.id+'\')">Delete</button>':"")+'</div>';
 async function loadAnn(){if(!me)return;const S=sid(),r=await sb.from("announcements").select("*").order("created_at",{ascending:false}).limit(100);annL=(r.data||[]).filter(x=>x.school_id===S);drawAnn()}
-function drawAnn(){const e=$("anList");if(!e)return;const cs=clSch().slice().sort((a,b)=>cname(a).localeCompare(cname(b))),c=$("anCls");
+function drawAnn(){const e=$("anList");if(!e)return;const cs=clSch().slice().sort(clCmp),c=$("anCls");
   if(c&&!c.options.length)c.innerHTML='<option value="">Whole school</option>'+cs.map(x=>'<option value="'+x.id+'">'+esc(cname(x))+' only</option>').join("");
-  e.innerHTML=annL.map(a=>{const k=classes.find(z=>z.id===a.class_id);return annCard({...a,class_name:k?cname(k):"",author:a.created_by?clTeach(a.created_by):""},perm.ad)}).join("")||'<p class="mut">No announcements yet.</p>'}
+  e.innerHTML=annL.map(a=>{const k=classes.find(z=>z.id===a.class_id);return annCard({...a,class_name:k?cname(k):"",author:a.created_by&&clTeach(a.created_by)!=="None"?clTeach(a.created_by):""},perm.ad)}).join("")||'<p class="mut">No announcements yet.</p>'}
 async function annPost(){const e=$("anE"),t=gv("anT"),b=gv("anB");e.textContent="";
   if(!t){e.textContent="Enter a title.";return}if(!b){e.textContent="Write the message.";return}
   const r=await sb.from("announcements").insert({school_id:sid(),class_id:$("anCls").value||null,title:t,body:b});
@@ -2344,15 +2416,15 @@ let lrL=[];
 const lrCard=(a,del)=>'<div class="st"><b>'+esc(a.title)+'</b> <span class="tag">'+(a.kind==="assignment"?"Assignment":"Note")+'</span> <span class="tag">'+esc(a.subject||"")+'</span>'+(a.class_name?' <span class="tag">'+esc(a.class_name)+'</span>':"")+'<div class="mut">'+esc(String(a.created_at).slice(0,10))+(a.author?" · "+esc(a.author):"")+(a.kind==="assignment"&&a.due_date?" · Due "+esc(a.due_date):"")+'</div><div style="white-space:pre-wrap;margin-top:4px">'+esc(a.body)+'</div>'+(del?'<button class="alt" style="width:auto;margin-top:6px" onclick="lrnDel(\''+a.id+'\')">Delete</button>':"")+'</div>';
 function lrnMine(){const S=sid();return assigns.filter(a=>a.school_id===S&&(perm.ad||(me&&a.teacher_id===me.id)))}
 async function loadLrn(){if(!me||!perm.st)return;const S=sid(),r=await sb.from("learning_items").select("*").order("created_at",{ascending:false}).limit(200);lrL=(r.data||[]).filter(x=>x.school_id===S);
-  const m=lrnMine(),ids=[...new Set(m.map(a=>a.class_id))],cs=clSch().filter(c=>ids.includes(c.id)).sort((a,b)=>cname(a).localeCompare(cname(b)));
+  const m=lrnMine(),ids=[...new Set(m.map(a=>a.class_id))],cs=clSch().filter(c=>ids.includes(c.id)).sort(clCmp);
   $("lrCls").innerHTML=cs.length?cs.map(c=>'<option value="'+c.id+'">'+esc(cname(c))+'</option>').join(""):'<option value="">No class linked to you</option>';
-  const f=$("lrFC"),keep=f.value;f.innerHTML='<option value="">All classes</option>'+clSch().slice().sort((a,b)=>cname(a).localeCompare(cname(b))).map(c=>'<option value="'+c.id+'">'+esc(cname(c))+'</option>').join("");f.value=keep;
+  const f=$("lrFC"),keep=f.value;f.innerHTML='<option value="">All classes</option>'+clSch().slice().sort(clCmp).map(c=>'<option value="'+c.id+'">'+esc(cname(c))+'</option>').join("");f.value=keep;
   lrnSubj();lrnKind();drawLrn()}
 function lrnSubj(){const c=$("lrCls").value,m=lrnMine().filter(a=>a.class_id===c),ids=[...new Set(m.map(a=>a.subject_id))];
   $("lrSub").innerHTML=ids.length?ids.map(i=>{const x=subjects.find(z=>z.id===i);return '<option value="'+i+'">'+esc(x?x.name+(x.code?" ("+x.code+")":""):"Subject")+'</option>'}).join(""):'<option value="">No subject linked</option>'}
 function lrnKind(){show("lrDW",$("lrK").value==="assignment")}
 function drawLrn(){const e=$("lrList");if(!e)return;const f=$("lrFC").value;
-  e.innerHTML=lrL.filter(a=>!f||a.class_id===f).map(a=>{const k=classes.find(z=>z.id===a.class_id),s=subjects.find(z=>z.id===a.subject_id);return lrCard({...a,class_name:k?cname(k):"",subject:s?s.name:"",author:a.created_by?clTeach(a.created_by):""},perm.ad||(me&&a.created_by===me.id))}).join("")||'<p class="mut">Nothing posted yet.</p>'}
+  e.innerHTML=lrL.filter(a=>!f||a.class_id===f).map(a=>{const k=classes.find(z=>z.id===a.class_id),s=subjects.find(z=>z.id===a.subject_id);return lrCard({...a,class_name:k?cname(k):"",subject:s?s.name:"",author:a.created_by&&clTeach(a.created_by)!=="None"?clTeach(a.created_by):""},perm.ad||(me&&a.created_by===me.id))}).join("")||'<p class="mut">Nothing posted yet.</p>'}
 async function lrnPost(){const e=$("lrE"),t=gv("lrT"),b=gv("lrB"),c=$("lrCls").value,sj=$("lrSub").value,k=$("lrK").value,d=$("lrD").value;e.textContent="";
   if(!c||!sj){e.textContent="Choose a class and a subject linked to you.";return}if(!t){e.textContent="Enter a title.";return}if(!b){e.textContent="Write the note or the instructions.";return}
   const r=await sb.from("learning_items").insert({school_id:sid(),class_id:c,subject_id:sj,kind:k,title:t,body:b,due_date:k==="assignment"&&d?d:null});
@@ -2380,7 +2452,7 @@ let ttP=[],ttS=[];
 const TTD=["Monday","Tuesday","Wednesday","Thursday","Friday"],hm=t=>String(t||"").slice(0,5);
 async function loadTT(){if(!me)return;const S=sid(),[p,q]=await Promise.all([sb.from("timetable_periods").select("*").order("start_time"),sb.from("timetable_slots").select("*")]);
   ttP=(p.data||[]).filter(x=>x.school_id===S);ttS=(q.data||[]).filter(x=>x.school_id===S);drawTT()}
-function ttGrid(cell){if(!ttP.length)return '<p class="mut">'+(perm.ad?"No periods yet. Open the Periods tab and add the school's lesson times.":"The timetable has not been set up yet.")+'</p>';
+function ttGrid(cell){if(!ttP.length)return '<p class="mut">'+(perm.tt?"No periods yet. Open the Periods tab and add the school's lesson times.":"The timetable has not been set up yet.")+'</p>';
   return '<table class="ttg"><tr><th></th>'+ttP.map(p=>'<th>'+esc(p.name)+'<small>'+hm(p.start_time)+'-'+hm(p.end_time)+'</small></th>').join("")+'</tr>'+
     TTD.map((d,i)=>'<tr><td class="dy">'+d.slice(0,3)+'</td>'+ttP.map(p=>p.is_break?'<td class="br">Break</td>':cell(i+1,p)).join("")+'</tr>').join("")+'</table>'}
 function ttSel(id,items,keep){const e=$(id);if(!e)return"";const cur=e.value||keep||"";e.innerHTML=items.map(o=>'<option value="'+o[0]+'"'+(o[0]===cur?" selected":"")+'>'+esc(o[1])+'</option>').join("")||'<option value="">None yet</option>';return e.value}
@@ -2388,7 +2460,7 @@ function drawTT(){if(!$("ttCG"))return;const S=sid(),cs=clSch().slice().sort((a,
   const cid=ttSel("ttClass",cs.map(c=>[c.id,cname(c)])),tid=ttSel("ttTeach",T.map(t=>[t.id,t.full_name]),me&&me.role==="teacher"?me.id:"");
   $("ttCG").innerHTML=cid?ttGrid((day,p)=>{const x=ttS.find(z=>z.class_id===cid&&z.day===day&&z.period_id===p.id),sj=x&&subjects.find(y=>y.id===x.subject_id);
     const oc=perm.ad?' ed" onclick="ttCell(\''+cid+'\','+day+',\''+p.id+'\')':'';
-    return '<td class="cl'+oc+'">'+(sj?'<b>'+esc(sj.code||sj.name)+'</b><small>'+esc(x.teacher_id?clTeach(x.teacher_id).split(" ")[0]:"")+'</small>':(perm.ad?'<span class="pl">+</span>':""))+'</td>'}):'<p class="mut">No classes yet.</p>';
+    return '<td class="cl'+oc+'">'+(sj?'<b>'+esc(sj.code||sj.name)+'</b><small>'+esc(x.teacher_id?clTeach(x.teacher_id).split(" ")[0]:"")+'</small>':(perm.tt?'<span class="pl">+</span>':""))+'</td>'}):'<p class="mut">No classes yet.</p>';
   $("ttTG").innerHTML=tid?ttGrid((day,p)=>{const x=ttS.find(z=>z.teacher_id===tid&&z.day===day&&z.period_id===p.id),c=x&&classes.find(y=>y.id===x.class_id),sj=x&&subjects.find(y=>y.id===x.subject_id);
     return '<td class="cl">'+(x?'<b>'+esc(c?cname(c):"?")+'</b><small>'+esc(sj?(sj.code||sj.name):"")+'</small>':"")+'</td>'}):'<p class="mut">No teachers yet.</p>';
   const L=$("ttPL");if(L)L.innerHTML=ttP.map(p=>'<div class="lpi" onclick="ttPerForm(\''+p.id+'\')"><span class="av">'+(p.is_break?"B":esc(String(p.period_no)))+'</span><div class="lm"><b>'+esc(p.name)+(p.is_break?' <span class="tag">Break</span>':"")+'</b><small>'+hm(p.start_time)+' - '+hm(p.end_time)+'</small></div><span class="lc">›</span></div>').join("")||'<p class="mut">No periods yet.</p>'}
@@ -2462,7 +2534,7 @@ async function grReset(){if(!confirm("Go back to the default scale (D1 to F9)?")
 /* ----- School ----- */
 function pgOverview(){const s=schRow()||{},kv=(a,b)=>`<span>${a}</span><span>${esc(b||"Not set")}</span>`,S=sid();
   return `<div class="card"><div style="display:flex;gap:14px;align-items:center;margin-bottom:8px">${s.logo_url?`<img src="${esc(s.logo_url)}" alt="" style="width:64px;height:64px;border-radius:16px;object-fit:cover">`:`<span class="chip c1" style="width:64px;height:64px">${sIc("sch")}</span>`}<div><b style="font-size:18px">${esc(s.name||"")}</b><div class="id">${esc(s.school_code||"")}</div></div></div>
-  <div class="kv" style="grid-template-columns:110px 1fr;display:grid;gap:6px 10px;font-size:14px">${kv("Motto",s.motto)}${kv("District",s.district)}${kv("Level",s.level)}${kv("Phone",s.phone)}${kv("Email",s.email)}${kv("Address",s.address)}${kv("Students",String(students.filter(x=>x.school_id===S).length))}${kv("Classes",String(classes.filter(x=>x.school_id===S).length))}${kv("Staff",String(staff.filter(x=>x.school_id===S).length))}${kv("Ownership",s.owner_id===me.id?"You are the owner":"")}</div></div>
+  <div class="kv" style="grid-template-columns:110px 1fr;display:grid;gap:6px 10px;font-size:14px">${kv("Motto",s.motto)}${kv("District",s.district)}${kv("Level",s.level)}${kv("Phone",s.phone)}${kv("Email",s.email)}${kv("Address",s.address)}${kv("Students",String(students.filter(x=>x.school_id===S).length))}${kv("Classes",String(clUniq(classes.filter(x=>x.school_id===S)).length))}${kv("Staff",String(staff.filter(x=>x.school_id===S).length))}${kv("Ownership",s.owner_id===me.id?"You are the owner":"")}</div></div>
   <div class="card"><p class="mut">Use Brand, Mission, Contact, Stamps and Receipts to change what is shown here.</p></div>`}
 function pgBrand(){const s=schRow()||{},c=s.brand_color||cfg.accent,canLogo=me.role==="school_admin";
   return `<div class="card"><h3>School picture</h3><div style="display:flex;gap:14px;align-items:center"><div style="width:84px;height:84px;border-radius:18px;border:2px dashed var(--bd);overflow:hidden;display:grid;place-items:center;flex:none">${s.logo_url?`<img src="${esc(s.logo_url)}" alt="" style="width:100%;height:100%;object-fit:cover">`:'<span class="mut">None</span>'}</div>
@@ -2643,19 +2715,6 @@ const GUIDE=[
 "- 4. To decline, tap Reject and, if you wish, type a reason.",
 "Use the filter to see Approved, Rejected or All applications. Approved ones show the student's ID.",
 "If a student with the same name and date of birth is already active in your school, the app warns you before approving, so one child does not get two IDs by mistake. A decision cannot be undone, so check before you tap."
-]
-},
-{
-"t": "Correct a student's details",
-"r": [
-"school_admin"
-],
-"b": [
-"Students cannot send corrections from their own app. A student who finds a mistake (name, date of birth or gender) tells the school. The school cannot change these three itself, because they travel with the student number. They are changed by correction only.",
-"- 1. Open Students and tap the learner.",
-"- 2. Tap Submit correction, change only what is wrong and give the reason. (Guardian details are changed with Edit.)",
-"- 3. Tap Submit correction. Nothing changes until it is approved. Only one request can be open per learner.",
-"The learner's record lists the request and its status. If it could not be submitted it shows Not sent yet with a Send again button. Inactive (transferred) learners cannot be corrected here: the new school sends the request."
 ]
 },
 {
@@ -3095,7 +3154,7 @@ async function pcLoad(){
   if(!r.ok){box.innerHTML="";err.textContent=(d&&d.message)||"Could not load.";return}
   try{localStorage.setItem("pcKey",key)}catch(e){}
   const by={};(d||[]).forEach(x=>{(by[x.student_id]=by[x.student_id]||[]).push(x)});
-  const rows=ss.filter(x=>by[x.national_student_id]).map(x=>`<div class="st"><b>${esc(x.first_name)} ${esc(x.last_name)}</b> <span class="mut">${esc(x.national_student_id)}</span>`+by[x.national_student_id].map(p=>`<div>${esc(p.parent_name)} <span class="mut">(${esc(p.relationship||"")}${p.status==="pending"?", linked by parent":""})</span> ${p.phone?'<a href="tel:'+esc(p.phone)+'">'+esc(p.phone)+"</a>":""}</div>`).join("")+"</div>");
+  const rows=ss.filter(x=>by[x.national_student_id]).map(x=>`<div class="st"><b>${esc(x.first_name)} ${esc(x.last_name)}</b> <span class="mut cp">${esc(x.national_student_id)}</span>`+by[x.national_student_id].map(p=>`<div>${esc(p.parent_name)} <span class="mut">(${esc(p.relationship||"")}${p.status==="pending"?", linked by parent":""})</span> ${p.phone?'<a href="tel:'+esc(p.phone)+'">'+esc(p.phone)+"</a>":""}</div>`).join("")+"</div>");
   box.innerHTML=rows.join("")||'<p class="mut">No parents have linked to your students in Parent Hub yet.</p>';
 }
 setTimeout(pcInit,0);
@@ -3157,17 +3216,17 @@ async function stuView(i){const s=students.find(x=>x.id===i);if(!s)return;
   if(perm.fee||perm.ad){const tb=bl.reduce((a,b)=>a+Number(b.billed||0),0),tp=bl.reduce((a,b)=>a+Number(b.paid||0),0);
     h+=sec("Fees",bl.length?kvs([["Billed",money(tb)],["Paid",money(tp)],["Balance",money(tb-tp)]].concat(bl.map(b=>[tname(b.term_id),`<div>Billed ${esc(money(b.billed))}</div><div>Paid ${esc(money(b.paid))}</div><div>Balance ${esc(money(b.balance))}</div>`,1])))+(pay.length?'<p class="mut" style="margin:8px 0 2px">Recent payments</p>'+pay.slice(0,5).map(p=>`<div class="mut">${esc(p.receipt_no||"")} · ${money(p.amount)} · ${esc(String(p.method||"").replace("_"," "))} · ${esc(String(p.created_at||"").slice(0,10))}</div>`).join(""):""):'<p class="mut">No fees billed yet.</p>')}
   if(perm.res||perm.ad){const by={};rs.forEach(r=>{const k=r.term_id+"|"+r.subject_id;(by[k]=by[k]||[]).push(Number(r.percent))});
-    const rows=Object.entries(by).map(([k,v])=>{const[t,sb2]=k.split("|"),a=Math.round(v.reduce((x,y)=>x+y,0)/v.length);return[tname(t)+" · "+(subjects.find(x=>x.id===sb2)?.name||"Subject"),a+"% ("+gradeFor(a)+")"]});
-    h+=sec("Results",rows.length?kvs(rows):'<p class="mut">No results yet.</p>')}
+    const byT={};Object.entries(by).forEach(([k,v])=>{const[t,sb2]=k.split("|"),a=Math.round(v.reduce((x,y)=>x+y,0)/v.length);(byT[t]=byT[t]||[]).push([subjects.find(x=>x.id===sb2)?.name||"Subject",a+"% ("+gradeFor(a)+")"])});
+    const tOrd=Object.keys(byT).sort((a,b)=>{const ia=terms.findIndex(x=>x.id===a),ib=terms.findIndex(x=>x.id===b);return (ia<0?999:ia)-(ib<0?999:ib)});
+    h+=sec("Results",tOrd.length?tOrd.map(t=>`<div style="margin:8px 0 2px;font-weight:700">${esc(tname(t))}</div>`+kvs(byT[t].sort((a,b)=>String(a[0]).localeCompare(String(b[0]))))).join(""):'<p class="mut">No results yet.</p>')}
   if(perm.ad&&stuInactive(s))h+=stuInactiveNote();
-  if(perm.ad&&!stuInactive(s))h+=await corrSec(i);
-  h+=`${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:14px 0 0" onclick="stuCorr('${i}')">Submit correction</button>`:""}<div class="row" style="gap:8px;margin-top:8px">${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:0" onclick="stuEdit('${i}')">Edit</button>`:""}<button style="margin:0" onclick="closeModal()">Close</button></div>`;
+  h+=`<div class="row" style="gap:8px;margin-top:8px">${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:0" onclick="stuEdit('${i}')">Edit</button>`:""}<button style="margin:0" onclick="closeModal()">Close</button></div>`;
   if($("mdl"))modal(h)}
 function clsView(id){const c=classes.find(x=>x.id===id);if(!c)return;const L=students.filter(s=>s.class_id===id&&s.status==="active"),asg=assigns.filter(a=>a.class_id===id);
   modal(`<div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">${esc(c.name)}${c.stream?" "+esc(c.stream):""}</b></div>`+
   sec("Class",kvs([["Class teacher",tchr(c.class_teacher_id)||"Not set"],["Learners",String(L.length)],["Year",c.academic_year]]))+
   sec("Subjects and teachers",asg.length?kvs(asg.map(a=>[subjects.find(x=>x.id===a.subject_id)?.name||"Subject",tchr(a.teacher_id)||"No teacher yet"])):'<p class="mut">No subjects linked yet.</p>')+
-  sec("Learners (tap to open)",L.length?L.map(s=>`<div class="ar" style="cursor:pointer" onclick="stuView('${s.id}')">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm">${esc(s.national_student_id)}</div></div></div>`).join(""):'<p class="mut">No learners yet.</p>')+'<button style="margin-top:14px" onclick="closeModal()">Close</button>')}
+  sec("Learners (tap to open)",L.length?L.map(s=>`<div class="ar" style="cursor:pointer" onclick="stuView('${s.id}')">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm cp">${esc(s.national_student_id)}</div></div></div>`).join(""):'<p class="mut">No learners yet.</p>')+'<button style="margin-top:14px" onclick="closeModal()">Close</button>')}
 /* clickable activity */
 let actG=[];const ACTW={students:["Students","stu"],classes:["Classes","cls"],teaching_assignments:["Classes","cls"],terms:["Academic settings","set"],fee_structures:["Fees","fee"],payments:["Fees","fee"],assessments:["Results","res"],results:["Results","res"],report_comments:["Report cards","rc"],guardian_students:["Students, link accounts","stu"],admission_applications:["Admissions","adm"],attendance:["Attendance","att"],staff_attendance:["Attendance (staff)","att"]};
 const SKIP=/^(id|school_id|created_by|updated_by|created_at|updated_at|deleted_at|marked_by|received_by|decided_by|user_id)$/;
@@ -3308,7 +3367,7 @@ function rmBrowse(all,day0){
   if(perm.fee||perm.ad)h+=P("Latest payments","setTab('fee')",pays.map(p=>{const x=students.find(y=>y.id===p.student_id);return row(x?stuAv(x):"",esc(x?fxName(x):"Learner"),esc(fxDate(fxD(p))+" · "+(fxMeth[p.method]||p.method||"")),money(p.amount),`fxStuPay('${p.student_id}')`)}).join("")||'<p class="mut" style="margin:0">No payments yet.</p>');
   const ow=fxRows().filter(r=>r.bal>0).sort((a,b)=>b.bal-a.bal).slice(0,5);
   if(perm.fee||perm.ad)h+=P("Fees owing (largest balances)","setTab('fee')",ow.map(r=>row(stuAv(r.x),esc(fxName(r.x)),esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")+" · "+(r.pc==null?"":r.pc+"% paid"),`<span style="color:#c0392b">${money(r.bal)}</span>`,`fxStuPay('${r.x.id}')`)).join("")||'<p class="mut" style="margin:0">Nobody owes anything, or no fee items are set yet.</p>');
-  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),esc(x.national_student_id||"")+" · "+esc(sCls(x)||"No class"),esc(x.created_at?new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"}):""),`stuView('${x.id}')`)).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
+  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),`<span class="cp">${esc(x.national_student_id||"")}</span> · `+esc(sCls(x)||"No class"),esc(x.created_at?new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"}):""),`stuView('${x.id}')`)).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
   if(!ex)return h+'<p class="mut" style="text-align:center">Loading admissions, notices and moves…</p>';
   const stc={pending:"#d98e04",approved:"#14804a",rejected:"#c0392b"};
   h+=P("Admission applications","setTab('adm')",ex.adm.map(a=>row(`<span class="av" style="background:var(--bd)">${esc(((a.first_name||"?")[0]+(a.last_name||"")[0]).toUpperCase())}</span>`,esc((a.first_name||"")+" "+(a.last_name||"")),esc((a.application_no||"")+" · "+new Date(a.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),`<span style="color:${stc[a.status]||"inherit"}">${esc(a.status||"")}</span>`,"setTab('adm')")).join("")||'<p class="mut" style="margin:0">No applications yet.</p>');
@@ -3578,18 +3637,18 @@ if(host)host.insertAdjacentHTML("beforebegin",`<div data-t="res" data-s="mark" c
 
 function mkInit(){const cl=$("mkCls");if(!cl)return;const keep={c:cl.value,s:$("mkSub").value,t:$("mkType").value};
  const S=sid(),cs=classes.filter(c=>c.school_id===S),mine=me.role==="teacher"?cs.filter(c=>assigns.some(a=>a.class_id===c.id&&a.teacher_id===me.id)):cs;
- cl.innerHTML='<option value="">Select class</option>'+mine.map(c=>{const n=learners(c.id).length;return`<option value="${c.id}">${e(cname(c))} (${n} learner${n===1?"":"s"})</option>`}).join("");
- if(mine.some(c=>c.id===keep.c))cl.value=keep.c;else cl.value=mine.length===1?mine[0].id:""
+ cl.innerHTML='<option value="">Select class</option>'+clUniq(mine).map(g=>{const n=students.filter(s=>g.ids.includes(s.class_id)&&s.status==="active").length;return`<option value="${g.id}">${e(g.name)} (${n} learner${n===1?"":"s"})</option>`}).join("");
+ {const U=clUniq(mine);if(U.some(g=>g.id===keep.c))cl.value=keep.c;else cl.value=U.length===1?U[0].id:""}
  mkClass(keep)}
 window.mkClass=function(keep){const cid=$("mkCls").value,S=sid();let ss=subjects.filter(x=>x.school_id===S);
- const ids=assigns.filter(a=>a.class_id===cid&&(me.role!=="teacher"||a.teacher_id===me.id)).map(a=>a.subject_id);
+ const ids=assigns.filter(a=>clIn(cid,a.class_id)&&(me.role!=="teacher"||a.teacher_id===me.id)).map(a=>a.subject_id);
  if(me.role==="teacher")ss=ss.filter(x=>ids.includes(x.id));else if(ids.length)ss=ss.filter(x=>ids.includes(x.id));
  const k=keep&&keep.s?keep.s:$("mkSub").value;$("mkSub").innerHTML='<option value="">Subject</option>'+ss.map(x=>`<option value="${x.id}">${e(x.name)}</option>`).join("");if(ss.some(x=>x.id===k))$("mkSub").value=k;else if(ss.length===1)$("mkSub").value=ss[0].id;
  const kt=keep&&keep.t?keep.t:$("mkType").value;$("mkType").innerHTML='<option value="">Exam type</option>'+typesFor(cid).map(t=>`<option value="${t[0]}">${t[0]}${t[0]==="A1"?" (Assessment 1)":t[0]==="A2"?" (Assessment 2)":t[0]==="A3"?" (Assessment 3)":""}</option>`).join("");
  if(typesFor(cid).some(t=>t[0]===kt))$("mkType").value=kt;
  mkDraw()};
 function mkAsm(){const cid=$("mkCls").value,sub=$("mkSub").value,t=$("mkType").value,k=RCslot(t);
- return assess.find(a=>a.class_id===cid&&a.subject_id===sub&&RCslot(a.name)===k)||null}
+ return assess.find(a=>clIn(cid,a.class_id)&&a.subject_id===sub&&RCslot(a.name)===k)||null}
 let MKQ={L:[],i:0,vals:{},max:0,a:null,ready:false};
 window.mkDraw=function(maxOnly){const cid=$("mkCls").value,sub=$("mkSub").value,ty=$("mkType").value,all=!!(cid&&sub&&ty),a=all?mkAsm():null,mxI=$("mkMax");$("mkMsg").textContent="";
  mxI.value=a?a.max_score:(typeMax(ty)||"");
@@ -3673,7 +3732,7 @@ const rr=window.renderRes;window.renderRes=function(){const k={c:($("rcls")||{})
 const frs=window.fillRsub;window.fillRsub=function(){frs();const sb=$("rsub");if(sb){sb.insertAdjacentHTML("afterbegin",'<option value="">Subject</option>');sb.value=""}};
 window.fillRtype=function(){};window.rtypePick=function(){};
 let ntWas=false;
-function ntFind(){const c=$("rcls").value,u=$("rsub").value,t=$("rtype").value;if(!(c&&u&&t))return null;const k=RCslot(t);return assess.find(a=>a.class_id===c&&a.subject_id===u&&RCslot(a.name)===k)||null}
+function ntFind(){const c=$("rcls").value,u=$("rsub").value,t=$("rtype").value;if(!(c&&u&&t))return null;const k=RCslot(t);return assess.find(a=>clIn(c,a.class_id)&&a.subject_id===u&&RCslot(a.name)===k)||null}
 window.ntTypes=function(keepT){const c=$("rcls").value,l=c?typesFor(c):[];$("rtype").innerHTML='<option value="">Exam type</option>'+l.map(t=>`<option value="${t[0]}">${t[0]}${t[0]==="A1"?" (Assessment 1)":t[0]==="A2"?" (Assessment 2)":t[0]==="A3"?" (Assessment 3)":""}</option>`).join("");if(keepT&&l.some(t=>t[0]===keepT))$("rtype").value=keepT};
 window.ntCheck=function(typing){const c=$("rcls").value,u=$("rsub").value,t=$("rtype").value,h=$("ntHint"),b=$("ntBtn"),m=$("rmax");$("ntMsg").textContent="";
  if(typing===true)return;
@@ -3712,12 +3771,12 @@ function scale(){const S=sid(),r=gradeScale.filter(x=>x.school_id===S).sort((a,b
 function build(cid){
  const cl=classes.find(c=>c.id===cid)||{},sec=SECR.test(cl.name||"")?"sec":"pri",sc=scale(),
   pt=p=>{const i=sc.findIndex(x=>p>=x.min);return(i<0?sc.length-1:i)+1},gr=p=>sc[pt(p)-1].g,
-  subIds=[...new Set(assess.filter(a=>a.class_id===cid).map(a=>a.subject_id))].filter(Boolean),
+  subIds=[...new Set(assess.filter(a=>clIn(cid,a.class_id)).map(a=>a.subject_id))].filter(Boolean),
   subs=subIds.map(id=>({id,n:(subjects.find(x=>x.id===id)||{}).name||"Subject"})).sort((a,b)=>a.n.localeCompare(b.n)),
-  L=students.filter(s=>s.class_id===cid&&s.status==="active");
+  L=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
  const rows=L.map(s=>{
   const per=subs.map(sj=>{
-   const ex=assess.filter(a=>a.class_id===cid&&a.subject_id===sj.id).map(a=>{const r=res.find(x=>x.assessment_id===a.id&&x.student_id===s.id);if(!r||r.score==null)return null;const m=+a.max_score,pc=m>0?+r.score/m*100:(r.percent!=null?+r.percent:null);return{a,score:+r.score,max:m,pc}}).filter(Boolean);
+   const ex=assess.filter(a=>clIn(cid,a.class_id)&&a.subject_id===sj.id).map(a=>{const r=res.find(x=>x.assessment_id===a.id&&x.student_id===s.id);if(!r||r.score==null)return null;const m=+a.max_score,pc=m>0?+r.score/m*100:(r.percent!=null?+r.percent:null);return{a,score:+r.score,max:m,pc}}).filter(Boolean);
    const c=RCcomp(ex.map(x=>({name:x.a.name,kind:x.a.kind,percent:x.pc}))),t=ex.length?RCtotal(c,sec):null,tp=t==null?null:Math.round(t);
    return{sj,ex,pct:tp,g:tp==null?null:gr(tp),pt:tp==null?null:pt(tp)}});
   const got=per.filter(x=>x.pt!=null);let pick=null;
@@ -3793,7 +3852,7 @@ async function addClassSubjects(d,c){try{const r=await sb.from("class_subjects")
   d.class_subjects.sort((a,b)=>String(a.subject).localeCompare(String(b.subject)))}catch(x){}}
 window.loadRC=async function(){const c=$("rccls").value,t=$("rctrm").value;show("rcpv",false);$("rcerr").textContent="";
  if(!c||!t){rcData=null;$("rclist").innerHTML=`<p class="mut">${me.role==="teacher"?"Report cards are prepared by class teachers. You are not a class teacher yet, or no term exists.":"Select a class and a term (add a term in the Classes tab first)."}</p>`;return}
- let data=null,err=null;try{const r=await sb.rpc("report_cards",{p_class:c,p_term:t});data=r.data;err=r.error}catch(x){err=x}
+ let data=null,err=null;try{let all=null;for(const i of clIds(c)){const r=await sb.rpc("report_cards",{p_class:i,p_term:t});if(r.error){err=r.error;all=null;break}if(!all)all=r.data;else if(r.data&&r.data.cards)all.cards=(all.cards||[]).concat(r.data.cards)}data=all}catch(x){err=x}
  if(err||!data){rcData=localRC(c,t);await addClassSubjects(rcData,c);$("rcerr").textContent="Marks could not be loaded"+(err&&err.message?" ("+err.message+")":"")+". You can still print the report card layout.";drawRC();return}
  await addClassSubjects(data,c);rcData=data;drawRC()};
 const dr=window.drawRC;window.drawRC=function(){dr();try{rcFit()}catch(x){}if(rcData&&!rcData.cards.length)$("rclist").innerHTML='<p class="mut">There are no learners in this class yet.</p>'};
@@ -3861,11 +3920,11 @@ window.printCards=function(w){save(w);return P0(w)};
 window.downloadCards=function(w){save(w);return D0(w)};
 
 /* views */
-async function vRC(){let q=sb.from("report_card_archive").select("id,student_name,class_name,overall,overall_grade,rank,print_count,printed_at").eq("term_id",H.term).order("class_name").order("rank",{ascending:true,nullsFirst:false}).limit(500);if(H.cls)q=q.eq("class_id",H.cls);
+async function vRC(){let q=sb.from("report_card_archive").select("id,student_name,class_name,overall,overall_grade,rank,print_count,printed_at").eq("term_id",H.term).order("class_name").order("rank",{ascending:true,nullsFirst:false}).limit(500);if(H.cls)q=q.in("class_id",H.cls.split(","));
   const{data,error}=await q;if(error)throw error;const L=(data||[]).filter(r=>okQ(r.student_name));
   if(!L.length)return none("No report cards saved for this selection yet. They are saved automatically when you print or download a report card.");
   return sec(L.length+" saved report card"+(L.length==1?"":"s"))+L.map(r=>row(E(r.student_name),`${E(r.class_name)} · ${r.overall==null?"No marks":r.overall+"%"}${r.overall_grade?" "+E(r.overall_grade):""}${r.rank?" · Position "+r.rank:""}<br>Last printed ${dt(r.printed_at)} · ${r.print_count} time${r.print_count==1?"":"s"}`,`<button ${bt} onclick="histOpen('${r.id}')">View</button>`)).join("")}
-async function vFee(){const m=stuMap(),ids=new Set(students.filter(s=>!H.cls||s.class_id===H.cls).map(s=>s.id));
+async function vFee(){const m=stuMap(),ids=new Set(students.filter(s=>!H.cls||H.cls.split(",").includes(s.class_id)).map(s=>s.id));
   const[B,P]=await Promise.all([pages(()=>sb.from("student_balances").select("student_id,billed,paid,balance").eq("term_id",H.term).order("student_id")),pages(()=>sb.from("payments").select("student_id,amount,method,receipt_no,paid_at").eq("term_id",H.term).order("id"))]);
   const b=B.filter(r=>ids.has(r.student_id)&&okQ(nm(m,r.student_id))),p=P.filter(r=>ids.has(r.student_id)&&okQ(nm(m,r.student_id))).sort((x,y)=>String(y.paid_at).localeCompare(String(x.paid_at)));
   if(!b.length&&!p.length)return none("No fee records for this selection.");
@@ -3873,15 +3932,15 @@ async function vFee(){const m=stuMap(),ids=new Set(students.filter(s=>!H.cls||s.
   return `<div class="card"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center"><div><b>${money(sum(b,"billed"))}</b><div class="mut">Billed</div></div><div><b>${money(sum(p,"amount"))}</b><div class="mut">Paid</div></div><div><b>${money(sum(b,"balance"))}</b><div class="mut">Balance</div></div></div></div>`
    +sec("Learner balances")+b.sort((x,y)=>Number(y.balance)-Number(x.balance)).map(r=>row(E(nm(m,r.student_id)),`Billed ${money(r.billed)} · Paid ${money(r.paid)}`,`<b style="color:${Number(r.balance)>0?"#c0392b":"var(--pri)"}">${Number(r.balance)>0?money(r.balance):"Cleared"}</b>`)).join("")
    +sec("Payments received")+(p.length?p.map(r=>row(E(nm(m,r.student_id)),`${E(r.receipt_no||"")} · ${E(r.method||"")} · ${dt(r.paid_at)}`,`<b>${money(r.amount)}</b>`)).join(""):none("No payments in this term."))}
-async function vPerf(){const R=await pages(()=>{let q=sb.from("results_view").select("student_id,subject_id,percent").eq("term_id",H.term).not("percent","is",null).order("id");if(H.cls)q=q.eq("class_id",H.cls);return q});
+async function vPerf(){const R=await pages(()=>{let q=sb.from("results_view").select("student_id,subject_id,percent").eq("term_id",H.term).not("percent","is",null).order("id");if(H.cls)q=q.in("class_id",H.cls.split(","));return q});
   if(!R.length)return none("No results recorded for this selection.");
   const m=stuMap(),sm={},sj={},sn=id=>(subjects.find(x=>x.id===id)||{}).name||"Subject";
   R.forEach(r=>{const a=(sm[r.student_id]=sm[r.student_id]||{});(a[r.subject_id]=a[r.subject_id]||[]).push(Number(r.percent));(sj[r.subject_id]=sj[r.subject_id]||[]).push(Number(r.percent))});
   const L=Object.keys(sm).map(id=>{const s=Object.entries(sm[id]).map(([k,v])=>[k,avg(v)]);return{id,name:nm(m,id),s,o:avg(s.map(x=>x[1]))}}).filter(x=>okQ(x.name)).sort((a,b)=>b.o-a.o);
   return `<div class="card"><b>Subject averages</b><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${Object.entries(sj).map(([k,v])=>`<span style="background:var(--bg);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;font-size:13px">${E(sn(k))} <b>${avg(v)}%</b></span>`).join("")}</div></div>`
    +sec("Learners ranked by average")+L.map((x,i)=>`<details class="st"><summary style="display:flex;gap:10px;align-items:center;cursor:pointer;list-style:none"><b style="width:26px">${i+1}</b><span style="flex:1;min-width:0"><b>${E(x.name)}</b></span><b>${x.o}%</b></summary><div class="mut" style="margin-top:8px;padding-top:8px">${x.s.sort((a,b)=>b[1]-a[1]).map(y=>`<div style="display:flex;justify-content:space-between"><span>${E(sn(y[0]))}</span><b>${y[1]}%</b></div>`).join("")}</div></details>`).join("")}
-async function vAtt(){const t=T(),m=stuMap(),ids=new Set(students.filter(s=>!H.cls||s.class_id===H.cls).map(s=>s.id));
-  const A=await pages(()=>{let q=sb.from("attendance").select("student_id,status").order("id");if(t.start_date)q=q.gte("attendance_date",t.start_date);if(t.end_date)q=q.lte("attendance_date",t.end_date);if(H.cls)q=q.eq("class_id",H.cls);return q});
+async function vAtt(){const t=T(),m=stuMap(),ids=new Set(students.filter(s=>!H.cls||H.cls.split(",").includes(s.class_id)).map(s=>s.id));
+  const A=await pages(()=>{let q=sb.from("attendance").select("student_id,status").order("id");if(t.start_date)q=q.gte("attendance_date",t.start_date);if(t.end_date)q=q.lte("attendance_date",t.end_date);if(H.cls)q=q.in("class_id",H.cls.split(","));return q});
   const g={};A.filter(r=>ids.has(r.student_id)).forEach(r=>{const o=(g[r.student_id]=g[r.student_id]||{present:0,late:0,absent:0,excused:0});if(o[r.status]!=null)o[r.status]++});
   const L=Object.keys(g).map(id=>({id,name:nm(m,id),o:g[id]})).filter(x=>okQ(x.name)).sort((a,b)=>a.name.localeCompare(b.name));
   if(!L.length)return none("No attendance recorded for this selection.");
@@ -3915,7 +3974,7 @@ window.histLoad=async function(){const av=HV.filter(v=>perm[v[2]]);if(!av.length
   let r={};try{r=await sb.from("terms").select("*").eq("school_id",sid()).order("start_date",{ascending:false,nullsFirst:false})}catch(x){}
   H.terms=r.data||[];if(!H.terms.some(t=>t.id===H.term))H.term=H.terms[0]?H.terms[0].id:"";
   $("hTerm").innerHTML=H.terms.length?H.terms.map(t=>`<option value="${t.id}">${E(t.name)} ${E(t.academic_year)}</option>`).join(""):'<option value="">No terms</option>';$("hTerm").value=H.term;
-  $("hCls").innerHTML='<option value="">All classes</option>'+classes.filter(c=>!c.school_id||c.school_id===sid()).map(c=>`<option value="${c.id}">${E(cname(c))}</option>`).join("");$("hCls").value=H.cls;H.cls=$("hCls").value;
+  $("hCls").innerHTML='<option value="">All classes</option>'+clUniq(classes.filter(c=>!c.school_id||c.school_id===sid())).map(g=>`<option value="${g.ids.join(",")}">${E(g.name)}</option>`).join("");$("hCls").value=H.cls;H.cls=$("hCls").value;
   tabsDraw();run()};
 
 /* build the screen and sidebar entry */
@@ -4210,4 +4269,31 @@ function open_(t){th=t;clearInterval(poll);
 })();
 </script>
 <!-- PARENT_CHAT_END -->
-</body></html>
+<style>.id,.sid2,.cp{cursor:pointer;-webkit-tap-highlight-color:transparent}.id::after,.sid2::after,.cp::after{content:" \29C9";font-size:.8em;opacity:.5}.id.copied,.sid2.copied,.cp.copied{color:var(--pri);font-weight:700}.id.copied::after,.sid2.copied::after,.cp.copied::after{content:" \2713";opacity:1}</style><script>
+/* tap any ID (student ID, staff ID, school code) to copy it */
+(function(){
+  function copyText(t){
+    if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(t);
+    return new Promise(function(ok,no){try{var a=document.createElement("textarea");a.value=t;a.style.cssText="position:fixed;top:0;left:0;opacity:0";document.body.appendChild(a);a.focus();a.select();var r=document.execCommand("copy");a.remove();r?ok():no()}catch(e){no(e)}});
+  }
+  document.addEventListener("click",function(e){
+    var el=e.target.closest&&e.target.closest(".id,.sid2,.cp,[data-copy]");
+    if(!el||el.closest("input,textarea,select"))return;
+    var v=(el.getAttribute("data-copy")||el.textContent||"").trim().split(/\s+/)[0].replace(/[\u29C9\u2713]/g,"");
+    if(!v)return;
+    e.stopPropagation();e.preventDefault();
+    copyText(v).then(function(){
+      el.classList.add("copied");setTimeout(function(){el.classList.remove("copied")},1500);
+      if(typeof toast==="function")toast("Copied "+v);
+    },function(){if(typeof toast==="function")toast("Could not copy. Press and hold the ID to copy it.")});
+  },true);
+})();
+</script><script>
+/* write guards: academic settings, timetable and fee structure */
+(function(){
+  var G={terms:["termForm","termSave","delTerm"],classes:["clForm","clSaveNew","clStreamForm","clSaveStream","clEditGroup","clSaveGroup","clDelGroup","stDelClass","strmEdit"],subjects:["subForm","subSave"],exam:["examForm","examSave","stDelExam"],grades:["grAdd","grDel","grSave","grReset"]};
+  Object.keys(G).forEach(function(a){G[a].forEach(function(n){var f=window[n];if(typeof f!=="function")return;window[n]=function(){if(!AW(a)){toast("You can only view this. Ask an administrator to change it.");return}return f.apply(this,arguments)}})});
+  ["ttCell","ttSave","ttClear","ttPerForm","ttPerSave","ttPerDel"].forEach(function(n){var f=window[n];if(typeof f!=="function")return;window[n]=function(){if(!perm.tt){toast("Only administrators and the Director of Studies can change the timetable.");return}return f.apply(this,arguments)}});
+  ["fxNew","fxSaveItems","fxDrop"].forEach(function(n){var f=window[n];if(typeof f!=="function")return;window[n]=function(){if(!perm.fs){toast("Only the Bursar, Accountant and administrators can change the fee structure.");return}return f.apply(this,arguments)}});
+})();
+</script></body></html>
