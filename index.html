@@ -1,6 +1,36 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <!--
+NOTE FOR CLAUDE OR ANY AI ASSISTANT: REMOVED FEATURES LOG (review later: keep or drop the database too)
+Update 2026-10-22: the dormant code pcInit and pcLoad was deleted, and the Parent Hub function school_parent_contacts was dropped. PHB and PHK stay because staff messages and parent lookups use them. Student promotion (manual and automatic) was fully removed on 2026-10-22: the app code, the Help entry, the Activity room feed, the table student_promotions and the function promote_students. Learners no longer move up a class by themselves. Staff attendance: sub-page removed; the table staff_attendance is kept because staff attendance will be rebuilt.
+Entry 2026-10-22. The owner removed two sub-tabs from the Students page. FRONT END ONLY. Nothing was dropped in Supabase.
+1. "Promotion" sub-tab (manual promote, demote, leave school, with the "Recent changes" list).
+   Removed: the SUBS entry, the promoBox HTML block and its text in the Help section.
+   Still in the file, now dormant, safe to delete later: loadPromo, drawPromo, pmRun, pmCount and the promoBox CSS.
+   STILL ACTIVE, do not delete: automatic yearly promotion (pmAutoRun). It runs by itself when an admin loads students.
+   It uses the Supabase table public.student_promotions and the function promote_students. The Activity room and Home
+   feed also read student_promotions. So that table must stay while automatic promotion stays.
+2. "Parent contacts" sub-tab (read-only list of parents who linked children in Parent Hub), also removed from the side menu.
+   Removed: the SUBS entry, the side menu entry and the pcBox HTML block.
+   Still in the file, now dormant, safe to delete later: pcInit, pcLoad, PHB and PHK constants (Parent Hub project URL and key).
+   Database: this tab had NO table in this app. It called the function school_parent_contacts on the separate Parent Hub
+   Supabase project. Nothing to drop here. Any cleanup of that function belongs to the Parent Hub project.
+   The separate top-level "pc" tab (parent communication) is NOT part of this removal and was left as it is.
+Review later with the owner: (a) whether to bring either tab back; (b) if both stay removed, whether to also remove the
+dormant code; (c) student_promotions and promote_students may be dropped ONLY if automatic promotion is also removed.
+Do not drop any table until the owner confirms in that conversation.
+-->
+<!--
+NOTE FOR CLAUDE OR ANY AI ASSISTANT: SUBSCRIPTION PLANS AND MODULE ROADMAP
+The platform admin (Schools tab) registers schools under a plan: Starter, Standard or Premium.
+Plans and every module are defined in the script tag with id module-roadmap (JSON) and in the
+JS constant PLAN_MODS near the end of this file. Each module has status "built" or "development".
+When the owner asks "which module should we build next?", list every module whose status is
+"development" (also shown in the app: Schools tab, Plans and modules card). When you build one,
+change its status to "built" in BOTH places. Do not invent modules not listed there.
+Optional database step: alter table public.schools add column if not exists plan text default 'starter';
+-->
+<!--
 NOTE FOR CLAUDE OR ANY AI ASSISTANT OPENING THIS FILE: BOARDING DATABASE SETUP
 
 This app (My School) keeps its data in Supabase. The Boarding module (dormitories, hostels,
@@ -323,7 +353,7 @@ img.sav{object-position:50% 25%}
 #homeBox .hero .hrow{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;margin:4px 0 0!important;color:#fff!important;border-radius:0!important;flex-direction:column;justify-content:center;gap:2px;width:100%}
 #homeBox .hero .hrow p{color:#fff!important;opacity:.9;font-size:13px;text-align:center;margin:0}
 #homeBox .hero .hrow .clock{color:#fff!important;font-size:22px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;width:100%}
-#homeBox .hero small#greet{font-size:16px;font-weight:600;opacity:.95}
+#homeBox .hero small.gr{font-size:16px;font-weight:600;opacity:.95}
 #homeBox .hero .hterm{font-size:13px;font-weight:600;opacity:.95;margin:2px 0 0;letter-spacing:.02em}
 #homeBox .stats{grid-template-columns:repeat(3,1fr)}
 #homeBox .stats div b{font-size:24px}
@@ -370,6 +400,23 @@ button[onclick],a[onclick]{-webkit-touch-callout:none;-webkit-user-select:none;u
 .ar2 .sav,.ar2 .av{flex:none}.ar2 .an{flex:1;min-width:0}.ar2 .an b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ar2 .an .id{font-size:12px}
 .asave{position:sticky;bottom:12px;z-index:5;display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:10px 10px 10px 16px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:6px}
 body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weight:600;color:var(--mut)}.asave button{width:auto;flex:none;margin:0;padding:11px 20px;border-radius:12px}
+
+/* attendance: class picker (admins / academics) */
+.acs{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:10px 14px;margin:0 0 12px}
+.acs b{font-size:14px}.acs small{display:block;color:var(--mut);font-size:12px;margin-top:1px}.acs .bar{flex:none;width:84px;height:7px;border-radius:99px;background:var(--bd);overflow:hidden;margin-left:auto}.acs .bar i{display:block;height:100%;background:#1a9d5a;border-radius:99px}
+.acl{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card)!important;color:var(--tx)!important;border:1px solid var(--bd)!important;border-left:5px solid #d98e04!important;border-radius:16px!important;padding:13px 14px!important;margin:0 0 10px!important;cursor:pointer}
+.acl.done{border-left-color:#1a9d5a!important;background:color-mix(in srgb,#1a9d5a 7%,var(--card))!important}
+.acl:active{transform:scale(.985)}
+.acl .ci{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:17px;font-weight:800;background:color-mix(in srgb,#d98e04 16%,transparent);color:#b87703}
+.acl.done .ci{background:#1a9d5a;color:#fff}
+.acl .ct{flex:1;min-width:0}.acl .ct b{display:block;font-size:16px;font-weight:700}.acl .ct small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px;font-weight:500}
+.acl .cs{flex:none;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,#d98e04 16%,transparent);color:#b87703}
+.acl.done .cs{background:color-mix(in srgb,#1a9d5a 16%,transparent);color:#14804a}
+.acl .go{flex:none;color:var(--mut);font-size:20px;line-height:1}
+.abk{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.abk button{width:auto;flex:none;margin:0;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;background:transparent;color:var(--pri);border:1.5px solid var(--pri)}
+.abk b{font-size:17px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.atk.ro{margin-top:0}
 
 /* attendance: results list, calendar, home tiles */
 .attpick{padding:0!important;border:0;overflow:visible}
@@ -421,6 +468,22 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
 #feeFab{touch-action:none;-webkit-user-select:none;user-select:none;position:fixed;right:16px;bottom:84px;z-index:10;width:58px;height:58px;margin:0;padding:0;border-radius:50%;background:var(--pri);color:#fff;border:0;display:grid;place-items:center;box-shadow:0 8px 20px rgba(0,0,0,.25)}
 
 /* ACADEMIC + BUTTON LISTS */
+.cgrid{grid-auto-flow:row dense}
+.cgc.open{border-color:color-mix(in srgb,var(--pri) 55%,var(--bd))}
+.cgs{display:none;grid-column:1/-1;border:1px solid var(--bd);border-radius:16px;background:var(--card);overflow:hidden}
+.cgc.open+.cgs{display:block}
+.cgs .clsi{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;cursor:pointer}.cgs .clsi+.clsi{border-top:1px solid var(--bd)}
+.cgs .clsn{text-align:right;white-space:nowrap}.cgs .clsn b{font-size:18px}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.cgc{border:1px solid var(--bd);border-radius:18px;padding:14px;background:var(--card);cursor:pointer;min-width:0}
+.cgc:active{background:color-mix(in srgb,var(--pri) 8%,var(--card))}
+.cgc b{display:block;font-size:17px;line-height:1.2}
+.cgc small{display:block;color:var(--mut);font-size:13px;margin-top:2px}
+.cgc .cn{font-size:28px;font-weight:800;line-height:1.1;margin-top:10px}
+.cgc.act{background:color-mix(in srgb,var(--pri) 7%,var(--card));border-color:color-mix(in srgb,var(--pri) 55%,var(--bd))}
+.cgc.act b{color:var(--pri)}
+.cgp{border-top:2px solid var(--bd);padding-top:12px;margin-bottom:12px}
+.cgh{font-weight:800;font-size:17px;margin:0 2px 10px}
 .lpi{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--bd);border-radius:16px;margin-bottom:10px;background:var(--card);cursor:pointer}
 .lpi:active{background:color-mix(in srgb,var(--pri) 8%,var(--card))}
 .lpi .lm{flex:1;min-width:0}.lpi .lm b{display:block;font-size:16px}.lpi .lm small{display:block;color:var(--mut);font-size:13px;margin-top:2px}.lpi .lc{color:var(--mut);font-size:22px}
@@ -513,6 +576,34 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
 #trashBox .mkhd b,#listBox .mkhd b,#linkBox .mkhd b{display:block;font-size:17px}
 #trashBox .mkhd small,#listBox .mkhd small,#linkBox .mkhd small{display:block;opacity:.9;font-size:12px;margin-top:2px}
 #trashBox .mkpad,#linkBox .mkpad{padding:14px 16px}#listBox .mkpad{padding:12px 4px}#listBox .mkpad>input{margin-left:12px;margin-right:12px;width:calc(100% - 24px)}
+</style>
+<style id="heroTabs">
+#homeBox #hero.hero{display:block!important;text-align:left!important;padding:14px 14px 12px!important}
+#homeBox #hero .hl{display:flex;align-items:baseline;gap:6px;white-space:nowrap;overflow:hidden;font-size:15px;line-height:1.25;margin:0 0 10px;text-align:left}
+#homeBox #hero .hl small.gr{display:inline;flex:none;font-size:1em!important;font-weight:600;opacity:1!important;color:#ffd84a!important;margin:0}
+#homeBox #hero .hl h2{display:inline;width:auto!important;flex:0 1 auto;margin:0!important;font-size:1em!important;font-weight:700;line-height:1.25;text-align:left!important;overflow:hidden;text-overflow:clip;white-space:nowrap;color:#fff}
+#homeBox #hero .htabs{display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:6px}
+#homeBox #hero .htab{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:8px 4px;text-align:center;min-width:0;overflow:hidden}
+#homeBox #hero .htab b{display:block;font-size:14px;font-weight:700;line-height:1.2;white-space:nowrap;color:#fff;font-variant-numeric:tabular-nums}
+#homeBox #hero .htab span{display:block;font-size:10px;line-height:1.3;margin-top:2px;white-space:nowrap;color:#fff;opacity:.8}
+#homeBox #hero .htab.t4 b{font-size:13px}
+#homeBox #hero .hl{display:block}
+#homeBox #hero .htrack{display:inline-flex;white-space:nowrap}
+#homeBox #hero .hin{display:inline-flex;align-items:baseline;gap:6px;flex:none}
+#homeBox #hero .hin h2{flex:none!important;overflow:visible!important}
+#homeBox #hero .hl.marq .hin{padding-right:40px}
+#homeBox #hero .hl.marq .htrack{animation:heroscroll 14s linear infinite;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+@keyframes heroscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media(prefers-reduced-motion:reduce){#homeBox #hero .hl.marq .htrack{animation:none}}
+#shBox .clg{display:flex;flex-direction:column;gap:10px}
+#shBox .clrow{border:1px solid var(--bd);border-radius:16px;background:var(--bg);overflow:hidden}
+#shBox .clmain{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+#shBox .clmain .nm{flex:1;min-width:0}#shBox .clmain .nm b{display:block;font-size:16px}#shBox .clmain .nm small{color:var(--mut)}
+#shBox .clmain .tot{text-align:right;font-size:22px;font-weight:700;line-height:1.1}#shBox .clmain .tot small{display:block;font-size:12px;font-weight:400;color:var(--mut)}
+#shBox .clchev{font-size:24px;line-height:1;color:var(--mut);transition:transform .2s}#shBox .clrow.open .clchev{transform:rotate(90deg)}
+#shBox .clstr{display:none;border-top:1px solid var(--bd);background:var(--card)}#shBox .clrow.open .clstr{display:block}
+#shBox .clsi{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px 10px 22px;cursor:pointer}#shBox .clsi+.clsi{border-top:1px solid var(--bd)}
+#shBox .clsi .clsn{text-align:right;white-space:nowrap}#shBox .clsi .clsn b{font-size:18px}
 </style>
 </head><body>
 <button id="pwaInstallBtn" title="Install App" style="display:none;position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:999;width:52px;height:52px;border-radius:50%;background:#16274A;color:#fff;border:none;box-shadow:0 6px 18px rgba(22,39,74,.35);align-items:center;justify-content:center;cursor:pointer;">
@@ -692,8 +783,10 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <input id="sname" placeholder="School name">
     <div class="row"><input id="sdist" placeholder="District">
     <select id="slevel"><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="nursery">Nursery</option><option value="mixed">Mixed</option></select></div>
+    <div id="planPick"></div>
     <button onclick="addSchool()">Create school</button>
     <div id="slist" class="mut"></div>
+    <div id="planCat"></div>
   </div>
 
   <div id="anBox" class="hide"><div id="anOut"></div></div>
@@ -761,18 +854,6 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
   <div data-t="stu" data-s="list" id="listBox" class="card hide"><input id="q" placeholder="Search name, ID or class" oninput="render()"><div id="list"></div></div>
   <div data-t="stu" data-s="trash" id="trashBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128465;</div><div><b>Trash</b><small>Deleted students are kept here. Restore brings a student back with all their records</small></div></div><div class="mkpad"><div id="trashList"></div></div></div>
 
-  <div data-t="stu" data-s="promo" id="promoBox" class="card hide">
-    <div class="mkhd"><div class="ic">&#127891;</div><div><b>Promotion</b><small>Everyone moves up automatically each new year. Use this for exceptions.</small></div></div>
-    <div class="mkrow">
-      <label class="mkf"><span>From class</span><select id="pmFrom" onchange="pmOff.clear();drawPromo(1)"></select></label>
-      <label class="mkf"><span>Action</span><select id="pmAct" onchange="pmOff.clear();drawPromo(1)"><option value="promote">Promote (move up)</option><option value="demote">Demote (move down)</option><option value="graduate">Leave school</option></select></label>
-      <label class="mkf"><span>To class</span><select id="pmTo"></select></label>
-    </div>
-    <div id="pmAutoMsg" class="mkhint"></div>
-    <div class="mkhint">For exceptions only: promote a learner early, demote one, or mark learners as left school. Untick a learner to leave them where they are.</div>
-    <div id="pmList" class="mkbody"></div>
-    <button id="pmGo" class="mkbtn" onclick="pmRun()">Promote</button><div id="pmMsg" class="err"></div>
-    <h3 class="mksec">Recent changes</h3><div id="pmHist" class="mkbody"></div></div>
   <div data-t="stu" data-s="transfer" id="transferBox" class="card hide">
     <div class="mkhd"><div class="ic">&#128260;</div><div><b>Transfers</b><small>Bring a learner in from another school</small></div></div>
     <div class="mkrow">
@@ -783,9 +864,6 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div class="mkhint">The student opens Transfer in Digital Students and creates a one-time code (OTP). Enter the student number and that code here before it expires. After the transfer, the old school keeps the history as inactive.</div>
     <div id="trRes" class="mkbody"></div>
     <h3 class="mksec">Transfer history</h3><div id="trHist" class="mkbody"></div></div>
-  <div data-t="stu" data-s="pc" id="pcBox" class="card mkc hide"><div class="mkhd"><div class="ic">&#128222;</div><div><b>Parent contacts</b><small>From Parent Hub. Read only.</small></div></div><div class="mkpad">
-    <p class="mut">Parents who linked their child to this school in Parent Hub. Enter the school key from the platform owner once; it is kept on this device only.</p>
-    <input id="pcKey" type="password" placeholder="School key" autocomplete="off"><button onclick="pcLoad()">Load parent contacts</button><div id="pcErr" class="err"></div><div id="pcList"></div></div></div>
 
   <div id="portal" class="hide">
     <div id="pnone" class="card hide"><h3>No learner linked yet</h3><p class="mut">No student is linked to your account yet. Give the school office the email you signed up with, then refresh this page.</p></div>
@@ -819,19 +897,16 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
         <button type="button" class="attpick" aria-label="Choose another day" onclick="attCal()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></button><input id="attdate" type="hidden"></div>
     </div>
     <div data-t="att" data-s="stu">
-      <div class="attrow"><select id="attcls" class="attcls" onchange="renderAtt()"></select><button type="button" id="attView" class="hide" onclick="attOpenRes()">View saved list</button></div>
-      <div id="attMark">
+      <input id="attcls" type="hidden">
+      <div id="attPick"></div>
+      <div id="attBack" class="hide"></div>
+      <div id="attMark" class="hide">
         <div id="asum" class="hide"></div>
         <div id="alist"></div>
         <div class="asave"><div id="aprog" class="aprog"></div><button onclick="saveAtt()">Save attendance</button></div>
         <div id="aerr2" class="err"></div>
       </div>
       <div id="attRes" class="hide"></div>
-    </div>
-    <div data-t="att" data-s="staff" id="staffAtt" class="hide">
-      <div id="ssum" class="asum"></div>
-      <div id="stalist"></div>
-      <div class="asave"><div id="sprog" class="aprog"></div><button onclick="saveStaffAtt()">Save attendance</button></div>
     </div>
   </div>
 
@@ -957,12 +1032,12 @@ async function addSchool(){
 }
 let trashed=[],regBlob=null,edBlob=null;
 async function loadStudents(){
-  const{data}=await sb.from("students").select("*").order("created_at",{ascending:false});const all=data||[];students=all.filter(x=>!x.deleted_at);trashed=all.filter(x=>x.deleted_at);render();if(perm.ad)pmAutoRun();
+  const{data}=await sb.from("students").select("*").order("created_at",{ascending:false});const all=data||[];students=all.filter(x=>!x.deleted_at);trashed=all.filter(x=>x.deleted_at);render();
 }
 const sCls=s=>{const c=classes.find(c=>c.id===s.class_id);return c?cname(c):(s.class_level||"")};
 const sIni=s=>((s.first_name||"?")[0]+(s.last_name||"")[0]).toUpperCase();
 const stuAv=(s,lg)=>s.photo_url?`<img class="sav ${lg?"lg":""}" src="${esc(s.photo_url)}" alt="">`:`<span class="sav ${lg?"lg":""}">${esc(sIni(s))}</span>`;
-function render(){renderHome();stuInit();if(typeof drawPromo==="function")drawPromo();
+function render(){renderHome();stuInit();
   const q=($("q").value||"").toLowerCase();
   const rows=students.filter(s=>(s.first_name+" "+s.last_name+" "+s.national_student_id+" "+sCls(s)).toLowerCase().includes(q)).map(s=>`<tr data-id="${s.id}"><td>${stuAv(s)}</td><td><b>${esc(s.first_name)} ${esc(s.last_name)}</b><div class="sid2">${esc(s.national_student_id)}${s.status!=="active"?' · <b style="color:#b45309">Inactive · transferred</b>':""}</div></td><td>${esc(sCls(s))}</td></tr>`).join("");
   $("list").innerHTML=rows?`<div class="tw"><table class="dt"><thead><tr><th></th><th>Name</th><th>Class</th></tr></thead><tbody>${rows}</tbody></table></div><p class="mut" style="margin:8px 4px 0">Tap a student to open. Press and hold for edit and delete.</p>`:'<p class="mut">No students yet.</p>';
@@ -1156,15 +1231,17 @@ async function addStudent(){
   $("serr").textContent=note;regBlob=null;$("sPh").innerHTML='<svg class="ic" style="width:44px;height:44px"><use href="#i-user"/></svg>';
   ["fn","gn","gp","dd","dm","dy","gRel","gRelO"].forEach(i=>$(i).value="");$("gRelO").style.display="none";loadStudents()
 }
-const SUBS={stu:[["list","Students"],["add","Register"],["pc","Parent contacts","ad"],["promo","Promotion","ad"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"],["staff","Staff","ad"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
+const SUBS={stu:[["list","Students"],["add","Register"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],adm:[["list","Applications"],["new","New"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
 let subs={};
 function subList(){return(SUBS[tab]||[]).filter(x=>!x[2]||(x[2]==="sa"?(!!me&&me.role==="super_admin"):x[2]==="st"?perm.st:perm.ad))}
 function curSub(){const l=subList();return l.length?(l.find(x=>x[0]===subs[tab])||l[0])[0]:null}
 function applySub(){const l=subList(),c=curSub();document.querySelectorAll("[data-s]").forEach(e=>e.classList.toggle("sh",e.dataset.t!==tab||e.dataset.s!==c));
   $("subbar").innerHTML=l.length>1?l.map(x=>`<button class="${x[0]===c?"on":""}" onclick="setSub('${x[0]}')">${x[1]}</button>`).join(""):""}
 function setSub(x){subs[tab]=x;applySub();if(tab==="fee")drawFeeX();if(tab==="an")loadAn()}
-function tick(){const d=new Date(),c=$("clock");if(c){c.style.display=cfg.clock?"":"none";c.textContent=d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!cfg.h24})}
-  const g=$("greet");if(g){const hr=d.getHours();g.textContent=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening"}}
+function ordN(n){const v=n%100;return n+(v>=11&&v<=13?"th":({1:"st",2:"nd",3:"rd"}[n%10]||"th"))}
+function tick(){const d=new Date(),c=$("clock");if(c){const tt=c.closest?c.closest(".htab"):null;if(tt)tt.style.display=cfg.clock?"":"none";c.textContent=d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!cfg.h24})}
+  const hd=$("hday");if(hd){hd.textContent=ordN(d.getDate());$("hwd").textContent=d.toLocaleDateString(undefined,{weekday:"long"});$("hmon").textContent=d.toLocaleDateString(undefined,{month:"long"});$("hyr").textContent=d.getFullYear()}
+  const hr0=d.getHours(),gt=hr0<12?"Good morning":hr0<17?"Good afternoon":"Good evening";document.querySelectorAll("#hero small.gr").forEach(g=>{if(g.textContent!==gt)g.textContent=gt})}
 setInterval(tick,1000);setInterval(()=>{if(tab==="home")drawActivity()},30000);
 
 
@@ -1225,7 +1302,7 @@ let sWarm=false,sFees=[],sAssess=[],sApps=[];
 async function searchWarm(){if(sWarm||!me)return;sWarm=true;try{const q=[sb.from("fee_structures").select("id,name,amount,school_id"),sb.from("assessments").select("id,name,school_id")];if(perm.ad)q.push(sb.from("admission_applications").select("id,application_no,first_name,last_name,status,school_id"));const r=await Promise.all(q);sFees=r[0].data||[];sAssess=r[1].data||[];sApps=(r[2]&&r[2].data)||[]}catch(e){}}
 function gsearch(){searchWarm();const v=$("gs").value.trim().toLowerCase(),r=$("gres");closePops("gres");if(!v){r.classList.add("hide");return}
   const has=(...a)=>a.join(" ").toLowerCase().includes(v),S=sid(),mine=x=>!x.school_id||x.school_id===S,
-  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","pc","Parent contacts"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>!canTab(x[0])?false:(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
+  M=[["home","","Dashboard"],["stu","","Students"],["stu","add","Register student"],["stu","trash","Trash"],["att","","Attendance"],["cls","","Classes"],["tea","","Teachers and staff"],["set","","Settings"]].concat(perm.res?[["res","","Results"],["rc","","Report cards"]]:[],perm.fee?[["fee","","Fees"]]:[],perm.ad?[["adm","","Admissions"],["ss","terms","School settings: Terms"],["ss","subjects","School settings: Subjects"]]:[]).filter(x=>!canTab(x[0])?false:(x[1]==="add"||x[1]==="link"||x[1]==="trash")&&!perm.ad?false:has(x[2])),
   St=students.filter(x=>has(x.first_name,x.last_name,x.national_student_id,x.guardian_name,x.guardian_phone,sCls(x))).slice(0,6),
   Tr=perm.ad?trashed.filter(x=>has(x.first_name,x.last_name,x.national_student_id)).slice(0,3):[],
   Cl=clUniq(classes.filter(c=>mine(c)&&has(c.name,c.academic_year))).map(g=>g.rows[0]).slice(0,4),
@@ -1250,6 +1327,7 @@ function gsearch(){searchWarm();const v=$("gs").value.trim().toLowerCase(),r=$("
    ||'<div class="gh">No results</div>';
   r.classList.remove("hide")}
 function gGo(t,sub){$("gs").value="";closePops();if(t==="ss"){setTab("set");setView("acad",sub);return}setTab(t);if(sub)setSub(sub)}
+(function(){const _t=()=>document.body.classList.toggle("instu",typeof tab!=="undefined"&&tab==="stu");setInterval(_t,300)})();
 function gStu(id){$("gs").value="";closePops();setTab("stu");setSub("list");stuView(id)}
 function bellDraw(open){const mine=me&&me.id,seen=+(()=>{try{return localStorage.getItem("dsr_seen")}catch(e){return 0}})()||0,
   un=acts.filter(a=>new Date(a.created_at).getTime()>seen&&a.user_id!==mine).length,b=$("bdg");if(!b)return;
@@ -1281,11 +1359,11 @@ function drawActivity(){bellDraw();const e=$("act");if(!e)return;const S=$("sch"
     today=d.toDateString()===new Date().toDateString();
     return `<div class="ar">${actPics[x.uid]?`<img class="av" src="${esc(actPics[x.uid])}" alt="" onerror="this.outerHTML='<span class=&quot;av&quot;>${esc(ini)}</span>'">`:`<span class="av">${esc(ini)}</span>`}<div class="at"><b>${esc(nm)}</b> ${txt}<div class="tm">${ago(x.t)} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})}${today?"":" · "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})}</div></div></div>`}).join("")}
 function drawLogo(){const e=$("hlogo");if(!e)return;const u=schoolLogo();if(u){if(e.dataset.u!==u){e.dataset.u=u;e.innerHTML=`<img src="${esc(u)}" alt="School logo">`}}else if(e.dataset.u){e.dataset.u="";e.innerHTML='<svg class="ic"><use href="#i-logo"/></svg>'}}
-function fitHero(){const h=document.querySelector('#hero h2');if(!h)return;h.style.whiteSpace='nowrap';let f=17;h.style.fontSize=f+'px';while(h.scrollWidth>h.clientWidth+1&&f>11){f--;h.style.fontSize=f+'px'}if(h.scrollWidth>h.clientWidth+1)h.style.whiteSpace='normal'}
-window.addEventListener('resize',()=>{try{fitHero()}catch(e){}});
+function fitHero(){const h=document.getElementById('hline'),t=document.getElementById('htrack');if(!h||!t)return;h.classList.remove('marq');t.style.animationDuration='';t.querySelectorAll('.hin.dup').forEach(x=>x.remove());const a=t.querySelector('.hin');if(!a)return;h.style.fontSize='15px';if(a.scrollWidth>h.clientWidth+1){const c=a.cloneNode(true);c.classList.add('dup');c.setAttribute('aria-hidden','true');c.querySelectorAll('[id]').forEach(x=>x.removeAttribute('id'));t.appendChild(c);h.classList.add('marq');t.style.animationDuration=Math.max(8,Math.round(a.scrollWidth/40))+'s'}}
+let _hw=0;window.addEventListener('resize',()=>{try{const h=document.getElementById('hline'),w=h?h.clientWidth:0;if(w&&w===_hw)return;_hw=w;fitHero()}catch(e){}});
 
 let homeAtt=null,homeAttKey="",homeAttBusy=false;
-function drawHeroTerm(){const e=$("hterm");if(!e)return;const S=(typeof sid==="function")?sid():null,ts=terms.filter(t=>!S||t.school_id===S),c=ts.length?curTermOf(ts):null;e.textContent=c?(c.name+" "+c.academic_year):""}
+function drawHeroTerm(){const e=$("hterm");if(!e)return;const S=(typeof sid==="function")?sid():null,ts=terms.filter(t=>!S||t.school_id===S),c=ts.length?curTermOf(ts):null;e.textContent=c?c.name:"";const y=$("hterm2");if(y)y.textContent=c?(c.academic_year||""):""}
 async function loadHomeAtt(){if(homeAttBusy||typeof sb==="undefined"||!sb)return;const d=todayIso(),S=$("sch")&&$("sch").value,key=d+"|"+S+"|"+students.length+"|"+staff.length;if(key===homeAttKey)return;homeAttKey=key;homeAttBusy=true;
   try{const ids=students.filter(x=>(!S||x.school_id===S)&&x.status==="active").map(x=>x.id);let p=0,a=0;
     if(ids.length){const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",ids);(data||[]).forEach(r=>{const s=String(r.status||"").toLowerCase();if(s==="present"||s==="late")p++;else if(s==="absent")a++})}
@@ -1317,14 +1395,14 @@ document.addEventListener("contextmenu",e=>{if(lpTarget(e)||(e.target.closest&&e
 document.addEventListener("click",e=>{if(Date.now()<lpRowSw&&e.target.closest&&e.target.closest(".st[data-lpr]")){e.preventDefault();e.stopImmediatePropagation();return}const b=lpTarget(e);if(!b||b===lpDone)return;e.preventDefault();e.stopImmediatePropagation();
   if(Date.now()<lpSwallow)return;const t=(b.textContent||"").trim().toLowerCase();toast("Press and hold to "+(t||"confirm"))},true);
 function renderHome(){drawLogo();const h=$("hero");if(h){const hr=new Date().getHours(),g=hr<12?"Good morning":hr<17?"Good afternoon":"Good evening",o=$("sch"),sn=o&&o.selectedOptions&&o.selectedOptions[0]?o.selectedOptions[0].text:"";
-  h.innerHTML=`<small id="greet">${g}</small><h2>${schoolLogo()?`<img src="${esc(schoolLogo())}" alt="" style="width:20px;height:20px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px">`:""}${esc(sn||(SCHI&&SCHI.name)||"Welcome")}</h2><div id="hterm" class="hterm"></div><div class="hrow"><p>${new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p><div id="clock" class="clock"></div></div>`;tick();fitHero();drawHeroTerm()}
+  h.innerHTML=`<div id="hline" class="hl"><div id="htrack" class="htrack"><div class="hin"><small id="greet" class="gr">${g}</small><h2>${esc(sn||(SCHI&&SCHI.name)||"Welcome")}</h2></div></div></div><div class="htabs"><div class="htab"><b id="hterm">Term</b><span id="hterm2"></span></div><div class="htab"><b id="hday"></b><span id="hwd"></span></div><div class="htab"><b id="hmon"></b><span id="hyr"></span></div><div class="htab t4"><b id="clock" class="clock"></b><span>Time</span></div></div>`;tick();fitHero();drawHeroTerm()}
   const k=(n,l,i,c)=>`<div class="kpi"><span class="chip ${c}"><svg class="ic"><use href="#i-${i}"/></svg></span><div><b>${n}</b><span class="l">${l}</span></div></div>`;
   const e=$("stats");if(e){const A=homeAtt||{};e.innerHTML=`<div><b>${students.length}</b><span>Students</span></div><div><b>${clUniq(classes).length}</b><span>Classes</span></div><div><b>${staff.length}</b><span>Staff</span></div><div class="clk" onclick="homeAttList('present')"><b>${A.p==null?"–":A.p}</b><span>Learners present</span></div><div class="clk" onclick="homeAttList('absent')"><b>${A.a==null?"–":A.a}</b><span>Learners absent</span></div><div><b>${A.sp==null?"–":A.sp}</b><span>Staff present</span></div>`}
   loadHomeAtt();
   const r=$("recent");if(r)r.innerHTML=students.length?`<div class="tw"><table class="dt"><tbody>${students.slice(0,5).map(x=>`<tr><td class="id">${esc(x.national_student_id)}</td><td><b>${esc(x.first_name)} ${esc(x.last_name)}</b></td><td>${esc(classes.find(c=>c.id===x.class_id)?.name||x.class_level||"")}</td></tr>`).join("")}</tbody></table></div>`:'<p class="mut">No registrations yet.</p>'}
 function closeSide(){$("side").classList.remove("open");$("ov").classList.remove("on")}
 function openSide(){$("side").classList.add("open");$("ov").classList.add("on")}
-function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="adm")loadAdm();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadPromo();loadTr()}if(t==="ann")loadAnn();if(t==="lrn")loadLrn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
+function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="adm")loadAdm();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadTr()}if(t==="ann")loadAnn();if(t==="lrn")loadLrn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
 /* ACCESS MATRIX: every department and every "I am". One place decides what each person sees and may change.
    tabs = what they can open (null = everything). Flags: res = write Results and Report cards, tt = write Timetable, fee = open Fees,
    fs = change fee structure, st = Attendance and Digital learning, acr = see Academic settings, acadW = Academic settings pages they may CHANGE.
@@ -1383,7 +1461,7 @@ function applyTab(){
   
   document.querySelectorAll("#side button[data-t],#bnav button[data-t]").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));applySub();renderHome();drawActivity();show("actBox",!!perm.ad&&cfg.feed);show("setBox",tab==="set");show("ssBox",false);show("tabSS",false);show("bFee",perm.fee);
   show("stuBox",perm.ad&&tab==="stu");show("listBox",perm.view&&tab==="stu");show("trashBox",perm.ad&&tab==="stu");
-  show("classBox",perm.view&&tab==="cls");show("attBox",!!perm.st&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("promoBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("staffAtt",perm.ad);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
+  show("classBox",perm.view&&tab==="cls");show("attBox",!!perm.st&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("teachBox",perm.view&&tab==="tea");show("admBox",perm.ad&&tab==="adm");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);show("tabAdm",perm.ad);
   show("adminCls",perm.ad);show("adminTea",perm.st);ALLTABS.forEach(t=>{if(!canTab(t))document.querySelectorAll('[onclick*="setTab(\''+t+'\')"],[data-t="'+t+'"]:is(button,a)').forEach(e=>e.classList.add("hide"))});staffRoleOpts();applyAccess();
 }
 /* AUTH_START: sign in and create account with the school ID given by the platform admin. Layout untouched: this is a full-screen overlay only. */
@@ -1738,10 +1816,7 @@ function renderOrg(){try{staffSubOpts()}catch(e){}setTimeout(()=>{if(tab==="set"
   const sl=$("sslist");if(sl)sl.innerHTML=ss.map(x=>`<div class="st" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b class="id">${esc(x.code)}</b> ${esc(x.name)}</span><a href="#" onclick="delSubject('${x.id}');return false">Remove</a></div>`).join("")||'<p class="mut">No subjects yet.</p>';
   $("cid").innerHTML='<option value="">No class yet</option>'+opt(cs,cname);
   $("acid").innerHTML='<option value="">Class applied for (optional)</option>'+opt(cs,cname);
-  $("clist").innerHTML=cs.map(c=>{
-    const n=students.filter(s=>s.class_id===c.id).length,
-      as=assigns.filter(a=>a.class_id===c.id).map(a=>`${esc(ss.find(x=>x.id===a.subject_id)?.name)} – ${esc(nm(a.teacher_id))}`).join("<br>");
-    return `<div class="st"><b>${esc(cname(c))}</b> · ${c.academic_year}<div class="mut">Class teacher: ${esc(nm(c.class_teacher_id))} · ${n} students</div><div class="mut">${as}</div></div>`}).join("")||'<p class="mut">No classes yet.</p>';
+  $("clist").innerHTML=shClsHtml(S,students.filter(x=>x.school_id===S));
   $("tlist").innerHTML=staffGroups(tt.filter(t=>!isOwnerAcct(t)),(staffContacts||[]).filter(x=>x.school_id===S));
 }
 
@@ -1785,65 +1860,112 @@ async function loadStaffMatch(){const b=$("pendMatch");if(!b)return;b.innerHTML=
   b.innerHTML='<p style="margin:12px 0 4px"><b>We found your staff record</b></p><p class="mut" style="margin:0 0 6px">Your school added you before you had an account. If this is you, connect it.</p>'+data.map(x=>`<div class="st"><b>${esc(x.full_name)}</b> · Teacher<div class="mut">Subjects: ${esc((x.subjects||[]).join(", "))}</div><div class="id">${esc(x.staff_id)}</div><button onclick="claimStaff('${x.id}')">Connect my account</button></div>`).join("")}
 async function claimStaff(id){if(!confirm("Connect your account to this staff record?"))return;const{data,error}=await sb.rpc("claim_staff_contact",{p_id:id});if(error)return alert(error.message);toast("Connected. Your staff ID is "+data.staff_id);load()}
 async function rmStaffContact(id){if(!confirm("Remove this staff member from the school?"))return;const{error}=await sb.rpc("remove_staff_contact",{p_id:id});if(error)return alert(error.message);loadOrg()}
-let amark={},smark={};
-const ST=[["present","Present"],["absent","Absent"]],
-  SST=[["present","Present"],["absent","Absent"]];
-const seg=(opts,cur,fn,id)=>`<div class="seg">${opts.map(([v,l])=>`<button class="${v}${cur===v?" on":""}" onclick="${fn}('${id}','${v}')">${l}</button>`).join("")}</div>`;
-function loadAtt(){
+let amark={};
+const ST=[["present","Present"],["absent","Absent"]];
+/* ---- who sees what: administrators and the Director of Studies see every class (list, then streams); a class teacher goes straight to their own class ---- */
+let attDirect=false,attGrp=null;
+function attScope(){
   const S=sid();let cs=classes.filter(c=>c.school_id===S);
-  if(me.role==="teacher"){const mine=new Set(assigns.filter(a=>a.teacher_id===me.id).map(a=>a.class_id));cs=cs.filter(c=>c.class_teacher_id===me.id||mine.has(c.id))}
-  {let U=clUniq(cs);if(me.role==="teacher"){const ct=g=>g.rows.some(c=>c.class_teacher_id===me.id);U=U.filter(ct).concat(U.filter(g=>!ct(g)))}
-  $("attcls").innerHTML=U.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");if(U.length)$("attcls").value=U[0].id}
-  attAuto=true;$("attdate").value=todayIso();attHead();
-  renderAtt();renderStaffAtt();
-}
+  if(me.role==="teacher"&&!isDOS()){
+    const own=cs.filter(c=>c.class_teacher_id===me.id);
+    if(own.length)cs=own;else{const mine=new Set(assigns.filter(a=>a.teacher_id===me.id).map(a=>a.class_id));cs=cs.filter(c=>mine.has(c.id))}
+    return{teacher:true,rows:cs.slice().sort(clCmp)}}
+  return{teacher:false,rows:cs.slice().sort(clCmp),groups:clUniq(cs)}}
+const attLearners=cid=>students.filter(s=>s.class_id===cid&&s.status==="active");
+function loadAtt(){
+  attAuto=true;$("attdate").value=todayIso();attHead();attGrp=null;$("attcls").value="";
+  const sc=attScope();attDirect=sc.teacher&&sc.rows.length===1;
+  if(attDirect)$("attcls").value=sc.rows[0].id;
+  attRefresh()}
 let attAuto=true;
-function attManual(){if(!$("attdate").value)$("attdate").value=todayIso();attAuto=$("attdate").value===todayIso();attHead();renderAtt();renderStaffAtt()}
-setInterval(()=>{const e=$("attdate");if(tab==="att"&&attAuto&&e&&e.value!==todayIso()){e.value=todayIso();renderAtt();renderStaffAtt()}},30000);
-let attEdit=false;
-async function renderAtt(edit){
-  attShowRes(false);attEdit=edit===true&&!!perm.ad;
+function attManual(){if(!$("attdate").value)$("attdate").value=todayIso();attAuto=$("attdate").value===todayIso();attHead();attRefresh()}
+setInterval(()=>{const e=$("attdate");if(tab==="att"&&attAuto&&e&&e.value!==todayIso()){e.value=todayIso();attRefresh()}},30000);
+function attRefresh(){if($("attcls").value)renderAtt();else attList()}
+/* status of every class for the chosen day, in one pass */
+async function attStatus(rows,d){
+  const m={};rows.forEach(c=>m[c.id]={n:attLearners(c.id).length,p:0,a:0,t:0});
+  if(!rows.length)return m;
+  try{const data=await pages(()=>sb.from("attendance").select("student_id,class_id,status").eq("attendance_date",d).in("class_id",rows.map(c=>c.id)).order("student_id"));
+    data.forEach(r=>{const x=m[r.class_id];if(!x)return;x.t++;const st=String(r.status||"").toLowerCase();if(st==="present"||st==="late")x.p++;else if(st==="absent")x.a++})}catch(e){}
+  return m}
+const attIni=n=>clAbbr(n);
+function attCard(label,sub,done,chip,ini,fn){return `<button type="button" class="acl${done?" done":""}" onclick="${fn}"><span class="ci">${done?"✓":esc(ini)}</span><span class="ct"><b>${esc(label)}</b><small>${sub}</small></span><span class="cs">${esc(chip)}</span><span class="go">›</span></button>`}
+function attCardRow(c,x,ini){const done=x.t>0,sub=x.n+" learner"+(x.n===1?"":"s")+(done?" · "+x.p+" present · "+x.a+" absent":" · attendance not taken");
+  return attCard(cname(c),sub,done,done?"Taken":"Not taken",ini||attIni(c.name),`attOpen('${c.id}')`)}
+/* the list of classes (or of streams once a class with streams is opened) */
+async function attList(){
+  const sc=attScope(),d=$("attdate").value||todayIso();
+  $("attMark").classList.add("hide");$("attRes").classList.add("hide");$("attPick").classList.remove("hide");
+  if(!sc.rows.length){$("attBack").classList.add("hide");$("attPick").innerHTML='<p class="mut">'+(sc.teacher?"You are not assigned to a class yet. Ask an administrator to set you as a class teacher (Classes tab).":"No classes yet. Add classes under Classes.")+'</p>';return}
+  $("attPick").innerHTML='<p class="mut">Loading…</p>';
+  const stat=await attStatus(sc.rows,d);if($("attcls").value)return;
+  const g=attGrp&&sc.groups?sc.groups.find(x=>x.id===attGrp):null;
+  const sum=rows=>{const n=rows.length,t=rows.filter(c=>stat[c.id].t>0).length;return `<div class="acs"><div><b>${t} of ${n} ${g?"stream":"class"}${n===1?"":(g?"s":"es")} taken</b><small>${n-t?(n-t)+" still to take":"All done"}</small></div><div class="bar"><i style="width:${n?t/n*100:0}%"></i></div></div>`};
+  if(g){ // streams of one class
+    $("attBack").classList.remove("hide");$("attBack").innerHTML=`<div class="abk"><button type="button" onclick="attHome()">‹ All classes</button><b>${esc(g.name)}</b></div>`;
+    const rows=g.rows.slice().sort(clCmp);
+    $("attPick").innerHTML='<p class="mut" style="margin:0 2px 10px">Choose the stream to take attendance for.</p>'+sum(rows)+rows.map(c=>{const l=(clLabels(g.rows.slice().sort(clCmp))[c.id]||{}).l;return attCardRow(c,stat[c.id],l||attIni(c.name))}).join("");return}
+  $("attBack").classList.add("hide");
+  if(sc.teacher){ // a teacher with several classes sees only theirs
+    $("attPick").innerHTML=sum(sc.rows)+sc.rows.map(c=>attCardRow(c,stat[c.id])).join("");return}
+  const gs=sc.groups;
+  $("attPick").innerHTML=sum(sc.rows)+gs.map(G=>{
+    const rows=G.rows,n=rows.reduce((a,c)=>a+stat[c.id].n,0),t=rows.filter(c=>stat[c.id].t>0).length;
+    if(rows.length===1)return attCardRow(rows[0],stat[rows[0].id],attIni(G.name));
+    const done=t===rows.length;
+    return attCard(G.name,rows.length+" streams · "+n+" learner"+(n===1?"":"s")+(t?" · "+t+" of "+rows.length+" taken":" · not taken"),done,done?"Taken":(t?t+"/"+rows.length:"Not taken"),attIni(G.name),`attOpenGrp('${G.id}')`)}).join("")}
+function attOpenGrp(id){attGrp=id;attList()}
+function attOpen(cid){$("attcls").value=cid;renderAtt()}
+function attHome(){attGrp=null;$("attcls").value="";attList();window.scrollTo(0,0)}
+function attBackBtn(){ // back from a class: to its streams, to the class list, or nothing for a class teacher with one class
+  if(attDirect){$("attBack").classList.add("hide");return}
+  const c=classes.find(x=>x.id===$("attcls").value),inGrp=!!attGrp;
+  $("attBack").classList.remove("hide");
+  $("attBack").innerHTML=`<div class="abk"><button type="button" onclick="attBackTo()">‹ ${inGrp?esc(c?c.name:"Streams"):"All classes"}</button><b>${esc(c?cname(c):"Class")}</b></div>`}
+function attBackTo(){$("attcls").value="";attList();window.scrollTo(0,0)}
+async function renderAtt(){
   const cid=$("attcls").value,d=$("attdate").value;amark={};
-  if(!cid||!d){$("alist").innerHTML='<p class="mut">No class available.</p>';$("asum").textContent="";$("attView").classList.add("hide");return}
-  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
+  if(!cid||!d){attList();return}
+  $("attPick").classList.add("hide");attBackBtn();
+  const c=classes.find(x=>x.id===cid);
+  if(c&&!attDirect){const sc=attScope();const g=sc.groups&&sc.groups.find(x=>x.ids.includes(cid));if(g&&g.rows.length>1&&!attGrp)attGrp=g.id;if(g&&g.rows.length===1)attGrp=null}
+  attBackBtn();
+  const list=attLearners(cid);
   const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",list.map(s=>s.id));
-  const taken=!!(data&&data.length);
-  if(taken&&!attEdit){attMk={};data.forEach(r=>attMk[r.student_id]=r.status);attJustSaved=false;attShowRes(true);drawAttRes();return}
-  if(attEdit)(data||[]).forEach(r=>amark[r.student_id]=r.status);
-  drawAtt(list);$("attView").classList.toggle("hide",!(attEdit&&taken));$("aerr2").textContent="";
-}
+  if($("attcls").value!==cid)return;
+  if(data&&data.length){attMk={};data.forEach(r=>attMk[r.student_id]=r.status);attJustSaved=false;attShowRes(true);drawAttRes();return}
+  attShowRes(false);drawAtt(list);$("aerr2").textContent=""}
 const aIni=n=>String(n||"?").split(" ").map(w=>w[0]).filter(Boolean).slice(0,2).join("").toUpperCase();
 function attHead(){const v=$("attdate").value||todayIso(),d=new Date(v+"T00:00:00"),t=v===todayIso();
   $("attDate").textContent=d.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const c=$("attToday");c.textContent=t?"Today":"Back to today";c.style.opacity=t?".75":"1";c.disabled=t}
-function attGoToday(){$("attdate").value=todayIso();attAuto=true;attHead();renderAtt();renderStaffAtt()}
+function attGoToday(){$("attdate").value=todayIso();attAuto=true;attHead();attRefresh()}
 function attSum(ids,mk){const n=ids.length,p=ids.filter(i=>mk[i]==="present"||mk[i]==="late").length,a=ids.filter(i=>mk[i]==="absent").length,u=n-p-a,pct=n?Math.round(p/n*100):0,w=x=>n?x/n*100:0;
   return n?`<div class="top"><div class="pc">${pct}%<small>attended</small></div><div class="mut">${p+a} of ${n} marked</div></div><div class="bar"><i style="width:${w(p)}%;background:#1a9d5a"></i><i style="width:${w(a)}%;background:#c0392b"></i></div><div class="chips"><span class="g">✓ ${p} Present</span><span class="r">✕ ${a} Absent</span><span>${u} Not marked</span></div>`:""}
 function attRows(list,mk,fn,idf,nameOf,subOf,avOf){return list.map(x=>{const m=mk[x.id]==="late"?"present":mk[x.id]||"";return `<div class="arow ${m}">${avOf(x)}<div class="an"><b>${esc(nameOf(x))}</b><span class="id">${esc(subOf(x)||"")}</span></div><div class="atog"><button class="a${m==="absent"?" on":""}" aria-label="Absent" onclick="${fn}('${x.id}','absent')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button><button class="p${m==="present"?" on":""}" aria-label="Present" onclick="${fn}('${x.id}','present')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2L18.5 7.5"/></svg></button></div></div>`}).join("")}
 function drawAtt(list){attHead();
-  list=list||students.filter(s=>clIn($("attcls").value,s.class_id)&&s.status==="active");
+  list=list||attLearners($("attcls").value);
   $("alist").innerHTML=attRows(list,amark,"setA","id",x=>x.first_name+" "+x.last_name,x=>x.national_student_id,x=>stuAv(x))||'<p class="mut">No students in this class.</p>';
   const ids=list.map(x=>x.id);$("asum").innerHTML=attSum(ids,amark);$("asum").style.display=ids.length?"":"none";
   const m=ids.filter(i=>amark[i]).length;$("aprog").textContent=ids.length?m+" of "+ids.length+" marked":""}
 function setA(id,v){amark[id]=v;drawAtt()}
-function allPresent(){students.filter(s=>clIn($("attcls").value,s.class_id)&&s.status==="active").forEach(s=>amark[s.id]=amark[s.id]||"present");drawAtt()}
 async function saveAtt(){
   const cid=$("attcls").value,d=$("attdate").value,e=$("aerr2");e.style.color="";
-  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active"),un=list.filter(s=>!amark[s.id]).length;
+  const list=attLearners(cid),un=list.filter(s=>!amark[s.id]).length;
   if(!list.length){e.textContent="No learners in this class.";return}
   if(un){e.textContent="Mark every learner before saving. "+un+" not marked yet.";return}
-  if(!attEdit){const q=await sb.from("attendance").select("student_id").eq("attendance_date",d).in("student_id",list.map(s=>s.id)).limit(1);
+  {const q=await sb.from("attendance").select("student_id").eq("attendance_date",d).in("student_id",list.map(s=>s.id)).limit(1);
     if(q.data&&q.data.length){toast("Attendance for this class is already taken");renderAtt();return}}
   const rows=list.map(s=>({student_id:s.id,class_id:s.class_id,attendance_date:d,status:amark[s.id]}));
-  const{error}=await sb.from("attendance").upsert(rows,{onConflict:"student_id,attendance_date"});
-  e.textContent=error?error.message:"";if(!error){attEdit=false;toast("Attendance saved successfully");refreshHomeAtt();attOpenRes(true)}
+  const{error}=await sb.from("attendance").insert(rows);
+  e.textContent=error?error.message:"";if(!error){toast("Attendance saved successfully");refreshHomeAtt();attOpenRes(true)}
 }
 /* ---- saved attendance list for a class (Present / Absent order) ---- */
 let attSort="present",attMk={},attJustSaved=false;
-function attShowRes(on){const a=$("attMark"),b=$("attRes");if(on)$("attView").classList.add("hide");if(a)a.classList.toggle("hide",!!on);if(b)b.classList.toggle("hide",!on)}
+function attShowRes(on){const a=$("attMark"),b=$("attRes");if(a)a.classList.toggle("hide",!!on);if(b)b.classList.toggle("hide",!on)}
 async function attOpenRes(saved){
   const cid=$("attcls").value,d=$("attdate").value;if(!cid||!d)return;
-  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
+  const list=attLearners(cid);
   attMk={};
   if(list.length){const{data}=await sb.from("attendance").select("student_id,status").eq("attendance_date",d).in("student_id",list.map(s=>s.id));(data||[]).forEach(r=>attMk[r.student_id]=r.status)}
   attJustSaved=saved===true;attShowRes(true);drawAttRes();window.scrollTo(0,0);
@@ -1851,7 +1973,7 @@ async function attOpenRes(saved){
 function attSetSort(v){attSort=v;attJustSaved=false;drawAttRes()}
 function drawAttRes(){
   const cid=$("attcls").value,c=classes.find(x=>x.id===cid);
-  const list=students.filter(s=>clIn(cid,s.class_id)&&s.status==="active");
+  const list=attLearners(cid);
   const st=s=>{const m=attMk[s.id];return m==="late"?"present":m||""};
   const nm=s=>(s.first_name||"")+" "+(s.last_name||"");
   const order=attSort==="present"?["present","absent",""]:["absent","present",""];
@@ -1859,7 +1981,7 @@ function drawAttRes(){
   const groups=order.map(m=>{const arr=list.filter(s=>st(s)===m).sort((a,b)=>nm(a).localeCompare(nm(b)));
     return arr.length?`<div class="agp"><div class="agh ${m}"><i></i>${lab[m]}<em>${arr.length}</em></div>${arr.map(s=>`<div class="ar2">${stuAv(s)}<div class="an"><b>${esc(nm(s))}</b><span class="id">${esc(s.national_student_id||"")}</span></div><span class="abadge ${m}">${lab[m]}</span></div>`).join("")}</div>`:""}).join("");
   $("attRes").innerHTML=(attJustSaved?'<div class="aok"><i>✓</i>Attendance saved successfully</div>':"")
-   +`<div class="atk"><i>✓</i><div><b>Attendance for ${esc(c?cname(c):"this class")} is taken</b><small id="attWhoT">${list.length} learner${list.length===1?"":"s"}</small></div>${perm.ad?'<button type="button" onclick="renderAtt(true)">Edit</button>':""}</div>`
+   +`<div class="atk ro"><i>✓</i><div><b>${esc(c?cname(c):"This class")} attendance taken</b><small id="attWhoT">${list.length} learner${list.length===1?"":"s"}</small></div></div>`
    +`<div class="asum">${attSum(list.map(x=>x.id),attMk)}</div>`
    +`<div class="asort"><button class="${attSort==="present"?"on":""}" onclick="attSetSort('present')">Present first</button><button class="${attSort==="absent"?"on":""}" onclick="attSetSort('absent')">Absent first</button></div>`
    +(groups||'<p class="mut">No students in this class.</p>');
@@ -1922,24 +2044,6 @@ document.addEventListener("click",e=>{const i=e.target.closest&&e.target.closest
 document.addEventListener("keydown",e=>{const i=e.target;if((e.key==="Enter"||e.key===" ")&&i.matches&&i.matches('input[type="date"]')){e.preventDefault();dpOpen(i)}},true);
 (function(){const ro=r=>{if(r.querySelectorAll)r.querySelectorAll('input[type="date"]').forEach(i=>{i.readOnly=true});if(r.matches&&r.matches('input[type="date"]'))r.readOnly=true};
   try{new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(n=>{if(n.nodeType===1)ro(n)}))).observe(document.documentElement,{childList:true,subtree:true});ro(document)}catch(e){}})();
-async function renderStaffAtt(){
-  if(!perm.ad)return;const S=sid(),d=$("attdate").value;smark={};
-  const tt=staff.filter(x=>x.school_id===S);
-  const{data}=await sb.from("staff_attendance").select("staff_id,status").eq("attendance_date",d).in("staff_id",tt.map(t=>t.id));
-  (data||[]).forEach(r=>smark[r.staff_id]=r.status);drawStaffAtt();
-}
-function drawStaffAtt(){attHead();
-  const tt=staff.filter(x=>x.school_id===sid());
-  $("stalist").innerHTML=attRows(tt,smark,"setS","id",x=>x.full_name,x=>x.staff_id,x=>`<span class="ini">${esc(aIni(x.full_name))}</span>`)||'<p class="mut">No staff yet.</p>';
-  const ids=tt.map(x=>x.id);$("ssum").innerHTML=attSum(ids,smark);$("ssum").style.display=ids.length?"":"none";
-  const m=ids.filter(i=>smark[i]).length;$("sprog").textContent=ids.length?m+" of "+ids.length+" marked":""}
-function setS(id,v){smark[id]=v;drawStaffAtt()}
-async function saveStaffAtt(){
-  const d=$("attdate").value,rows=Object.entries(smark).map(([staff_id,status])=>({staff_id,attendance_date:d,status}));
-  if(!rows.length)return alert("Mark at least one staff member.");
-  const{error}=await sb.from("staff_attendance").upsert(rows,{onConflict:"staff_id,attendance_date"});
-  if(error)alert(error.message);else{toast("Staff attendance saved");refreshHomeAtt()}
-}
 let terms=[],fees=[],bal=[],assess=[],res=[];
 const money=n=>"UGX "+Number(n).toLocaleString();
 const gradeFor=p=>{const g=gradeScale.filter(x=>x.school_id===sid()).sort((a,b)=>b.min_percent-a.min_percent).find(x=>+x.min_percent<=p);if(g)return g.grade;return p>=80?"D1":p>=70?"D2":p>=66?"D3":p>=60?"C4":p>=55?"C5":p>=50?"C6":p>=45?"P7":p>=40?"P8":"F9"};
@@ -2367,15 +2471,16 @@ function pgClasses(){const S=sid(),m=new Map();clSch().forEach(c=>{if(!m.has(c.n
   const warn=clCapMissing()?`<div class="card"><div class="anote">Learner limits need a one-time database update before they can be saved. Run this once in the Supabase SQL editor:</div><p class="mut" style="user-select:all;font-family:monospace;font-size:12.5px">alter table classes add column if not exists capacity integer check (capacity > 0);</p></div>`:"";
   if(!names.length)return warn+`<div class="card"><p class="mut">No classes yet. Tap the + button to add your first class, for example P.3 with a limit of 80 learners per stream.</p></div><div class="fabpad"></div>`;
   if(CL.sel&&!m.has(CL.sel))CL.sel=null;
-  const rows=names.map((n,ni)=>{const g=m.get(n),l=g.reduce((x,c)=>x+clCnt(c.id),0),open=n===CL.sel,col=pc(ni),lb=clLabels(g);
-    let h=`<div class="lpi ${open?"act":""}" style="--ac:${col}" data-hold="clsg:${eq(n)}" onclick="clSel(decodeURIComponent('${eq(n)}'))"><span class="av">${esc(clAbbr(n))}</span><div class="lm"><b>${esc(n)}</b><small>${g.length} stream${g.length===1?"":"s"} · ${l} learner${l===1?"":"s"}</small></div><span class="lc">${open?"▾":"›"}</span></div>`;
-    if(open){const allFull=g.every(c=>clCap(c)>0&&clCnt(c.id)>=clCap(c)),ns=nextStream(g);
-      const banner=allFull?`<div class="anote">Every stream of ${esc(n)} is full. Add Stream ${esc(ns)} for the extra learners.</div><button onclick="clStreamForm(decodeURIComponent('${eq(n)}'))">Add Stream ${esc(ns)}</button>`:"";
-      const cards=g.map((c,si)=>{const k=clCnt(c.id),cp=clCap(c),pp=cp?Math.min(100,Math.round(k*100/cp)):0,full=cp&&k>=cp,sc=pc(ni+si+1);
-        return `<div class="lpi ${AC.id===c.id?"act":""}" style="--ac:${sc}" data-hold="strm:${c.id}" onclick="strmOpen('${c.id}')"><span class="av">${esc(lb[c.id].l||clAbbr(c.name))}</span><div class="lm"><b>${esc(lb[c.id].t)} ${full?'<span class="tag bad">Full</span>':""}</b><small>Class teacher: ${esc(clTeach(c.class_teacher_id))}</small><small>${k} learner${k===1?"":"s"}${cp?" of "+cp+(full?"":" · "+(cp-k)+" space"+(cp-k===1?"":"s")+" left"):" · no limit set"}</small>${cp?`<div class="cbar ${full?"full":""}"><i style="width:${pp}%;background:${full?"#c0392b":sc}"></i></div>`:""}</div><span class="lc">›</span></div>`}).join("");
-      h+=`<div style="margin:-2px 0 12px 12px;padding-left:10px;border-left:2px solid var(--bd)">${banner}${cards}</div>`}
-    return h}).join("");
-  return warn+sortSel()+`${rows}`+lpHint}
+  const cardsH=names.map((n,ni)=>{const g=m.get(n),l=g.reduce((x,c)=>x+clCnt(c.id),0),open=n===CL.sel,sub=g.length>1?g.length+" streams":(tchr(g[0].class_teacher_id)||"No class teacher");
+    return `<div class="cgc ${open?"act":""}" data-hold="clsg:${eq(n)}" onclick="clSel(decodeURIComponent('${eq(n)}'))"><b>${esc(n)}</b><small>${esc(sub)}</small><div class="cn">${l}</div><small>learner${l===1?"":"s"}</small></div>`}).join("");
+  let panel="";
+  if(CL.sel){const n=CL.sel,g=m.get(n),ni=names.indexOf(n),lb=clLabels(g);
+    const allFull=g.every(c=>clCap(c)>0&&clCnt(c.id)>=clCap(c)),ns=nextStream(g);
+    const banner=allFull?`<div class="anote">Every stream of ${esc(n)} is full. Add Stream ${esc(ns)} for the extra learners.</div><button onclick="clStreamForm(decodeURIComponent('${eq(n)}'))">Add Stream ${esc(ns)}</button>`:"";
+    const cards=g.map((c,si)=>{const k=clCnt(c.id),cp=clCap(c),pp=cp?Math.min(100,Math.round(k*100/cp)):0,full=cp&&k>=cp,sc=pc(ni+si+1);
+      return `<div class="lpi ${AC.id===c.id?"act":""}" style="--ac:${sc}" data-hold="strm:${c.id}" onclick="strmOpen('${c.id}')"><span class="av">${esc(lb[c.id].l||clAbbr(c.name))}</span><div class="lm"><b>${esc(lb[c.id].t)} ${full?'<span class="tag bad">Full</span>':""}</b><small>Class teacher: ${esc(clTeach(c.class_teacher_id))}</small><small>${k} learner${k===1?"":"s"}${cp?" of "+cp+(full?"":" · "+(cp-k)+" space"+(cp-k===1?"":"s")+" left"):" · no limit set"}</small>${cp?`<div class="cbar ${full?"full":""}"><i style="width:${pp}%;background:${full?"#c0392b":sc}"></i></div>`:""}</div><span class="lc">›</span></div>`}).join("");
+    panel=`<div class="cgp"><div class="cgh">${esc(n)}</div>${banner}${cards}</div>`}
+  return warn+sortSel()+`<div class="cgrid">${cardsH}</div>`+panel+lpHint}
 function clForm(){const t=staff.filter(x=>x.school_id===sid()&&x.role==="teacher");
   modal(mh("Add class")+fld("cfN","Class name","","e.g. P.3")+fld("cfC","Limit of learners per stream","","e.g. 80","number")+fld("cfS","First stream (optional)","","e.g. A")+`<div class="f"><label for="cfT">Class teacher (optional)</label><select id="cfT"><option value="">None</option>${opt(t,x=>x.full_name)}</select></div><p class="mut">When a stream is full you can add Stream B, C, D and so on inside the class.</p>`+mbtn("clSaveNew()"))}
 async function clWrite(id,row){const run=r=>id?sb.from("classes").update(r).eq("id",id):sb.from("classes").insert(r);let r=await run(row);
@@ -2496,63 +2601,13 @@ async function trRec(id){const q=await sb.rpc("student_history",{p_student:id});
 /* TRANSFERS_END */
 
 /* PROMOTION_START */
-let pmOff=new Set(),pmH=[];
-async function loadPromo(){if(!me||!perm.ad)return;const S=sid(),r=await sb.from("student_promotions").select("*").order("created_at",{ascending:false}).limit(15);pmH=(r.data||[]).filter(x=>x.school_id===S);drawPromo();pmAutoRun()}
-const pmActV=()=>($("pmAct")?$("pmAct").value:"promote");
-function pmElig(cid){return students.filter(x=>x.school_id===sid()&&x.class_id===cid&&x.status==="active"&&!x.deleted_at)}
+/* Class order helper (used for sorting classes) */
 function clRank(c){const n=String(c.name||"").toLowerCase().replace(/[._\-]/g," ").replace(/\s+/g," ").trim(),W={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7},num=t=>/^\d+$/.test(t)?+t:(W[t]||null);let m;
   if(/^baby/.test(n))return 1;if(/^(middle|mid)\b/.test(n))return 2;if(/^top\b/.test(n))return 3;
   if((m=n.match(/^(?:primary|p)\s*(\w+)/))&&num(m[1]))return 10+num(m[1]);
   if((m=n.match(/^(?:senior|form|s)\s*(\w+)/))&&num(m[1]))return 20+num(m[1]);
   return 999}
-const pmSort=clCmp;
-function pmNext(fc,dir,opts){if(!fc)return null;const r=clRank(fc);if(r>=999)return null;const rs=opts.map(clRank).filter(x=>dir>0?x>r:x<r&&x<999);if(!rs.length)return null;const tr=dir>0?Math.min(...rs):Math.max(...rs),c=opts.filter(x=>clRank(x)===tr);return c.find(x=>(x.stream||"")===(fc.stream||""))||c[0]}
-function drawPromo(auto){const f=$("pmFrom");if(!f)return;const cs=clSch().slice().sort(pmSort),cur=f.value;
-  f.innerHTML=cs.map(c=>'<option value="'+c.id+'"'+(c.id===cur?" selected":"")+'>'+esc(cname(c))+' ('+pmElig(c.id).length+' students)</option>').join("")||'<option value="">No classes yet</option>';
-  const from=f.value,act=pmActV(),pr=act!=="graduate",dem=act==="demote",t=$("pmTo"),tcur=t.value;show("pmTo",pr);
-  const fc=cs.find(c=>c.id===from),fr=fc?clRank(fc):999;let opts=cs.filter(c=>c.id!==from),empty="";
-  if(pr&&fr<999){opts=opts.filter(c=>{const r=clRank(c);return r<999&&(dem?r<fr:r>fr)});if(!opts.length)empty=dem?"No lower class":"No higher class"}
-  let pick=!auto&&opts.some(c=>c.id===tcur)?tcur:"";if(!pick){const n=pr?pmNext(fc,dem?-1:1,opts):null;pick=n?n.id:(opts[0]?opts[0].id:"")}
-  t.innerHTML=opts.map(c=>'<option value="'+c.id+'"'+(c.id===pick?" selected":"")+'>'+esc(cname(c))+'</option>').join("")||'<option value="">'+(empty||"No other class")+'</option>';
-  const L=from?pmElig(from):[];
-  $("pmList").innerHTML=L.map(x=>'<label class="ck"><input type="checkbox" class="pmCk" value="'+x.id+'"'+(pmOff.has(x.id)?"":" checked")+' onchange="pmTog(this)"><span>'+esc(x.first_name+" "+x.last_name)+'</span></label>').join("")||'<p class="mut">No active students in this class.</p>';
-  pmCount();if($("pmAutoMsg"))$("pmAutoMsg").textContent=pmAutoNote();
-  $("pmHist").innerHTML=pmH.map(h=>{const st=students.concat(typeof trashed!=="undefined"?trashed:[]).find(z=>z.id===h.student_id),a=classes.find(z=>z.id===h.from_class_id),b=classes.find(z=>z.id===h.to_class_id),down=a&&b&&clRank(b)<clRank(a)&&clRank(b)<999;
-    return '<div class="st"><b>'+esc(st?st.first_name+" "+st.last_name:"Student")+'</b> <span class="mut">'+(h.action==="graduated"?"Left school from "+esc(a?cname(a):"?"):(down?"Demoted from ":"")+esc(a?cname(a):"?")+(down?" to ":" to ")+esc(b?cname(b):"?"))+' · '+esc(String(h.created_at).slice(0,10))+'</span></div>'}).join("")||'<p class="mut">No changes yet.</p>'}
-function pmTog(e){if(e.checked)pmOff.delete(e.value);else pmOff.add(e.value);pmCount()}
-function pmCount(){const n=document.querySelectorAll(".pmCk:checked").length,b=$("pmGo");if(b){b.textContent=({promote:"Promote ",demote:"Demote ",graduate:"Leave school: "}[pmActV()]||"Promote ")+n+" student"+(n===1?"":"s");b.disabled=!n}}
-async function pmRun(){const m=$("pmMsg"),from=$("pmFrom").value,act=pmActV(),pr=act!=="graduate",to=pr?$("pmTo").value:null,ids=[...document.querySelectorAll(".pmCk:checked")].map(i=>i.value);m.textContent="";
-  if(!from||!ids.length){m.textContent="Choose a class and at least one student.";return}if(pr&&!to){m.textContent=act==="demote"?"There is no lower class to move them into.":"There is no higher class yet. Add the next class in Classes first.";return}
-  const w=pr&&typeof clFullMsg==="function"?clFullMsg(to):"";if(w&&!confirm(w))return;
-  if(!confirm((act==="demote"?"Demote ":pr?"Promote ":"Mark as left school: ")+ids.length+" student"+(ids.length===1?"":"s")+(pr?" to "+$("pmTo").selectedOptions[0].text:"")+"? This is recorded in the history below."))return;
-  const r=await sb.rpc("promote_students",{p_from:from,p_to:to,p_students:ids,p_action:pr?"promote":"graduate"});
-  if(r.error){m.textContent=r.error.message;return}pmOff.clear();toast((act==="demote"?"Demoted ":pr?"Promoted ":"Left school: ")+r.data+" student"+(r.data===1?"":"s"));loadStudents();loadPromo()}
 
-/* AUTO_PROMOTION_START: every new academic year every active learner moves up one class by itself.
-   A learner is moved only if they were registered before the new year began and have no promotion or demotion recorded since it began,
-   so manual exceptions are respected and running it twice never moves anyone twice. */
-let pmAuto={busy:0,key:"",msg:"",stay:[]};
-function pmYearInfo(){const T=(typeof terms!=="undefined"?terms:[]).filter(t=>t.start_date&&(!t.school_id||t.school_id===sid())),today=new Date().toISOString().slice(0,10),started=T.filter(t=>t.start_date<=today);if(!started.length)return null;
-  const Y=Math.max(...started.map(t=>+t.academic_year||0));if(!Y||!T.some(t=>(+t.academic_year||0)<Y))return null;
-  return{Y,start:T.filter(t=>+t.academic_year===Y).map(t=>t.start_date).sort()[0]}}
-async function pmAutoRun(){if(!me||!perm.ad||pmAuto.busy||typeof clSch!=="function")return;const cs=clSch();if(!cs.length||!students.length)return;
-  const yi=pmYearInfo();if(!yi)return;const S=sid(),key=S+":"+yi.Y;if(pmAuto.key===key)return;pmAuto.busy=1;
-  try{const r=await sb.from("student_promotions").select("student_id,school_id,created_at").gte("created_at",yi.start);if(r.error)return;
-    const done=new Set((r.data||[]).filter(x=>x.school_id===S).map(x=>x.student_id)),groups={};
-    students.filter(x=>x.school_id===S&&x.status==="active"&&!x.deleted_at&&x.class_id&&!done.has(x.id)&&String(x.created_at).slice(0,10)<yi.start).forEach(x=>{(groups[x.class_id]=groups[x.class_id]||[]).push(x.id)});
-    let moved=0;const stay=[],errs=[];
-    for(const cid of Object.keys(groups).sort((a,b)=>clRank(cs.find(c=>c.id===b)||{})-clRank(cs.find(c=>c.id===a)||{}))){const fc=cs.find(c=>c.id===cid);if(!fc)continue;
-      const n=pmNext(fc,1,cs.filter(c=>c.id!==cid));if(!n){stay.push(cname(fc)+" ("+groups[cid].length+")");continue}
-      const q=await sb.rpc("promote_students",{p_from:cid,p_to:n.id,p_students:groups[cid],p_action:"promote"});
-      if(q.error){errs.push(cname(fc)+": "+q.error.message);continue}moved+=(+q.data||0)}
-    pmAuto.stay=stay;pmAuto.msg=errs.length?"Some classes could not move up: "+errs.join("; "):"";
-    if(!errs.length)pmAuto.key=key;
-    if(moved){toast("New year "+yi.Y+": "+moved+" learner"+(moved===1?"":"s")+" moved up a class");await loadStudents();loadPromo()}else drawPromo()
-  }catch(e){}finally{pmAuto.busy=0}}
-function pmAutoNote(){const yi=pmYearInfo();let m=yi?"Automatic promotion is on. At the start of "+yi.Y+" every learner moves up one class on their own.":"Automatic promotion is on. It starts when the school has terms for a new year.";
-  if(pmAuto.stay.length)m+=" These classes have no higher class yet, so nobody moved: "+pmAuto.stay.join(", ")+". Add the next class in Classes, or mark them as left school below.";
-  if(pmAuto.msg)m+=" "+pmAuto.msg;return m}
-/* AUTO_PROMOTION_END */
 /* PROMOTION_END */
 
 /* ANALYTICS_START */
@@ -2954,21 +3009,6 @@ const GUIDE=[
 ]
 },
 {
-"t": "Promotion and graduation",
-"r": [
-"school_admin"
-],
-"b": [
-"Promotion is automatic. When a new academic year begins, every active learner moves up one class on their own (for example P1 to P2, S1 to S2) and their profile changes. Nothing needs to be done.",
-"Use the Promotion tab only for exceptions:",
-"- 1. Choose the class the learner is in now.",
-"- 2. Choose Promote to move a learner up early, Demote to move one down, or Leave school for a final class such as P7.",
-"- 3. Untick everyone who should stay where they are, then tap the button and confirm.",
-"A learner you moved by hand during the new year is skipped by the automatic promotion. If a class has no higher class yet, nobody in it moves until you add the next class in Classes.",
-"Each move is saved in Recent promotions with the date, so the record shows where every student came from. A student keeps the same student ID in every class. A graduated student is marked Graduated and has no class. Only active students are moved. A promotion cannot be undone from the screen: to correct one, open the student and edit the class."
-]
-},
-{
 "t": "Announcements and notices",
 "r": "all",
 "b": [
@@ -3081,20 +3121,11 @@ const GUIDE=[
 "teacher"
 ],
 "b": [
-"Open the Attendance tab. Choose the class and the date (today is the default). Each student has two buttons: Present and Absent. The date follows today automatically.",
+"Open the Attendance tab. Administrators and the Director of Studies see a list of every class; tap a class (and then a stream, if the class has streams) to take its attendance. A class teacher goes straight to their own class. Each student has two buttons: Present and Absent. Today is the default date and follows the calendar automatically.",
 "- Mark each student one by one, then tap Save.",
-"- Tap Save. Saving the same class and date again updates the marks instead of duplicating them.",
+"- Tap Save. Once saved, a class's attendance for that day is locked: it cannot be edited, only viewed (Present first or Absent first).",
 "- The summary shows counts and the attendance percentage.",
-"Teachers only see classes where they are the class teacher or teach a subject. Admins see every class."
-]
-},
-{
-"t": "Attendance: staff",
-"r": [
-"school_admin"
-],
-"b": [
-"At the bottom of the Attendance tab, admins can mark staff as Present or Absent for the chosen date, then tap Save staff attendance."
+"Class teachers only see the class they handle. Administrators see every class and stream."
 ]
 },
 {
@@ -3287,7 +3318,7 @@ const GUIDE=[
 "Tap any learner (in the list, a class view, the dashboard or search) to open the full record: personal details, class with its teacher and subjects, parent or guardian, attendance, fees with recent payments, and results. Fees show only to admins and finance; results only to admins and teachers.",
 "Tap a class name in a learner record or the dashboard to see the class teacher, its subjects with teachers, and every learner in it.",
 "Administrators: tap any line in Recent activity to see who did it, their role, the exact time, where in the system, and every detail of the change. Tap Open to go to that screen.",
-"Administrators: Activity room (side menu) is the room of everything happening in the app. Feed lists every activity by day with filters (type, person, period, search); Browse shows latest payments, new learners, admission applications, notices, promotions and transfers; Overview shows attendance, fees, outstanding balance, average result, quick actions and learners per class. Tap any line to open the details."
+"Administrators: Activity room (side menu) is the room of everything happening in the app. Feed lists every activity by day with filters (type, person, period, search); Browse shows latest payments, new learners, admission applications, notices and transfers; Overview shows attendance, fees, outstanding balance, average result, quick actions and learners per class. Tap any line to open the details."
 ]
 }
 ];
@@ -3363,24 +3394,8 @@ async function linkAcct(){
   $("lkerr").style.color=error?"":"var(--pri)";$("lkerr").textContent=error?error.message:"Linked. Ask them to refresh the app.";
   if(!error){$("lkemail").value="";loadStudents()}
 }
-/* ---------- PARENT CONTACTS (read only, from Parent Hub) ---------- */
+/* ---------- Parent Hub connection (used by staff messages and parent lookups) ---------- */
 const PHB="https://kxsxwefzqyqyxnpwfowd.supabase.co",PHK="sb_publishable_ACK5WYStzJ6Tz-UfqsvKNQ_2hdKN9k8";
-function pcInit(){try{const k=localStorage.getItem("pcKey");if(k&&$("pcKey"))$("pcKey").value=k}catch(e){}}
-async function pcLoad(){
-  const err=$("pcErr"),box=$("pcList"),sc=(schRow()||{}).school_code,key=$("pcKey").value.trim();err.textContent="";
-  if(!key){err.textContent="Enter the school key.";return}
-  if(!sc){err.textContent="School code not found.";return}
-  const S=sid(),ss=students.filter(x=>x.school_id===S&&x.status==="active");
-  box.innerHTML='<p class="mut">Loading...</p>';
-  let r;try{r=await fetch(PHB+"/rest/v1/rpc/school_parent_contacts",{method:"POST",headers:{apikey:PHK,Authorization:"Bearer "+PHK,"Content-Type":"application/json"},body:JSON.stringify({p_school:sc,p_key:key,p_sins:ss.map(x=>x.national_student_id)})})}catch(e){box.innerHTML="";err.textContent="No connection. Try again.";return}
-  const d=await r.json().catch(()=>null);
-  if(!r.ok){box.innerHTML="";err.textContent=(d&&d.message)||"Could not load.";return}
-  try{localStorage.setItem("pcKey",key)}catch(e){}
-  const by={};(d||[]).forEach(x=>{(by[x.student_id]=by[x.student_id]||[]).push(x)});
-  const rows=ss.filter(x=>by[x.national_student_id]).map(x=>`<div class="st"><b>${esc(x.first_name)} ${esc(x.last_name)}</b> <span class="mut cp">${esc(x.national_student_id)}</span>`+by[x.national_student_id].map(p=>`<div>${esc(p.parent_name)} <span class="mut">(${esc(p.relationship||"")}${p.status==="pending"?", linked by parent":""})</span> ${p.phone?'<a href="tel:'+esc(p.phone)+'">'+esc(p.phone)+"</a>":""}</div>`).join("")+"</div>");
-  box.innerHTML=rows.join("")||'<p class="mut">No parents have linked to your students in Parent Hub yet.</p>';
-}
-setTimeout(pcInit,0);
 /* ---------- PARENT / STUDENT PORTAL ---------- */
 let kids=[],pd=null,ptab="att";
 const ICON=Object.fromEntries(["present","late","absent","excused"].map(k=>[k,`<span class="dot ${k}"></span>`]));
@@ -3418,7 +3433,7 @@ const sec=(t,h)=>`<div style="margin-top:14px"><b style="display:block;font-size
 const kvs=a=>`<div class="kv">${a.filter(x=>x[1]!==""&&x[1]!=null).map(x=>`<span>${esc(x[0])}</span><span>${x[2]?x[1]:esc(x[1])}</span>`).join("")}</div>`;
 const tname=id=>{const t=terms.find(x=>x.id===id);return t?t.name+" "+(t.academic_year||""):"Term"};
 const tchr=id=>{const t=staff.find(x=>x.id===id);return t?(t.full_name||t.name||""):""};
-async function stuView(i){const s=students.find(x=>x.id===i);if(!s)return;
+async function stuView(i){if(typeof tab!=="undefined"&&tab!=="stu")return;const s=students.find(x=>x.id===i);if(!s)return;
   const c=classes.find(x=>x.id===s.class_id),head=`<div style="position:relative;padding-right:34px">${xBtn}<div style="display:flex;gap:12px;align-items:center">${stuAv(s,1)}<div style="min-width:0"><b style="display:block;font-size:18px">${esc(sName(s))}</b><div class="id">${esc(s.national_student_id)}</div>${stuInactive(s)?'<span class="tag" style="background:#fef3c7;color:#b45309">Inactive · transferred</span>':`<span class="tag">${esc(s.status||"")}</span>`}</div></div></div>`;
   modal(head+'<p class="mut" style="margin-top:14px">Loading full record…</p>');
   const q=async f=>{try{const r=await f();return r.data||[]}catch(e){return[]}},
@@ -3445,11 +3460,20 @@ async function stuView(i){const s=students.find(x=>x.id===i);if(!s)return;
   if(perm.ad&&stuInactive(s))h+=stuInactiveNote();
   h+=`<div class="row" style="gap:8px;margin-top:8px">${perm.ad&&!stuInactive(s)?`<button class="alt" style="margin:0" onclick="stuEdit('${i}')">Edit</button>`:""}<button style="margin:0" onclick="closeModal()">Close</button></div>`;
   if($("mdl"))modal(h)}
+/* HOME CLASSES CARD: one row per class (streams merged), tap to open its streams */
+const shOpen=new Set();
+function shClsHtml(S,L){const cs=classes.filter(c=>!S||c.school_id===S),gs=clUniq(cs);if(!gs.length)return'<span class="mut">No classes yet.</span>';
+  return'<div class="cgrid">'+gs.map((g,gi)=>{const rows=g.rows.slice().sort(clCmp),cnt=c=>L.filter(s=>s.class_id===c.id).length,tot=rows.reduce((a,c)=>a+cnt(c),0),multi=rows.length>1,lab=multi?clLabels(rows):{},key=String(g.name);
+    const sub=multi?rows.length+" streams":(tchr(rows[0].class_teacher_id)||"No class teacher");
+    const click=multi?`shClsTog(${gi})`:`clsView('${rows[0].id}')`;
+    return`<div class="cgc${multi&&shOpen.has(key)?" open":""}" id="clr${gi}" data-k="${esc(key)}" onclick="${click}"><b>${esc(g.name)}</b><small>${esc(sub)}</small><div class="cn">${tot}</div><small>learner${tot===1?"":"s"}</small></div>`
+      +(multi?`<div class="cgs">${rows.map(c=>`<div class="clsi" onclick="clsView('${c.id}')"><span><b>${esc(lab[c.id]?lab[c.id].t:(c.stream?"Stream "+c.stream:""))}</b><br><small class="mut">${esc(tchr(c.class_teacher_id)||"No class teacher")}</small></span><span class="clsn"><b>${cnt(c)}</b> <small class="mut">learner${cnt(c)===1?"":"s"}</small></span></div>`).join("")}</div>`:"")}).join("")+'</div>'}
+function shClsTog(i){const r=document.getElementById("clr"+i);if(!r)return;const k=r.dataset.k;r.classList.toggle("open");if(r.classList.contains("open"))shOpen.add(k);else shOpen.delete(k)}
 function clsView(id){const c=classes.find(x=>x.id===id);if(!c)return;const L=students.filter(s=>s.class_id===id&&s.status==="active"),asg=assigns.filter(a=>a.class_id===id);
   modal(`<div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">${esc(c.name)}${c.stream?" "+esc(c.stream):""}</b></div>`+
   sec("Class",kvs([["Class teacher",tchr(c.class_teacher_id)||"Not set"],["Learners",String(L.length)],["Year",c.academic_year]]))+
   sec("Subjects and teachers",asg.length?kvs(asg.map(a=>[subjects.find(x=>x.id===a.subject_id)?.name||"Subject",tchr(a.teacher_id)||"No teacher yet"])):'<p class="mut">No subjects linked yet.</p>')+
-  sec("Learners (tap to open)",L.length?L.map(s=>`<div class="ar" style="cursor:pointer" onclick="stuView('${s.id}')">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm cp">${esc(s.national_student_id)}</div></div></div>`).join(""):'<p class="mut">No learners yet.</p>')+'<button style="margin-top:14px" onclick="closeModal()">Close</button>')}
+  sec("Learners",L.length?L.map(s=>`<div class="ar">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm">${esc(sCls(s)||c.name)}</div></div></div>`).join(""):'<p class="mut">No learners yet.</p>')+'<button style="margin-top:14px" onclick="closeModal()">Close</button>')}
 /* clickable activity */
 let actG=[];const ACTW={students:["Students","stu"],classes:["Classes","cls"],teaching_assignments:["Classes","cls"],terms:["Academic settings","set"],fee_structures:["Fees","fee"],payments:["Fees","fee"],assessments:["Results","res"],results:["Results","res"],report_comments:["Report cards","rc"],guardian_students:["Students, link accounts","stu"],admission_applications:["Admissions","adm"],attendance:["Attendance","att"],staff_attendance:["Attendance (staff)","att"]};
 const SKIP=/^(id|school_id|created_by|updated_by|created_at|updated_at|deleted_at|marked_by|received_by|decided_by|user_id)$/;
@@ -3508,8 +3532,8 @@ function drawOverviewHtml(){const d={};if(!perm.ad)return"";
   else h+='<div class="pn"><p class="mut" style="margin:0">Loading school figures…</p></div>';
   const qa=[["stu","add","Register","#14804a","stu"],["att","","Attendance","#2b6cb0","att"],["fee","","Fees","#d98e04","fee"],["res","","Results","#7048e8","res"],["adm","","Admissions","#d6336c","adm"],["tt","","Timetable","#0b7285","att"],["ann","","Notices","#e8590c","adm"],["an","","Analytics","#364fc7","res"]];
   h+=`<div class="qa">${qa.filter(x=>x[0]!=="fee"||perm.fee).filter(x=>x[0]!=="res"||perm.res).map(x=>`<button style="background:${x[3]}" onclick="setTab('${x[0]}');${x[1]?`setSub('${x[1]}')`:""}"><svg class="ic"><use href="#i-${x[4]}"/></svg>${x[2]}</button>`).join("")}</div>`;
-  h+=`<div class="pn"><h3>Classes</h3><div class="cg">${classes.filter(c=>!S||c.school_id===S).map(c=>{const n=L.filter(s=>s.class_id===c.id).length,cap=A&&(A.students.by_class||[]).find(x=>x.name===c.name&&x.cap);return `<div class="cc" onclick="clsView('${c.id}')"><b>${esc(c.name)}${c.stream?" "+esc(c.stream):""}</b><small>${esc(tchr(c.class_teacher_id)||"No class teacher")}</small><div style="font-size:22px;font-weight:700;margin-top:6px">${n}<small style="font-size:12px"> learners</small></div></div>`}).join("")||'<span class="mut">No classes yet.</span>'}</div></div>`;
-  h+=`<div class="pn"><h3>New learners</h3><div class="rg">${L.slice(0,8).map(s=>`<div onclick="stuView('${s.id}')">${stuAv(s)}${esc((s.first_name||"").slice(0,10))}</div>`).join("")||'<span class="mut">No registrations yet.</span>'}</div></div>`;
+  h+=`<div class="pn"><h3>Classes</h3>${shClsHtml(S,L)}</div>`;
+  h+=`<div class="pn"><h3>New learners</h3><div class="rg">${L.slice(0,8).map(s=>`<div>${stuAv(s)}${esc((s.first_name||"").slice(0,10))}</div>`).join("")||'<span class="mut">No registrations yet.</span>'}</div></div>`;
   return h}
 function drawDash(){if(typeof drawRoom==="function")drawRoom()}
 (function(){const an=$("anBox"),sh=document.createElement("div");sh.id="shBox";sh.className="hide";an.parentNode.insertBefore(sh,an.nextSibling);
@@ -3558,7 +3582,7 @@ async function roomLoad(){if(!perm.ad||typeof sb==="undefined")return;if(Date.no
   try{const{data}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(500);ROOM.logs=data||[];await ensureNames(ROOM.logs)}catch(e){}
   drawRoom();
   const S=sid(),q=async(t,n,o)=>{try{let r=sb.from(t).select("*");if(S&&o!==1)r=r.eq("school_id",S);const x=await r.order("created_at",{ascending:false}).limit(n);return x.error?[]:(x.data||[])}catch(e){return[]}};
-  const[adm,ann,pro,tr]=await Promise.all([q("admission_applications",8),q("announcements",6),q("student_promotions",8),q("student_transfers",6,1)]);
+  const[adm,ann,pro,tr]=await Promise.all([q("admission_applications",8),q("announcements",6),Promise.resolve([]),q("student_transfers",6,1)]);
   ROOM.ex={adm,ann,pro,tr:tr.filter(t=>!S||t.from_school_id===S||t.to_school_id===S)};
   try{if(!FX.pays.length)await loadFeeX()}catch(e){}
   drawRoom()}
@@ -3593,12 +3617,12 @@ function rmBrowse(all,day0){
   if(perm.fee||perm.ad)h+=P("Latest payments","setTab('fee')",pays.map(p=>{const x=students.find(y=>y.id===p.student_id);return row(x?stuAv(x):"",esc(x?fxName(x):"Learner"),esc(fxDate(fxD(p))+" · "+(fxMeth[p.method]||p.method||"")),money(p.amount),`fxStuPay('${p.student_id}')`)}).join("")||'<p class="mut" style="margin:0">No payments yet.</p>');
   const ow=fxRows().filter(r=>r.bal>0).sort((a,b)=>b.bal-a.bal).slice(0,5);
   if(perm.fee||perm.ad)h+=P("Fees owing (largest balances)","setTab('fee')",ow.map(r=>row(stuAv(r.x),esc(fxName(r.x)),esc((classes.find(c=>c.id===r.x.class_id)||{}).name||"No class")+" · "+(r.pc==null?"":r.pc+"% paid"),`<span style="color:#c0392b">${money(r.bal)}</span>`,`fxStuPay('${r.x.id}')`)).join("")||'<p class="mut" style="margin:0">Nobody owes anything, or no fee items are set yet.</p>');
-  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),esc(x.national_student_id||"")+(x.created_at?" · "+esc(new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})):""),`<span class="rcl">${esc(sCls(x)||"No class")}</span>`,`stuView('${x.id}')`)).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
+  h+=P("New learners","setTab('stu')",ss.slice().sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,6).map(x=>row(stuAv(x),esc(sName(x)),(x.created_at?esc(new Date(x.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})):""),`<span class="rcl">${esc(sCls(x)||"No class")}</span>`,"")).join("")||'<p class="mut" style="margin:0">No learners yet.</p>');
   if(!ex)return h+'<p class="mut" style="text-align:center">Loading admissions, notices and moves…</p>';
   const stc={pending:"#d98e04",approved:"#14804a",rejected:"#c0392b"};
   h+=P("Admission applications","setTab('adm')",ex.adm.map(a=>row(`<span class="av" style="background:var(--bd)">${esc(((a.first_name||"?")[0]+(a.last_name||"")[0]).toUpperCase())}</span>`,esc((a.first_name||"")+" "+(a.last_name||"")),esc((a.application_no||"")+" · "+new Date(a.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),`<span style="color:${stc[a.status]||"inherit"}">${esc(a.status||"")}</span>`,"setTab('adm')")).join("")||'<p class="mut" style="margin:0">No applications yet.</p>');
   h+=P("Notices posted","setTab('ann')",ex.ann.map(a=>row("",esc(a.title||""),esc(a.class_id?(classes.find(c=>c.id===a.class_id)||{}).name||"One class":"Whole school"),esc(new Date(a.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),"setTab('ann')")).join("")||'<p class="mut" style="margin:0">No notices yet.</p>');
-  h+=P("Promotions and transfers","setTab('stu')",ex.pro.map(p=>{const x=students.find(y=>y.id===p.student_id),a=classes.find(c=>c.id===p.from_class_id),b=classes.find(c=>c.id===p.to_class_id);return row(x?stuAv(x):"",esc(x?sName(x):"Learner"),esc(p.action==="graduated"?"Graduated from "+(a?a.name:"class"):(a?a.name:"?")+" to "+(b?b.name:"?")),esc(p.academic_year||""),x?`stuView('${x.id}')`:"")}).join("")+ex.tr.map(t=>row("",esc(t.student_name||t.national_student_id||"Learner"),esc((t.from_school_name||"?")+" to "+(t.to_school_name||"?")),esc(new Date(t.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),"setTab('stu')")).join("")||'<p class="mut" style="margin:0">No promotions or transfers yet.</p>');
+  h+=P("Transfers","setTab('stu')",ex.tr.map(t=>row("",esc(t.student_name||t.national_student_id||"Learner"),esc((t.from_school_name||"?")+" to "+(t.to_school_name||"?")),esc(new Date(t.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short"})),"setTab('stu')")).join("")||'<p class="mut" style="margin:0">No transfers yet.</p>');
   return h}
 (function(){const da=drawActivity;drawActivity=function(){da();if(typeof tab!=="undefined"&&tab==="sh"&&ROOM.tab!=="over")drawRoom()}})();
 /* ROOM_END */
@@ -4290,7 +4314,6 @@ const SS0=saveScores;saveScores=function(){const a=assess.find(x=>x.id===$("rasm
 <script>
 (function(){
  function fit(){try{fitSel(["pmFrom","pmAct","pmTo"])}catch(x){}}
- if(typeof drawPromo==="function"){const d=drawPromo;drawPromo=function(){d.apply(this,arguments);fit()}}
  fit();
 })();
 </script>
@@ -4455,7 +4478,7 @@ const _bd=window.bellDraw;
 window.bellDraw=function(open){_bd(open);const b=$("bdg");if(!b)return;const seen=+ld(SEEN,0)||0;
   if(open)sv(SEEN,Date.now());else{const un=PHN.filter(n=>n.t>seen).length;if(un){const cur=b.classList.contains("hide")?0:(parseInt(b.textContent)||0);b.textContent=cur+un>99?"99+":cur+un;b.classList.remove("hide")}}
   const p=$("npop");if(p&&PHN.length&&(open||!p.classList.contains("hide"))){const h=p.querySelector(".ph");if(h&&!p.querySelector(".phn")){const m=p.querySelector("p.mut");if(m)m.remove();
-    h.insertAdjacentHTML("afterend",PHN.slice(0,10).map(n=>`<div class="ar phn" style="cursor:pointer" onclick="closePops();stuView('${(students.find(x=>x.national_student_id===n.sin)||{}).id||""}')"><span class="av">PH</span><div class="at"><b>${esc(n.name)}</b><div>${esc(n.txt)}</div><div class="tm">${ago(n.t)}</div></div></div>`).join(""))}}};
+    h.insertAdjacentHTML("afterend",PHN.slice(0,10).map(n=>`<div class="ar phn" style="cursor:pointer" onclick="closePops();gStu('${(students.find(x=>x.national_student_id===n.sin)||{}).id||""}')"><span class="av">PH</span><div class="at"><b>${esc(n.name)}</b><div>${esc(n.txt)}</div><div class="tm">${ago(n.t)}</div></div></div>`).join(""))}}};
 setTimeout(tick,3000);setInterval(tick,15000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick()});
 })();
 </script>
@@ -4495,7 +4518,7 @@ function open_(t){th=t;clearInterval(poll);
 })();
 </script>
 <!-- PARENT_CHAT_END -->
-<style>.id,.sid2,.cp{cursor:pointer;-webkit-tap-highlight-color:transparent}.id::after,.sid2::after,.cp::after{content:" \29C9";font-size:.8em;opacity:.5}.id.copied,.sid2.copied,.cp.copied{color:var(--pri);font-weight:700}.id.copied::after,.sid2.copied::after,.cp.copied::after{content:" \2713";opacity:1}</style><script>
+<style>body:not(.instu) .sid2::after,body:not(.instu) .cp::after{content:none}body:not(.instu) .sid2,body:not(.instu) .cp{cursor:default}.id,.sid2,.cp{cursor:pointer;-webkit-tap-highlight-color:transparent}.id::after,.sid2::after,.cp::after{content:" \29C9";font-size:.8em;opacity:.5}.id.copied,.sid2.copied,.cp.copied{color:var(--pri);font-weight:700}.id.copied::after,.sid2.copied::after,.cp.copied::after{content:" \2713";opacity:1}</style><script>
 /* tap any ID (student ID, staff ID, school code) to copy it */
 (function(){
   function copyText(t){
@@ -4507,6 +4530,7 @@ function open_(t){th=t;clearInterval(poll);
     if(!el||el.closest("input,textarea,select"))return;
     var v=(el.getAttribute("data-copy")||el.textContent||"").trim().split(/\s+/)[0].replace(/[\u29C9\u2713]/g,"");
     if(!v)return;
+    if(typeof tab!=="undefined"&&tab!=="stu"&&typeof students!=="undefined"&&students.some(function(x){return x.national_student_id===v}))return;
     e.stopPropagation();e.preventDefault();
     copyText(v).then(function(){
       el.classList.add("copied");setTimeout(function(){el.classList.remove("copied")},1500);
@@ -4724,7 +4748,7 @@ function brdList(){const e=$("bdList");if(e)e.innerHTML=brdListHtml()}
 function brdBoarder(id){const a=BRD.al.find(x=>x.id===id),s=a&&brdStu(a.student_id);if(!a||!s)return;const d=brdDorm(a.dorm_id);
   modal(`<div style="position:relative;padding-right:34px">${xBtn}<b style="font-size:18px">Boarder</b></div><div class="ar" style="margin-top:10px;align-items:center">${stuAv(s)}<div class="at"><b>${esc(sName(s))}</b><div class="tm cp">${esc(s.national_student_id||"")}</div></div></div>`+
   sec("Boarding",kvs([["Dormitory",d?d.name:"?"],["Room",a.room||""],["Bed",a.bed||""],["Type",a.boarder_type==="weekly"?"Weekly boarder":"Full boarder"],["Since",brdD(a.start_date)],["Class",sCls(s)]]))+
-  `<div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap"><button class="alt" style="margin:0" onclick="closeModal();stuView('${s.id}')">Learner profile</button>${brdW()?`<button class="alt" style="margin:0" onclick="brdMoveForm('${a.id}')">Move</button><button class="alt" style="margin:0" onclick="closeModal();brdExeatForm('${s.id}')">Exeat</button><button class="alt" style="margin:0;color:#c0392b;border-color:#c0392b" onclick="brdCheckout('${a.id}')">Check out</button>`:""}</div>`)}
+  `<div class="row" style="gap:8px;margin-top:16px;flex-wrap:wrap"><button class="alt" style="margin:0" onclick="closeModal();gStu('${s.id}')">Learner profile</button>${brdW()?`<button class="alt" style="margin:0" onclick="brdMoveForm('${a.id}')">Move</button><button class="alt" style="margin:0" onclick="closeModal();brdExeatForm('${s.id}')">Exeat</button><button class="alt" style="margin:0;color:#c0392b;border-color:#c0392b" onclick="brdCheckout('${a.id}')">Check out</button>`:""}</div>`)}
 function brdDormOpts(sid2,keep){const s=brdStu(sid2);return BRD.dorms.filter(d=>brdFits(d,s)||d.id===keep).map(d=>{const n=brdOcc(d.id),full=(+d.capacity||0)<=n&&d.id!==keep;return `<option value="${d.id}" ${d.id===keep?"selected":""} ${full?"disabled":""}>${esc(d.name)} (${Math.max(0,(+d.capacity||0)-n)} free)</option>`}).join("")}
 function brdStuOpts(){const q=($("bdSq")?$("bdSq").value:"").trim().toLowerCase(),b=new Set(BRD.al.map(a=>a.student_id));
   const L=students.filter(s=>s.school_id===sid()&&s.status==="active"&&!s.deleted_at&&!b.has(s.id)&&(!q||(sName(s)+" "+(s.national_student_id||"")+" "+sCls(s)).toLowerCase().includes(q))).sort(brdByName).slice(0,80);
@@ -4802,5 +4826,133 @@ async function brdReturn(id){if(!confirm("Mark this learner as back at school?")
 })();
 /* BOARDING_END */
 
+</script>
+
+<script type="application/json" id="module-roadmap">
+{"plans":{"starter":{"name":"Starter","usd":20,"ugx":72000,"for":"Small schools"},"standard":{"name":"Standard","usd":35,"ugx":126000,"for":"Most schools, full administration"},"premium":{"name":"Premium","usd":57,"ugx":205200,"for":"Boarding schools"}},"rate":3600,
+"modules":[
+{"id":"students","name":"Student information","plan":"starter","status":"built"},
+{"id":"attendance","name":"Attendance management","plan":"starter","status":"built"},
+{"id":"fees_basic","name":"Basic fees management","plan":"starter","status":"built"},
+{"id":"support","name":"Basic support","plan":"starter","status":"service"},
+{"id":"classes","name":"Class management","plan":"starter","status":"built"},
+{"id":"timetable","name":"Timetable / programme","plan":"starter","status":"built"},
+{"id":"exams","name":"Examination management","plan":"standard","status":"built"},
+{"id":"fees_full","name":"Full fees management","plan":"standard","status":"built"},
+{"id":"parent_balance","name":"Parent balance visibility","plan":"standard","status":"built"},
+{"id":"staff","name":"Staff management","plan":"standard","status":"built"},
+{"id":"library","name":"Library management","plan":"standard","status":"development"},
+{"id":"ai_basic","name":"Basic AI assistant","plan":"standard","status":"development"},
+{"id":"print_center","name":"Print center","plan":"standard","status":"development"},
+{"id":"hostel","name":"Hostel management","plan":"premium","status":"built"},
+{"id":"visitors","name":"Visitor recording","plan":"premium","status":"development"},
+{"id":"ai_full","name":"AI assistant (full)","plan":"premium","status":"development"},
+{"id":"preps","name":"Preps and extra","plan":"premium","status":"development"}
+]}
+</script>
+<script>
+/* PLANS_START: subscription plans for the platform admin (Schools tab). Edit status in module-roadmap too. */
+const PLAN_MODS=JSON.parse(document.getElementById("module-roadmap").textContent);
+const PLAN_ORDER=["starter","standard","premium"];
+let planSel="starter";
+const planUgx=n=>"UGX "+Number(n).toLocaleString("en-US");
+function planFeatures(k){return PLAN_MODS.modules.filter(m=>m.plan===k)}
+function planCards(){
+  const box=document.getElementById("planPick");if(!box)return;
+  box.innerHTML='<div class="mut" style="margin:10px 0 6px">Subscription plan</div>'+PLAN_ORDER.map(k=>{const P=PLAN_MODS.plans[k],on=planSel===k;
+    return `<div onclick="planSel='${k}';planCards()" style="border:2px solid ${on?'#2563eb':'#d0d5dd'};border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer"><b>${P.name}</b> <span class="mut">${P.for}</span><div><b>$${P.usd}</b> = ${planUgx(P.ugx)} <span class="mut">per month, at ${PLAN_MODS.rate} UGX per $</span></div></div>`}).join("");
+}
+function planCatalog(){
+  const box=document.getElementById("planCat");if(!box)return;
+  const lab={built:"Built",development:"Under development",service:"Service"},col={built:"#15803d",development:"#b45309",service:"#475569"};
+  const dev=PLAN_MODS.modules.filter(m=>m.status==="development");
+  box.innerHTML='<h3 style="margin-top:18px">Plans and modules</h3>'+PLAN_ORDER.map((k,i)=>{const P=PLAN_MODS.plans[k];
+    return `<div class="card" style="margin:8px 0"><b>${P.name}</b> · $${P.usd} · ${planUgx(P.ugx)}<div class="mut" style="font-size:12px">${i?'Everything in '+PLAN_MODS.plans[PLAN_ORDER[i-1]].name+', plus:':'Includes:'}</div>`+
+    planFeatures(k).map(m=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>${esc(m.name)}</span><span style="color:${col[m.status]};font-size:12px;white-space:nowrap">${lab[m.status]}</span></div>`).join("")+'</div>'}).join("")+
+    `<div class="card" style="margin:8px 0"><b>Still under development (${dev.length})</b><div class="mut" style="font-size:12px">Ask "which module should we build next?" and this list is the answer.</div>`+dev.map(m=>`<div style="padding:3px 0">${esc(m.name)} <span class="mut">(${PLAN_MODS.plans[m.plan].name})</span></div>`).join("")+'</div>';
+}
+addSchool=async function(){
+  const name=$("sname").value.trim();if(!name)return alert("Enter the school name");
+  const row={name,district:$("sdist").value,level:$("slevel").value,plan:planSel};
+  let{error}=await sb.from("schools").insert(row);
+  if(error&&/plan/i.test(error.message)){delete row.plan;({error}=await sb.from("schools").insert(row));
+    if(!error)toast("School created, but the plan was not saved: add the plan column in Supabase (see note at top of file)")}
+  if(error)return alert(error.message);$("sname").value="";loadSchools();
+};
+const _ls=loadSchools;
+loadSchools=async function(){await _ls();
+  const L=document.getElementById("slist");if(L)L.innerHTML=schools.map(s=>`<div class="st"><span class="id">${esc(s.school_code)}</span> ${esc(s.name)} <span class="mut">· ${esc(PLAN_MODS.plans[s.plan]?PLAN_MODS.plans[s.plan].name:"No plan")}</span></div>`).join("");
+  planCards();planCatalog();
+};
+planCards();planCatalog();
+/* PLANS_END */
+</script>
+
+<script>
+/* PLAN_LOCK_START: plan, expiry and read-only lock. The database is the real enforcement (my_access, module_ok); this shapes the screens and explains why. */
+(function(){
+const NOTICE="Plan expired. Please contact TFG administering to renew your plan.";
+const GATED_FEE_SUBS=["health","status","remind"];
+const rankOf=p=>p==="premium"?3:p==="standard"?2:p==="starter"?1:0;
+const locked=()=>!!(typeof acc!=="undefined"&&acc&&acc.read_only&&me&&me.role!=="super_admin");
+const full=()=>!!(typeof acc!=="undefined"&&acc&&rankOf(acc.plan)>=2)||!(typeof acc!=="undefined"&&acc)||(me&&me.role==="super_admin");
+function reasonText(){const r=acc&&acc.lock_reason;
+  if(r==="overdue")return"Billing is overdue. Please contact TFG administering.";
+  if(r==="no_plan")return"No plan is set for this school. Please contact TFG administering to choose and activate a plan.";
+  return NOTICE}
+/* popup */
+let lastPop=0;
+function lockPopup(){const n=Date.now();if(n-lastPop<1500)return;lastPop=n;
+  let o=document.getElementById("lockPop");if(o)o.remove();
+  o=document.createElement("div");o.id="lockPop";
+  o.style.cssText="position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px";
+  o.innerHTML='<div style="background:Canvas;color:CanvasText;border-radius:16px;max-width:360px;width:100%;padding:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h3 style="margin:0 0 8px;color:#b42318">Read-only</h3><p style="margin:0 0 14px">'+esc(reasonText())+'</p><button type="button" id="lockPopOk" style="padding:10px 22px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-size:15px">OK</button></div>';
+  document.body.appendChild(o);
+  o.onclick=e=>{if(e.target===o||e.target.id==="lockPopOk")o.remove()}}
+window.lockPopup=lockPopup;
+/* tabs: add analytics to the module map; hide fee sub-pages and staff attendance below Standard */
+if(typeof TABMOD!=="undefined")TABMOD.an="analytics";
+const _sl=subList;
+subList=function(){const l=_sl();
+  if(full())return l;
+  return l.filter(x=>!(tab==="fee"&&GATED_FEE_SUBS.includes(x[0]))&&!(tab==="att"&&x[0]==="staff"))};
+const _aa=applyAccess;
+applyAccess=function(){_aa();
+  const bar=document.getElementById("accBar");
+  if(locked()&&bar){bar.style.background="#fde8e8";bar.style.color="#7a1212";bar.textContent=reasonText()+(acc.subscription_until&&acc.lock_reason==="expired"?" (ended "+acc.subscription_until+")":"");bar.style.display=""}
+  const sa=document.getElementById("staffAtt");if(sa&&!full())sa.classList.add("hide")};
+/* errors from the database */
+const _al=window.alert;
+window.alert=function(m){if(locked()&&/row-level security|plan does not allow|permission denied/i.test(String(m)))return lockPopup();_al(m)};
+/* block writes at the client (the database blocks them too) */
+const stub=()=>{lockPopup();const r={data:null,error:{message:"plan does not allow this action",code:"42501"}};
+  const p=new Proxy(function(){},{get(_,k){if(k==="then")return(f,g)=>Promise.resolve(r).then(f,g);return p},apply(){return p}});return p};
+const _from=sb.from.bind(sb);
+sb.from=function(t){const q=_from(t);if(!locked())return q;
+  return new Proxy(q,{get(o,k){if(["insert","update","upsert","delete"].includes(k))return stub;const v=o[k];return typeof v==="function"?v.bind(o):v}})};
+const _rpc=sb.rpc.bind(sb);
+sb.rpc=function(n,...r){if(locked()&&/^(add|save|create|update|delete|remove|set|insert|record|mark|submit|approve|reject|enrol|transfer|promote|register|issue|clear|send|import|reset|close|open|assign|cancel)/i.test(String(n)))return stub();return _rpc(n,...r)};
+try{const st=sb.storage;if(st&&st.from){const _sf=st.from.bind(st);st.from=function(b){const x=_sf(b);if(!locked())return x;
+  return new Proxy(x,{get(o,k){if(["upload","update","remove","move","copy"].includes(k))return stub;const v=o[k];return typeof v==="function"?v.bind(o):v}})}}}catch(e){}
+/* buttons: when locked, a tap says it is locked, and a long press (0.6 s) opens the full notice */
+const WRITE=/\b(save|add|new|create|delete|remove|register|submit|upload|record|mark|issue|send|import|promote|transfer|approve|reject|edit|update|enrol|enroll|print receipt|post|publish|assign|activate)\b|^\s*[+＋]\s*$/i;
+const writeBtn=b=>{if(!b||b.closest("#lock,#lockPop,#side nav,#bnav,#subbar,[data-lockok]"))return false;
+  const oc=b.getAttribute("onclick")||"";if(/setTab\(|setSub\(|setP\(|closeModal|closeSide|signOut|logout|print\(\)|window\.print/i.test(oc))return false;
+  return WRITE.test((b.textContent||"").trim().slice(0,40)+" "+oc.slice(0,60))||b.classList.contains("fab")};
+let ht=null,held=false;
+document.addEventListener("pointerdown",e=>{if(!locked())return;const b=e.target.closest("button,.fab,[role=button]");if(!writeBtn(b))return;held=false;
+  clearTimeout(ht);ht=setTimeout(()=>{held=true;lockPopup()},600)},true);
+["pointerup","pointercancel","pointerleave"].forEach(k=>document.addEventListener(k,()=>clearTimeout(ht),true));
+document.addEventListener("click",e=>{if(!locked())return;const b=e.target.closest("button,.fab,[role=button]");if(!writeBtn(b))return;
+  e.preventDefault();e.stopImmediatePropagation();if(!held&&typeof toast==="function")toast("Locked. Press and hold for details.");held=false},true);
+document.addEventListener("contextmenu",e=>{if(locked()&&writeBtn(e.target.closest("button,.fab,[role=button]")))e.preventDefault()},true);
+/* typing into a data-entry field shows the notice */
+document.addEventListener("focusin",e=>{if(!locked())return;const t=e.target;
+  if(!t.matches||!t.matches("input,textarea")||t.closest("#lock,#lockPop,[data-lockok]"))return;
+  if(/^(search|hidden|checkbox|radio|button|submit)$/i.test(t.type||""))return;
+  if(/search|filter|find|query|^q$/i.test((t.id||"")+" "+(t.placeholder||"")+" "+(t.getAttribute("aria-label")||"")))return;
+  t.blur();lockPopup()},true);
+})();
+/* PLAN_LOCK_END */
 </script>
 </body></html>
