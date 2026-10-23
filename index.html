@@ -4833,21 +4833,23 @@ async function brdReturn(id){if(!confirm("Mark this learner as back at school?")
 "modules":[
 {"id":"students","name":"Student information","plan":"starter","status":"built"},
 {"id":"attendance","name":"Attendance management","plan":"starter","status":"built"},
-{"id":"fees_basic","name":"Basic fees management","plan":"starter","status":"built"},
-{"id":"support","name":"Basic support","plan":"starter","status":"service"},
+{"id":"fees_basic","name":"Fees management (basic)","plan":"starter","status":"built"},
 {"id":"classes","name":"Class management","plan":"starter","status":"built"},
 {"id":"timetable","name":"Timetable / programme","plan":"starter","status":"built"},
+{"id":"print_basic","name":"Print center (basic): class lists and fee receipts","plan":"starter","status":"built"},
+{"id":"support","name":"Basic support","plan":"starter","status":"service"},
 {"id":"exams","name":"Examination management","plan":"standard","status":"built"},
 {"id":"fees_full","name":"Full fees management","plan":"standard","status":"built"},
-{"id":"parent_balance","name":"Parent balance visibility","plan":"standard","status":"built"},
+{"id":"parent_balance","name":"Parent balance visibility (parent app connected)","plan":"standard","status":"built"},
 {"id":"staff","name":"Staff management","plan":"standard","status":"built"},
-{"id":"library","name":"Library management","plan":"standard","status":"development"},
-{"id":"ai_basic","name":"Basic AI assistant","plan":"standard","status":"development"},
-{"id":"print_center","name":"Print center","plan":"standard","status":"development"},
-{"id":"hostel","name":"Hostel management","plan":"premium","status":"built"},
-{"id":"visitors","name":"Visitor recording","plan":"premium","status":"development"},
-{"id":"ai_full","name":"AI assistant (full)","plan":"premium","status":"development"},
-{"id":"preps","name":"Preps and extra","plan":"premium","status":"development"}
+{"id":"library","name":"Library management","plan":"standard","status":"built"},
+{"id":"analytics","name":"Analytics","plan":"standard","status":"built"},
+{"id":"print_standard","name":"Print center (standard): adds report cards","plan":"standard","status":"built"},
+{"id":"hostel","name":"Hostel management (dormitory and boarding)","plan":"premium","status":"built"},
+{"id":"visitors","name":"Visitor recording","plan":"premium","status":"built"},
+{"id":"print_full","name":"Print center (full): every document","plan":"premium","status":"built"},
+{"id":"activity_room","name":"Activity room","plan":"premium","status":"built"},
+{"id":"preps","name":"Preps and extra lessons","plan":"premium","status":"built"}
 ]}
 </script>
 <script>
@@ -4889,6 +4891,611 @@ planCards();planCatalog();
 </script>
 
 <script>
+/* LIBRARY_START: books, loans, returns. Tables and rules are part of the school database (library_books, library_loans, library_issue, library_return). */
+(function(){
+const L={view:"books",books:[],loans:[],staff:[],q:"",flt:"open",t:0,ok:null,err:""};
+const libW=()=>!!me&&(!!perm.ad||/librar/i.test(me.department||""));
+const libCan=()=>!!me&&(!!perm.view||libW());
+const pad=n=>String(n).padStart(2,"0"),dAdd=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const outN=id=>L.loans.filter(x=>x.book_id===id&&!x.returned_on).length;
+const isOver=x=>!x.returned_on&&x.due_on<todayIso();
+const stuName=id=>{const s=(typeof students!=="undefined"?students:[]).find(x=>x.id===id);return s?esc((s.first_name||"")+" "+(s.last_name||"")):"Student"};
+const whoName=x=>x.student_id?stuName(x.student_id):esc((L.staff.find(p=>p.id===x.staff_id)||{}).full_name||"Staff member");
+const bookOf=id=>L.books.find(b=>b.id===id)||{title:"(removed book)"};
+const fd=s=>{if(!s)return"";const d=new Date(s+"T00:00:00");return isNaN(d)?s:d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})};
+const st=document.createElement("style");st.textContent=`
+#libBox{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);max-width:100%;overflow-x:clip}#libBox>*{min-width:0;box-sizing:border-box}
+#libBox .lh{border-radius:22px;padding:18px;color:#fff;background:linear-gradient(135deg,var(--pri),#0b3d2e 60%,#7a4b12)}
+#libBox .lh h2{margin:0;font-size:21px}#libBox .lh p{margin:2px 0 0;opacity:.85;font-size:13px}
+#libBox .lh .lv{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:99px;padding:3px 10px;margin-bottom:8px}
+#libBox .ls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}#libBox .ls div{background:rgba(255,255,255,.14);border-radius:14px;padding:9px 10px}#libBox .ls b{display:block;font-size:20px}#libBox .ls span{font-size:11px;opacity:.85}
+#libBox .lt{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:4px;gap:4px}#libBox .lt button{flex:1;margin:0;width:auto;padding:9px 12px;border-radius:11px;border:0;background:transparent;color:var(--mut);font-weight:700;font-size:13px}#libBox .lt button.on{background:var(--pri);color:#fff}
+#libBox .lp{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:14px}
+#libBox .lr{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--bd)}#libBox .lr:first-child{border-top:0}
+#libBox .lr .m{min-width:0;flex:1}#libBox .lr b{display:block;overflow-wrap:anywhere}#libBox .lr small{color:var(--mut);display:block;overflow-wrap:anywhere}
+#libBox .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;background:var(--bd);color:var(--mut);margin-left:6px;white-space:nowrap}#libBox .pill.g{background:#dcfce7;color:#166534}#libBox .pill.r{background:#fee2e2;color:#991b1b}#libBox .pill.y{background:#fef3c7;color:#92400e}
+#libBox .lf{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}#libBox .lf input{flex:1 1 160px;margin:0;min-width:0}#libBox .lf button,#libBox .lr button{margin:0;width:auto;padding:8px 12px;font-size:13px;white-space:nowrap}
+.lbm .lbf{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lbm .lbf .w{grid-column:1/-1}.lbm input,.lbm select,.lbm textarea{margin:0;min-width:0}`;document.head.appendChild(st);
+const sp=document.querySelector('svg[aria-hidden="true"]');if(sp&&!document.getElementById("i-book"))sp.insertAdjacentHTML("beforeend",'<symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M9 7h6"/></symbol>');
+const an=document.getElementById("annBox");if(an&&!document.getElementById("libBox")){const b=document.createElement("div");b.id="libBox";b.className="hide";an.parentNode.insertBefore(b,an.nextSibling)}
+const sd=document.getElementById("tabBrd")||document.querySelector('#side button[data-t="att"]');if(sd&&!document.getElementById("tabLib"))sd.insertAdjacentHTML("afterend",'<button id="tabLib" data-t="lib" class="hide" onclick="setTab(\'lib\')"><svg class="ic"><use href="#i-book"/></svg>Library</button>');
+Object.values(ACC).forEach(a=>{if(a&&a.tabs&&a.tabs.includes("ann")&&!a.tabs.includes("lib"))a.tabs.push("lib")});
+ALLTABS.push("lib");TABMOD.lib="library";
+async function load(force){
+  if(!me||!libCan())return;
+  if(!force&&Date.now()-L.t<15000){draw();return}
+  L.t=Date.now();const S=sid();if(!S)return;
+  const r=await Promise.all([sb.from("library_books").select("*").eq("school_id",S).order("title").limit(3000),sb.from("library_loans").select("*").eq("school_id",S).order("issued_on",{ascending:false}).limit(2000),sb.from("profiles").select("id,full_name").eq("school_id",S).in("role",["school_admin","teacher","bursar","staff"]).order("full_name")]);
+  if(r[0].error){L.ok=false;L.err=r[0].error.message}else{L.ok=true;L.books=r[0].data||[];L.loans=(r[1].data)||[];L.staff=r[2].data||[]}
+  draw();
+}
+function draw(){
+  const d=$("libBox");if(!d||!me||!libCan())return;
+  if(L.ok===null){d.innerHTML='<div class="lp">Loading the library…</div>';return}
+  if(L.ok===false){d.innerHTML=`<div class="lh"><span class="lv">LIBRARY</span><h2>Library is not available yet</h2><p>It may not be switched on for your school's plan, or it is still being set up.</p></div><div class="lp"><p class="mut">${esc(L.err)}</p><button onclick="libReload()">Try again</button></div>`;return}
+  const open=L.loans.filter(x=>!x.returned_on),over=open.filter(isOver),active=L.books.filter(b=>b.status==="active");
+  const head=`<div class="lh"><span class="lv">LIBRARY</span><h2>Books and borrowing</h2><p>${esc((typeof schRow==="function"&&schRow()||{}).name||"Your school")}</p><div class="ls"><div><b>${active.length}</b><span>Titles</span></div><div><b>${open.length}</b><span>Out now</span></div><div><b>${over.length}</b><span>Overdue</span></div></div></div>`;
+  const nav=`<div class="lt">${[["books","Books"],["loans","Loans"]].map(([k,l])=>`<button class="${L.view===k?"on":""}" onclick="libGo('${k}')">${l}${k==="loans"&&over.length?` (${over.length} late)`:""}</button>`).join("")}</div>`;
+  d.innerHTML=head+nav+(L.view==="books"?bodyBooks():bodyLoans());
+}
+function bodyBooks(){
+  const q=L.q.trim().toLowerCase(),list=L.books.filter(b=>!q||[b.title,b.author,b.accession_no,b.isbn,b.category,b.shelf].some(v=>String(v||"").toLowerCase().includes(q)));
+  return `<div class="lp"><div class="lf"><input type="search" id="lbQ" placeholder="Search title, author or number" value="${esc(L.q)}" oninput="libQ(this.value)">${libW()?'<button class="btn" onclick="libBook()">+ Add book</button>':""}</div>`+
+   (list.length?list.slice(0,200).map(b=>{const o=outN(b.id),av=Math.max(b.copies-o,0);return `<div class="lr"><div class="m"><b>${esc(b.title)}${b.status!=="active"?`<span class="pill y">${esc(b.status)}</span>`:""}</b><small>${esc([b.author,b.category,b.shelf&&"Shelf "+b.shelf,b.accession_no&&"No. "+b.accession_no].filter(Boolean).join(" · "))}</small><small><span class="pill ${av?"g":"r"}">${av} of ${b.copies} available</span></small></div>${libW()?`<div style="display:grid;gap:6px">${b.status==="active"&&av?`<button class="btn" onclick="libIssue('${b.id}')">Issue</button>`:""}<button onclick="libBook('${b.id}')">Edit</button></div>`:""}</div>`}).join("")+(list.length>200?`<p class="mut">Showing 200 of ${list.length}. Search to narrow down.</p>`:""):`<p class="mut">${L.books.length?"No book matches your search.":"No books yet."+(libW()?" Tap “Add book” to start.":"")}</p>`)+`</div>`;
+}
+function bodyLoans(){
+  const f=L.flt,all=L.loans,rows=all.filter(x=>f==="open"?!x.returned_on:f==="late"?isOver(x):!!x.returned_on).slice(0,200);
+  return `<div class="lp"><div class="lf">${[["open","Out now"],["late","Overdue"],["done","Returned"]].map(([k,l])=>`<button class="${f===k?"btn":""}" onclick="libFlt('${k}')">${l}</button>`).join("")}</div>`+
+   (rows.length?rows.map(x=>{const b=bookOf(x.book_id);return `<div class="lr"><div class="m"><b>${esc(b.title)}</b><small>${whoName(x)}</small><small>Issued ${fd(x.issued_on)} · Due ${fd(x.due_on)}${x.returned_on?` · Returned ${fd(x.returned_on)}`:""}${+x.fine>0?` · Fine ${(+x.fine).toLocaleString()}`:""}</small>${isOver(x)?'<span class="pill r">Overdue</span>':""}</div>${libW()&&!x.returned_on?`<button class="btn" onclick="libReturn('${x.id}')">Receive</button>`:""}</div>`}).join(""):`<p class="mut">Nothing here.</p>`)+`</div>`;
+}
+window.libGo=v=>{L.view=v;draw()};window.libFlt=v=>{L.flt=v;draw()};window.libReload=()=>load(true);
+window.libQ=v=>{L.q=v;draw();const i=$("lbQ");if(i){i.focus();i.setSelectionRange(v.length,v.length)}};
+window.libBook=function(id){
+  const b=id?L.books.find(x=>x.id===id):{copies:1,status:"active"};
+  modal(`<div class="lbm"><h3>${id?"Edit book":"Add a book"}</h3><div class="lbf"><div class="w"><label>Title</label><input id="lbT" value="${esc(b.title||"")}"></div><div><label>Author</label><input id="lbA" value="${esc(b.author||"")}"></div><div><label>Book number</label><input id="lbN" value="${esc(b.accession_no||"")}"></div><div><label>Category</label><input id="lbC" value="${esc(b.category||"")}"></div><div><label>Shelf</label><input id="lbS" value="${esc(b.shelf||"")}"></div><div><label>ISBN</label><input id="lbI" value="${esc(b.isbn||"")}"></div><div><label>Copies</label><input id="lbK" type="number" min="1" value="${b.copies||1}"></div><div class="w"><label>Status</label><select id="lbU">${["active","lost","archived"].map(s=>`<option ${b.status===s?"selected":""}>${s}</option>`).join("")}</select></div></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="libBookSave('${id||""}')">Save</button><button onclick="closeModal()">Cancel</button></div></div>`);
+};
+window.libBookSave=async function(id){
+  const g=i=>$(i).value.trim(),title=g("lbT"),copies=parseInt($("lbK").value,10);
+  if(!title)return alert("Write the book title.");if(!(copies>=1))return alert("Copies must be 1 or more.");
+  const row={title,author:g("lbA")||null,accession_no:g("lbN")||null,category:g("lbC")||null,shelf:g("lbS")||null,isbn:g("lbI")||null,copies,status:$("lbU").value};
+  if(id&&copies<outN(id))return alert("Copies cannot be fewer than the copies currently out ("+outN(id)+").");
+  const q=id?await sb.from("library_books").update(row).eq("id",id):await sb.from("library_books").insert({...row,school_id:sid()});
+  if(q.error)return alert(q.error.code==="23505"?"That book number is already used.":q.error.message);
+  closeModal();toast("Saved");load(true);
+};
+window.libIssue=function(bid){
+  const b=bookOf(bid);
+  modal(`<div class="lbm"><h3>Issue: ${esc(b.title)}</h3><div class="lbf"><div class="w"><label>Borrower</label><select id="lbBK" onchange="libPick()"><option value="s">Student</option><option value="t">Staff member</option></select></div><div class="w"><input id="lbSQ" type="search" placeholder="Type a name to find" oninput="libPick()"></div><div class="w"><select id="lbP" size="5"></select></div><div class="w"><label>Due date</label><input id="lbD" type="date" value="${dAdd(14)}" min="${todayIso()}"></div></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="libIssueGo('${bid}')">Issue book</button><button onclick="closeModal()">Cancel</button></div></div>`);libPick();
+};
+window.libPick=function(){
+  const k=$("lbBK").value,q=($("lbSQ").value||"").toLowerCase(),sel=$("lbP");if(!sel)return;
+  const src=k==="s"?(typeof students!=="undefined"?students:[]).filter(s=>!s.status||s.status==="active").map(s=>({id:s.id,n:(s.first_name||"")+" "+(s.last_name||"")+(s.class_level?" · "+s.class_level:"")})):L.staff.map(p=>({id:p.id,n:p.full_name||"Staff"}));
+  sel.innerHTML=src.filter(x=>!q||x.n.toLowerCase().includes(q)).slice(0,60).map(x=>`<option value="${x.id}">${esc(x.n)}</option>`).join("");
+};
+window.libIssueGo=async function(bid){
+  const k=$("lbBK").value,v=$("lbP").value,due=$("lbD").value;
+  if(!v)return alert("Choose who is borrowing the book.");if(!due)return alert("Set the due date.");
+  const {error}=await sb.rpc("library_issue",{p_book:bid,p_student:k==="s"?v:null,p_staff:k==="t"?v:null,p_due:due});
+  if(error)return alert(error.message);closeModal();toast("Book issued");load(true);
+};
+window.libReturn=function(id){
+  const x=L.loans.find(l=>l.id===id),b=bookOf(x.book_id);
+  modal(`<div class="lbm"><h3>Receive: ${esc(b.title)}</h3><p class="mut">${whoName(x)} · due ${fd(x.due_on)}${isOver(x)?" · overdue":""}</p><div class="lbf"><div><label>Fine (if any)</label><input id="lbF" type="number" min="0" value="0"></div><div><label>Note</label><input id="lbO" placeholder="e.g. damaged cover"></div></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="libReturnGo('${id}')">Receive book</button><button onclick="closeModal()">Cancel</button></div></div>`);
+};
+window.libReturnGo=async function(id){
+  const {error}=await sb.rpc("library_return",{p_loan:id,p_fine:parseFloat($("lbF").value)||0,p_note:$("lbO").value});
+  if(error)return alert(error.message);closeModal();toast("Book received");load(true);
+};
+const _at=applyTab;applyTab=function(){_at();const ok=libCan();show("libBox",ok&&tab==="lib");show("tabLib",ok&&(!acc||(acc.modules||{}).library!=="off"))};
+const _st=setTab;setTab=function(x){_st(x);if(tab==="lib")load()};
+})();
+/* LIBRARY_END */
+/* VISITORS_PREPS_START: visitors book, and preps / extra lessons with attendance. Tables come from the "Visitors" and "Preps" jobs. */
+(function(){
+const pad=n=>String(n).padStart(2,"0"),ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const tm=s=>s?new Date(s).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
+const fd=s=>{if(!s)return"";const d=new Date(s+"T00:00:00");return isNaN(d)?s:d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})};
+const st=document.createElement("style");st.textContent=`
+#visBox,#prpBox{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);max-width:100%;overflow-x:clip}#visBox>*,#prpBox>*{min-width:0;box-sizing:border-box}
+:is(#visBox,#prpBox) .xh{border-radius:22px;padding:18px;color:#fff;background:linear-gradient(135deg,var(--pri),#0b3d2e 60%,#3b2a63)}
+:is(#visBox,#prpBox) .xh h2{margin:0;font-size:21px}:is(#visBox,#prpBox) .xh p{margin:2px 0 0;opacity:.85;font-size:13px}
+:is(#visBox,#prpBox) .xh .lv{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.18);border-radius:99px;padding:3px 10px;margin-bottom:8px}
+:is(#visBox,#prpBox) .xs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}:is(#visBox,#prpBox) .xs div{background:rgba(255,255,255,.14);border-radius:14px;padding:9px 10px}:is(#visBox,#prpBox) .xs b{display:block;font-size:20px}:is(#visBox,#prpBox) .xs span{font-size:11px;opacity:.85}
+:is(#visBox,#prpBox) .xt{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:4px;gap:4px}:is(#visBox,#prpBox) .xt button{flex:1;margin:0;width:auto;padding:9px 12px;border-radius:11px;border:0;background:transparent;color:var(--mut);font-weight:700;font-size:13px}:is(#visBox,#prpBox) .xt button.on{background:var(--pri);color:#fff}
+:is(#visBox,#prpBox) .xp{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:14px}
+:is(#visBox,#prpBox) .xr{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--bd)}:is(#visBox,#prpBox) .xr:first-child{border-top:0}
+:is(#visBox,#prpBox) .xr .m{min-width:0;flex:1}:is(#visBox,#prpBox) .xr b{display:block;overflow-wrap:anywhere}:is(#visBox,#prpBox) .xr small{color:var(--mut);display:block;overflow-wrap:anywhere}
+:is(#visBox,#prpBox) .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;background:var(--bd);color:var(--mut);margin-left:6px;white-space:nowrap}:is(#visBox,#prpBox) .pill.g{background:#dcfce7;color:#166534}:is(#visBox,#prpBox) .pill.y{background:#fef3c7;color:#92400e}:is(#visBox,#prpBox) .pill.b{background:#dbeafe;color:#1e40af}
+:is(#visBox,#prpBox) .xf{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}:is(#visBox,#prpBox) .xf input{flex:1 1 150px;margin:0;min-width:0}:is(#visBox,#prpBox) .xf button,:is(#visBox,#prpBox) .xr button{margin:0;width:auto;padding:8px 12px;font-size:13px;white-space:nowrap}
+.xm .xg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.xm .xg .w{grid-column:1/-1}.xm input,.xm select,.xm textarea{margin:0;min-width:0}.xm .rl{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--bd)}.xm .rl span{min-width:0;overflow-wrap:anywhere}.xm .rl div{display:flex;gap:4px}.xm .rl button{margin:0;width:auto;padding:6px 10px;font-size:12px}.xm .rl button.on{background:var(--pri);color:#fff}`;document.head.appendChild(st);
+const sp=document.querySelector('svg[aria-hidden="true"]');
+if(sp&&!document.getElementById("i-door"))sp.insertAdjacentHTML("beforeend",'<symbol id="i-door" viewBox="0 0 24 24"><path d="M5 21V4a1 1 0 0 1 1-1h9l4 3v15"/><path d="M3 21h18"/><circle cx="13" cy="12" r="1"/></symbol><symbol id="i-prep" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>');
+const base=document.getElementById("libBox")||document.getElementById("annBox");
+["visBox","prpBox"].forEach(id=>{if(base&&!document.getElementById(id)){const b=document.createElement("div");b.id=id;b.className="hide";base.parentNode.insertBefore(b,base.nextSibling)}});
+const sd=document.getElementById("tabLib")||document.querySelector('#side button[data-t="att"]');
+if(sd&&!document.getElementById("tabPrp"))sd.insertAdjacentHTML("afterend",'<button id="tabVis" data-t="vis" class="hide" onclick="setTab(\'vis\')"><svg class="ic"><use href="#i-door"/></svg>Visitors</button><button id="tabPrp" data-t="prp" class="hide" onclick="setTab(\'prp\')"><svg class="ic"><use href="#i-prep"/></svg>Preps &amp; extra lessons</button>');
+Object.values(ACC).forEach(a=>{if(a&&a.tabs&&a.tabs.includes("ann")&&!a.tabs.includes("prp"))a.tabs.push("prp")});
+if(ACC.s_desk&&ACC.s_desk.tabs&&!ACC.s_desk.tabs.includes("vis"))ACC.s_desk.tabs.push("vis");
+ALLTABS.push("vis","prp");TABMOD.vis="visitors";TABMOD.prp="preps";
+
+/* ---------------- Visitors ---------------- */
+const V={rows:[],t:0,ok:null,err:"",view:"in",day:ymd(new Date())};
+const visW=()=>!!me&&(!!perm.ad||(me.role==="staff"&&/reception|security|gate|front/i.test(me.department||"")));
+async function vLoad(force){
+  if(!me||!visW())return;if(!force&&Date.now()-V.t<15000){vDraw();return}
+  V.t=Date.now();const S=sid();if(!S)return;const from=new Date();from.setDate(from.getDate()-60);
+  const r=await sb.from("visitors").select("*").eq("school_id",S).gte("time_in",from.toISOString()).order("time_in",{ascending:false}).limit(1500);
+  if(r.error){V.ok=false;V.err=r.error.message}else{V.ok=true;V.rows=r.data||[]}vDraw();
+}
+function vDraw(){
+  const d=$("visBox");if(!d||!me||!visW())return;
+  if(V.ok===null){d.innerHTML='<div class="xp">Loading the visitors book…</div>';return}
+  if(V.ok===false){d.innerHTML=`<div class="xh"><span class="lv">VISITORS</span><h2>Visitors book is not available yet</h2><p>It may not be switched on for your school's plan, or it is still being set up.</p></div><div class="xp"><p class="mut">${esc(V.err)}</p><button onclick="visReload()">Try again</button></div>`;return}
+  const inside=V.rows.filter(x=>!x.time_out),today=V.rows.filter(x=>ymd(new Date(x.time_in))===ymd(new Date())),wk=V.rows.filter(x=>Date.now()-new Date(x.time_in)<7*864e5);
+  const head=`<div class="xh"><span class="lv">VISITORS</span><h2>Visitors book</h2><p>${esc((typeof schRow==="function"&&schRow()||{}).name||"Your school")}</p><div class="xs"><div><b>${inside.length}</b><span>Inside now</span></div><div><b>${today.length}</b><span>Today</span></div><div><b>${wk.length}</b><span>Last 7 days</span></div></div></div>`;
+  const nav=`<div class="xt">${[["in","Inside now"],["day","By day"]].map(([k,l])=>`<button class="${V.view===k?"on":""}" onclick="visGo('${k}')">${l}</button>`).join("")}</div>`;
+  const rows=V.view==="in"?inside:V.rows.filter(x=>ymd(new Date(x.time_in))===V.day);
+  const row=x=>`<div class="xr"><div class="m"><b>${esc(x.visitor_name)}${x.time_out?"":'<span class="pill g">Inside</span>'}</b><small>${esc([x.purpose,x.whom_to_see&&"to see "+x.whom_to_see].filter(Boolean).join(" · "))}</small><small>In ${tm(x.time_in)}${x.time_out?" · Out "+tm(x.time_out):""}${V.view==="in"?" · "+fd(ymd(new Date(x.time_in))):""}${x.badge_no?" · Badge "+esc(x.badge_no):""}${x.vehicle_no?" · "+esc(x.vehicle_no):""}${x.phone?" · "+esc(x.phone):""}</small></div>${x.time_out?"":`<button class="btn" onclick="visOut('${x.id}')">Sign out</button>`}</div>`;
+  d.innerHTML=head+nav+`<div class="xp"><div class="xf">${V.view==="day"?`<input type="date" value="${V.day}" max="${ymd(new Date())}" onchange="visDay(this.value)">`:""}<button class="btn" onclick="visAdd()">+ Sign in a visitor</button></div>${rows.length?rows.map(row).join(""):`<p class="mut">${V.view==="in"?"Nobody is inside right now.":"No visitors on this day."}</p>`}</div>`;
+}
+window.visGo=v=>{V.view=v;vDraw()};window.visDay=v=>{if(v){V.day=v;vDraw()}};window.visReload=()=>vLoad(true);
+window.visAdd=function(){
+  modal(`<div class="xm"><h3>Sign in a visitor</h3><div class="xg"><div class="w"><label>Visitor name</label><input id="vN"></div><div><label>Phone</label><input id="vP" type="tel"></div><div><label>ID / permit no.</label><input id="vI"></div><div class="w"><label>Purpose</label><select id="vU">${["Meeting a parent","Meeting the head teacher","Meeting a teacher","Delivery","Official / inspection","Collecting a learner","Other"].map(o=>`<option>${o}</option>`).join("")}</select></div><div class="w"><label>Who do they want to see?</label><input id="vW"></div><div><label>Badge no.</label><input id="vB"></div><div><label>Vehicle no.</label><input id="vV"></div><div class="w"><label>Notes</label><input id="vO"></div></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="visSave()">Sign in</button><button onclick="closeModal()">Cancel</button></div></div>`);
+};
+window.visSave=async function(){
+  const g=i=>$(i).value.trim(),name=g("vN");if(!name)return alert("Write the visitor's name.");
+  const {error}=await sb.from("visitors").insert({school_id:sid(),visitor_name:name,phone:g("vP")||null,id_number:g("vI")||null,purpose:$("vU").value,whom_to_see:g("vW")||null,badge_no:g("vB")||null,vehicle_no:g("vV")||null,notes:g("vO")||null});
+  if(error)return alert(error.message);closeModal();toast("Visitor signed in");vLoad(true);
+};
+window.visOut=async function(id){
+  const {error}=await sb.from("visitors").update({time_out:new Date().toISOString()}).eq("id",id).is("time_out",null);
+  if(error)return alert(error.message);toast("Signed out");vLoad(true);
+};
+
+/* ---------------- Preps and extra lessons ---------------- */
+const KIND={prep:"Prep",extra_lesson:"Extra lesson",remedial:"Remedial",holiday:"Holiday lesson"};
+const P={rows:[],cls:[],sub:[],staff:[],t:0,ok:null,err:"",view:"up"};
+const prpW=()=>!!me&&(!!perm.ad||me.role==="teacher"||(me.role==="staff"&&/boarding|warden|matron|patron/i.test(me.department||"")));
+const prpCan=()=>!!me&&(!!perm.view||prpW());
+const cName=id=>{const c=P.cls.find(x=>x.id===id);return c?esc(c.name+(c.stream?" "+c.stream:"")):""};
+async function pLoad(force){
+  if(!me||!prpCan())return;if(!force&&Date.now()-P.t<15000){pDraw();return}
+  P.t=Date.now();const S=sid();if(!S)return;const from=new Date();from.setDate(from.getDate()-60);
+  const r=await Promise.all([sb.from("prep_sessions").select("*").eq("school_id",S).gte("session_date",ymd(from)).order("session_date").order("start_time").limit(800),sb.from("classes").select("id,name,stream").eq("school_id",S).order("name"),sb.from("subjects").select("id,name").eq("school_id",S).order("name"),sb.from("profiles").select("id,full_name").eq("school_id",S).in("role",["school_admin","teacher","staff"]).order("full_name")]);
+  if(r[0].error){P.ok=false;P.err=r[0].error.message}else{P.ok=true;P.rows=r[0].data||[];P.cls=r[1].data||[];P.sub=r[2].data||[];P.staff=r[3].data||[]}pDraw();
+}
+function pDraw(){
+  const d=$("prpBox");if(!d||!me||!prpCan())return;
+  if(P.ok===null){d.innerHTML='<div class="xp">Loading…</div>';return}
+  if(P.ok===false){d.innerHTML=`<div class="xh"><span class="lv">PREPS</span><h2>Preps and extra lessons are not available yet</h2><p>It may not be switched on for your school's plan, or it is still being set up.</p></div><div class="xp"><p class="mut">${esc(P.err)}</p><button onclick="prpReload()">Try again</button></div>`;return}
+  const td=ymd(new Date()),up=P.rows.filter(x=>x.session_date>=td),past=P.rows.filter(x=>x.session_date<td).reverse(),tod=P.rows.filter(x=>x.session_date===td);
+  const head=`<div class="xh"><span class="lv">PREPS</span><h2>Preps and extra lessons</h2><p>${esc((typeof schRow==="function"&&schRow()||{}).name||"Your school")}</p><div class="xs"><div><b>${tod.length}</b><span>Today</span></div><div><b>${up.length}</b><span>Upcoming</span></div><div><b>${past.length}</b><span>Past 60 days</span></div></div></div>`;
+  const nav=`<div class="xt">${[["up","Upcoming"],["past","Past"]].map(([k,l])=>`<button class="${P.view===k?"on":""}" onclick="prpGo('${k}')">${l}</button>`).join("")}</div>`;
+  const rows=P.view==="up"?up:past;
+  const row=x=>`<div class="xr"><div class="m"><b>${esc(x.title)}<span class="pill ${x.kind==="prep"?"b":"y"}">${KIND[x.kind]||x.kind}</span></b><small>${fd(x.session_date)}${x.start_time?" · "+x.start_time.slice(0,5)+(x.end_time?"–"+x.end_time.slice(0,5):""):""}${x.venue?" · "+esc(x.venue):""}</small><small>${[cName(x.class_id),(P.sub.find(s=>s.id===x.subject_id)||{}).name&&esc(P.sub.find(s=>s.id===x.subject_id).name),(P.staff.find(s=>s.id===x.supervisor_id)||{}).full_name&&"Supervisor: "+esc(P.staff.find(s=>s.id===x.supervisor_id).full_name)].filter(Boolean).join(" · ")}</small></div><div style="display:grid;gap:6px"><button class="btn" onclick="prpRoll('${x.id}')">${prpW()?"Roll call":"Attendance"}</button>${prpW()?`<button onclick="prpEdit('${x.id}')">Edit</button>`:""}</div></div>`;
+  d.innerHTML=head+nav+`<div class="xp"><div class="xf">${prpW()?'<button class="btn" onclick="prpEdit()">+ New session</button>':""}</div>${rows.length?rows.map(row).join(""):`<p class="mut">${P.view==="up"?"No sessions planned.":"No past sessions."}</p>`}</div>`;
+}
+window.prpGo=v=>{P.view=v;pDraw()};window.prpReload=()=>pLoad(true);
+const opts=(arr,sel,lab)=>`<option value="">${lab}</option>`+arr.map(o=>`<option value="${o.id}" ${o.id===sel?"selected":""}>${esc(o.name||o.full_name)}${o.stream?" "+esc(o.stream):""}</option>`).join("");
+window.prpEdit=function(id){
+  const x=id?P.rows.find(r=>r.id===id):{kind:"prep",session_date:ymd(new Date())};
+  modal(`<div class="xm"><h3>${id?"Edit session":"New session"}</h3><div class="xg"><div><label>Type</label><select id="pK">${Object.entries(KIND).map(([k,l])=>`<option value="${k}" ${x.kind===k?"selected":""}>${l}</option>`).join("")}</select></div><div><label>Date</label><input id="pD" type="date" value="${x.session_date}"></div><div class="w"><label>Title</label><input id="pT" value="${esc(x.title||"")}" placeholder="e.g. Evening prep, P7 Maths revision"></div><div><label>Starts</label><input id="pS" type="time" value="${(x.start_time||"").slice(0,5)}"></div><div><label>Ends</label><input id="pE" type="time" value="${(x.end_time||"").slice(0,5)}"></div><div class="w"><label>Class</label><select id="pC">${opts(P.cls,x.class_id,"All / no class")}</select></div><div class="w"><label>Subject</label><select id="pJ">${opts(P.sub,x.subject_id,"No subject")}</select></div><div class="w"><label>Supervisor</label><select id="pV">${opts(P.staff,x.supervisor_id,"Not assigned")}</select></div><div class="w"><label>Venue</label><input id="pU" value="${esc(x.venue||"")}"></div><div class="w"><label>Notes</label><input id="pN" value="${esc(x.notes||"")}"></div></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="prpSave('${id||""}')">Save</button><button onclick="closeModal()">Cancel</button>${id?`<button style="margin-left:auto;color:#b91c1c" onclick="prpDel('${id}')">Delete</button>`:""}</div></div>`);
+};
+window.prpSave=async function(id){
+  const g=i=>$(i).value.trim(),title=g("pT");if(!title)return alert("Give the session a title.");if(!g("pD"))return alert("Choose the date.");
+  if(g("pS")&&g("pE")&&g("pE")<=g("pS"))return alert("The end time must be after the start time.");
+  const row={kind:$("pK").value,title,session_date:g("pD"),start_time:g("pS")||null,end_time:g("pE")||null,class_id:$("pC").value||null,subject_id:$("pJ").value||null,supervisor_id:$("pV").value||null,venue:g("pU")||null,notes:g("pN")||null};
+  const q=id?await sb.from("prep_sessions").update(row).eq("id",id):await sb.from("prep_sessions").insert({...row,school_id:sid()});
+  if(q.error)return alert(q.error.message);closeModal();toast("Saved");pLoad(true);
+};
+window.prpDel=async function(id){
+  if(!confirm("Delete this session and its attendance?"))return;
+  const {error}=await sb.from("prep_sessions").delete().eq("id",id);if(error)return alert(error.message);closeModal();toast("Deleted");pLoad(true);
+};
+let RL={};
+window.prpRoll=async function(id){
+  const x=P.rows.find(r=>r.id===id);if(!x)return;
+  if(!x.class_id){modal(`<div class="xm"><h3>${esc(x.title)}</h3><p class="mut">This session has no class. ${prpW()?"Edit it and choose a class to take attendance.":""}</p><button onclick="closeModal()">Close</button></div>`);return}
+  const list=(typeof students!=="undefined"?students:[]).filter(s=>s.class_id===x.class_id&&(!s.status||s.status==="active")).sort((a,b)=>(a.last_name||"").localeCompare(b.last_name||""));
+  const r=await sb.from("prep_attendance").select("student_id,status").eq("session_id",id);
+  RL={id,map:{}};(r.data||[]).forEach(a=>RL.map[a.student_id]=a.status);RL.list=list;
+  modal(`<div class="xm"><h3>${esc(x.title)}</h3><p class="mut">${fd(x.session_date)} · ${cName(x.class_id)} · ${list.length} learners</p><div id="rlBox"></div>${prpW()?'<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="rlSave()">Save attendance</button><button onclick="rlAll()">All present</button><button onclick="closeModal()">Close</button></div>':'<button onclick="closeModal()" style="margin-top:12px">Close</button>'}</div>`);rlDraw();
+};
+function rlDraw(){const b=$("rlBox");if(!b)return;const W=prpW(),c={present:0,absent:0,late:0};Object.values(RL.map).forEach(v=>c[v]++);
+  b.innerHTML=`<p class="mut">Present ${c.present} · Late ${c.late} · Absent ${c.absent}</p>`+(RL.list.length?RL.list.map(s=>{const v=RL.map[s.id];return `<div class="rl"><span>${esc((s.first_name||"")+" "+(s.last_name||""))}</span>${W?`<div>${[["present","P"],["late","L"],["absent","A"]].map(([k,l])=>`<button class="${v===k?"on":""}" onclick="rlSet('${s.id}','${k}')">${l}</button>`).join("")}</div>`:`<span class="pill">${v||"not marked"}</span>`}</div>`}).join(""):'<p class="mut">No learners in this class.</p>')}
+window.rlSet=(s,k)=>{RL.map[s]=k;rlDraw()};window.rlAll=()=>{RL.list.forEach(s=>RL.map[s.id]="present");rlDraw()};
+window.rlSave=async function(){
+  const rows=Object.entries(RL.map).map(([student_id,status])=>({school_id:sid(),session_id:RL.id,student_id,status,updated_at:new Date().toISOString()}));
+  if(!rows.length)return alert("Mark at least one learner.");
+  const {error}=await sb.from("prep_attendance").upsert(rows,{onConflict:"session_id,student_id"});if(error)return alert(error.message);closeModal();toast("Attendance saved");
+};
+
+const _at=applyTab;applyTab=function(){_at();const mo=m=>!acc||(acc.modules||{})[m]!=="off";const v=visW(),p=prpCan();show("visBox",v&&tab==="vis");show("tabVis",v&&mo("visitors"));show("prpBox",p&&tab==="prp");show("tabPrp",p&&mo("preps"))};
+const _st=setTab;setTab=function(x){_st(x);if(tab==="vis")vLoad();if(tab==="prp")pLoad()};
+})();
+/* VISITORS_PREPS_END */
+
+/* PRINT_CENTER_START: One Print center for every plan. Pick a document, a class, one learner (or everyone), a term, the paper size (A3, A4, A5, A6, Letter, Legal) and Print. Starter: student lists, fee lists, fee receipts, attendance register. Standard adds report cards and class performance. Premium adds fee statements, fee reminders and staff list. There are no ID cards. Also timetable, library and boarding documents. No database change. */
+(function(){
+const PC={doc:"classlist",cls:"*",stu:"*",term:"",paper:"A4",orient:"portrait",blank:0,tch:"*",dorm:"*",lf:""};
+const LV={basic:"Starter",standard:"Standard",full:"Premium"},RK={basic:1,standard:2,full:3};
+const PAPERS={A3:{w:297,h:420,css:"A3"},A4:{w:210,h:297,css:"A4"},A5:{w:148,h:210,css:"A5"},A6:{w:105,h:148,css:"A6"},Letter:{w:216,h:279,css:"letter"},Legal:{w:216,h:356,css:"legal"}};
+const DOCS=[
+ {id:"classlist",name:"Student list",min:"basic",def:0,blank:[0,3,5,8,10],about:"Active learners of a class, or of every class. Add blank columns to tick or write in."},
+ {id:"fees",name:"School fees list",min:"basic",term:1,about:"Billed, paid and balance for each learner for the term."},
+ {id:"receipts",name:"Fee receipts",min:"basic",term:1,about:"A receipt for every payment made in the term by the learners selected."},
+ {id:"register",name:"Attendance register (blank)",min:"basic",noLearner:1,def:20,blank:[5,10,20,31],about:"A blank register to tick by hand. Choose how many day columns."},
+ {id:"ttclass",name:"Class timetable",min:"basic",noLearner:1,about:"The weekly timetable of one class, or of every class. Landscape paper fits it best."},
+ {id:"ttteacher",name:"Teacher timetable",min:"basic",noClass:1,noLearner:1,teacher:1,about:"The weekly timetable of one teacher, or of every teacher."},
+ {id:"reportcards",name:"Report cards",min:"standard",term:1,about:"The full report card, using the template you chose in Report cards."},
+ {id:"perf",name:"Class performance list",min:"standard",term:1,about:"Average, grade and position of each learner for the term."},
+ {id:"statements",name:"Fee statements",min:"full",term:1,about:"One page per learner: fee items, payments, billed, paid and balance."},
+ {id:"reminders",name:"Fee reminders",min:"full",term:1,about:"A short notice for each learner who still owes money for the term."},
+ {id:"staff",name:"Staff list",min:"full",noClass:1,noLearner:1,about:"All staff with their role and phone."},
+ {id:"libbooks",name:"Library catalogue",min:"full",noClass:1,noLearner:1,about:"All active books with author, category, shelf, copies and how many are available."},
+ {id:"libloans",name:"Library loans",min:"full",noClass:1,noLearner:1,filter:{label:"Show",opts:[["open","Out now"],["late","Overdue"],["done","Returned"],["all","All loans"]]},about:"Who borrowed which book, with issue, due and return dates and any fine."},
+ {id:"brddorm",name:"Dormitory list",min:"full",noClass:1,noLearner:1,dorm:1,about:"Boarders of each dormitory with room and bed. One dormitory per page."},
+ {id:"brdroll",name:"Boarding roll sheet (blank)",min:"full",noClass:1,noLearner:1,dorm:1,def:7,blank:[7,14,21,31],about:"A blank roll sheet for each dormitory. Choose how many day columns."},
+ {id:"brdexeat",name:"Exeat list",min:"full",noClass:1,noLearner:1,filter:{label:"Show",opts:[["out","Out now"],["all","All exeats"]]},about:"Boarders who went out on exeat, with dates, reason and who picked them."}
+];
+const planOk=()=>{if(!acc||(me&&me.role==="super_admin"))return true;return(acc.modules||{}).print_center!=="off"};
+const lvl=()=>{if(!acc||(me&&me.role==="super_admin"))return"full";return acc.print_level||(acc.plan==="premium"?"full":acc.plan==="standard"?"standard":"basic")};
+const prtCan=()=>!!me&&!!perm.view&&planOk();
+const okDoc=D=>RK[lvl()]>=RK[D.min];
+const curDoc=()=>DOCS.find(x=>x.id===PC.doc)||DOCS[0];
+const prtCls=()=>{const S=sid();return(typeof classes!=="undefined"?classes:[]).filter(c=>!S||!c.school_id||c.school_id===S).slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{numeric:true}))};
+const clLab=c=>esc((c.name||"Class")+(c.stream?" "+c.stream:"")+(c.academic_year?" · "+c.academic_year:""));
+const byName=(a,b)=>String(a.last_name||"").localeCompare(String(b.last_name||""))||String(a.first_name||"").localeCompare(String(b.first_name||""));
+const pupils=id=>(typeof students!=="undefined"?students:[]).filter(s=>s.class_id===id&&(!s.status||s.status==="active")).sort(byName);
+const clName=id=>{const c=(typeof classes!=="undefined"?classes:[]).find(x=>x.id===id);return c?clLab(c):""};
+const prTerms=()=>{const S=sid();return(typeof terms!=="undefined"?terms:[]).filter(t=>!S||!t.school_id||t.school_id===S).slice().sort((a,b)=>String(a.start_date||"").localeCompare(String(b.start_date||"")))};
+const prDefTerm=()=>{const L=prTerms(),t=new Date().toISOString().slice(0,10);return(L.find(x=>x.start_date<=t&&x.end_date>=t)||L.filter(x=>x.end_date>=t)[0]||L[L.length-1]||{}).id||""};
+const prPupils=()=>{let L;
+  if(PC.cls==="*"){const S=sid();L=(typeof students!=="undefined"?students:[]).filter(x=>(!S||!x.school_id||x.school_id===S)&&(!x.status||x.status==="active")).slice().sort((a,b)=>String(clName(a.class_id)).localeCompare(String(clName(b.class_id)),undefined,{numeric:true})||byName(a,b))}
+  else{L=pupils(PC.cls);if(PC.stu!=="*")L=L.filter(x=>x.id===PC.stu)}
+  return L};
+const prName=s=>esc((s.last_name||"")+" "+(s.first_name||""));
+const sch0=()=>(typeof schRow==="function"&&schRow())||{};
+const termObj=()=>prTerms().find(t=>t.id===PC.term)||{};
+const B1="border:1px solid #444;padding:4px 6px";
+const prHead=(sch,t)=>`<div style="text-align:center;margin-bottom:8px">${sch.logo_url?`<img src="${esc(sch.logo_url)}" alt="" style="height:46px;display:block;margin:0 auto 3px">`:""}<b style="font-size:16px">${esc(sch.name||"")}</b>${t?`<div style="font-size:14px;margin-top:2px">${t}</div>`:""}<div style="font-size:11px;color:#444">${esc([sch.address,sch.phone,sch.phone2,sch.email].filter(Boolean).join(" · "))}</div></div>`;
+const WRAP="padding:8mm;font-family:Arial,sans-serif;color:#000;font-size:12px";
+
+/* paper size */
+function clearPage(){const o=document.getElementById("prtPage");if(o)o.remove()}
+function setPage(mode){clearPage();const p=PAPERS[PC.paper]||PAPERS.A4,ls=PC.orient==="landscape",W=ls?p.h:p.w,H=ls?p.w:p.h;
+  let z=1;if(mode==="rc")z=Math.min(W/210,H/297);else if(mode==="tbl")z=W/210;
+  z=Math.max(.5,Math.min(1.6,z));
+  const s=document.createElement("style");s.id="prtPage";
+  s.textContent=`@media print{@page{size:${p.css} ${PC.orient};margin:6mm}${Math.abs(z-1)>.01?`#printArea>*{zoom:${z.toFixed(3)}}`:""}}`;
+  document.head.appendChild(s);return{W,H}}
+window.addEventListener("afterprint",clearPage);
+function go(h,mode){setPage(mode);printHTML(h)}
+
+/* screen */
+const sp=document.querySelector('svg[aria-hidden="true"]');if(sp&&!document.getElementById("i-prt"))sp.insertAdjacentHTML("beforeend",'<symbol id="i-prt" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><path d="M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2"/><path d="M6 14h12v7H6z"/></symbol>');
+const st=document.createElement("style");st.textContent=`#prtBox .ph{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:16px;padding:16px;margin-bottom:12px}#prtBox .ph .pv{font-size:11px;letter-spacing:.12em;opacity:.85}#prtBox .ph h2{margin:4px 0;font-size:20px}#prtBox .ph p{margin:0;opacity:.9;font-size:13px}
+#prtBox .pf{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}#prtBox .pf .w{grid-column:1/-1}#prtBox .pf select{margin:0;min-width:0}#prtBox .pa{display:flex;gap:8px;flex-wrap:wrap}#prtBox .pa button{margin:0;width:auto;padding:10px 18px;font-size:15px}`;document.head.appendChild(st);
+const an=document.getElementById("annBox");if(an&&!document.getElementById("prtBox")){const b=document.createElement("div");b.id="prtBox";b.className="hide";an.parentNode.insertBefore(b,an.nextSibling)}
+const sd=document.getElementById("tabLib")||document.getElementById("tabBrd")||document.querySelector('#side button[data-t="att"]');if(sd&&!document.getElementById("tabPrt"))sd.insertAdjacentHTML("afterend",'<button id="tabPrt" data-t="prt" class="hide" onclick="setTab(\'prt\')"><svg class="ic"><use href="#i-prt"/></svg>Print center</button>');
+Object.values(ACC).forEach(a=>{if(a&&a.tabs&&a.tabs.includes("ann")&&!a.tabs.includes("prt"))a.tabs.push("prt")});
+ALLTABS.push("prt");TABMOD.prt="print_center";
+const opt=(v,t,sel,dis)=>`<option value="${v}" ${sel?"selected":""} ${dis?"disabled":""}>${t}</option>`;
+const teachers=()=>(typeof staff!=="undefined"?staff:[]).filter(t=>t.role==="teacher"&&t.school_id===sid()).slice().sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||"")));
+function ensureDorms(){if(PC.dorms!==undefined||PC.dl||typeof sb==="undefined")return;PC.dl=1;
+  sb.from("dormitories").select("id,name").eq("school_id",sid()).order("name").then(r=>{PC.dorms=r.error?[]:(r.data||[]);draw()},()=>{PC.dorms=[];draw()})}
+function draw(){
+  const d=$("prtBox");if(!d||!me||!prtCan())return;
+  const L=prtCls(),T=prTerms();
+  let D=curDoc();if(!okDoc(D)){PC.doc="classlist";D=curDoc()}
+  if(PC.cls!=="*"&&!L.some(c=>c.id===PC.cls))PC.cls="*";
+  const PL=PC.cls!=="*"?pupils(PC.cls):[];if(PC.stu!=="*"&&!PL.some(s=>s.id===PC.stu))PC.stu="*";
+  if(!T.some(t=>t.id===PC.term))PC.term=prDefTerm();
+  if(D.blank&&!D.blank.includes(+PC.blank))PC.blank=D.def;
+  if(D.filter&&!D.filter.opts.some(o=>o[0]===PC.lf))PC.lf=D.filter.opts[0][0];
+  if(D.dorm)ensureDorms();
+  const TH=D.teacher?teachers():[];if(PC.tch!=="*"&&!TH.some(t=>t.id===PC.tch))PC.tch="*";
+  const DM=PC.dorms||[];if(PC.dorm!=="*"&&!DM.some(x=>x.id===PC.dorm))PC.dorm="*";
+  const learnerDoc=!D.noLearner;
+  const n=learnerDoc?prPupils().length:0;
+  const blankOpts=D.blank?(D.id==="classlist"&&lvl()==="basic"?D.blank.filter(k=>k<=5):D.blank):null;
+  d.innerHTML=`<div class="ph"><span class="pv">PRINT CENTER</span><h2>Print documents</h2><p>${esc(sch0().name||"Your school")}</p></div>`+
+  `<div class="card"><h3>What do you want to print?</h3>
+  <div class="pf"><div class="w"><label>Document</label><select onchange="prtSet('doc',this.value)">${DOCS.map(x=>opt(x.id,esc(x.name)+(okDoc(x)?"":" ("+LV[x.min]+" plan)"),x.id===PC.doc,!okDoc(x))).join("")}</select></div>
+  <p class="mut w" style="margin:0">${esc(D.about)}</p>
+  ${!D.noClass?`<div class="w"><label>Class</label><select onchange="prtSet('cls',this.value)">${opt("*","All classes",PC.cls==="*")}${L.map(c=>opt(c.id,clLab(c),c.id===PC.cls)).join("")}</select></div>`:""}
+  ${learnerDoc&&PC.cls!=="*"?`<div class="w"><label>Learner</label><select onchange="prtSet('stu',this.value)">${opt("*","All learners in the class",PC.stu==="*")}${PL.map(s=>opt(s.id,prName(s),s.id===PC.stu)).join("")}</select></div>`:""}
+  ${D.teacher?`<div class="w"><label>Teacher</label><select onchange="prtSet('tch',this.value)">${opt("*","All teachers",PC.tch==="*")}${TH.map(t=>opt(t.id,esc(t.full_name||""),t.id===PC.tch)).join("")}</select></div>`:""}
+  ${D.dorm?`<div class="w"><label>Dormitory</label><select onchange="prtSet('dorm',this.value)">${opt("*","All dormitories",PC.dorm==="*")}${DM.map(x=>opt(x.id,esc(x.name||""),x.id===PC.dorm)).join("")}</select></div>`:""}
+  ${D.filter?`<div class="w"><label>${D.filter.label}</label><select onchange="prtSet('lf',this.value)">${D.filter.opts.map(o=>opt(o[0],o[1],o[0]===PC.lf)).join("")}</select></div>`:""}
+  ${D.term?`<div class="w"><label>Term</label><select onchange="prtSet('term',this.value)">${T.length?T.map(t=>opt(t.id,esc(t.name),t.id===PC.term)).join(""):'<option value="">No terms yet</option>'}</select></div>`:""}
+  ${blankOpts?`<div class="w"><label>${D.id==="classlist"?"Blank columns":"Day columns"}</label><select onchange="prtSet('blank',this.value)">${blankOpts.map(k=>opt(k,k===0?"None":k,+PC.blank===k)).join("")}</select></div>`:""}
+  <div><label>Paper size</label><select onchange="prtSet('paper',this.value)">${Object.keys(PAPERS).map(k=>opt(k,k,k===PC.paper)).join("")}</select></div>
+  <div><label>Direction</label><select onchange="prtSet('orient',this.value)">${opt("portrait","Portrait",PC.orient==="portrait")}${opt("landscape","Landscape",PC.orient==="landscape")}</select></div></div>
+  ${learnerDoc?`<p class="mut">${n} learner${n===1?"":"s"} selected.</p>`:""}
+  <div class="pa"><button class="btn" onclick="prtPrint()">Print</button></div>
+  <p class="mut" style="font-size:12px">The paper size is sent to the print dialog. On a phone choose Save as PDF or your printer there.</p></div>`;
+}
+window.prtSet=(k,v)=>{PC[k]=k==="blank"?+v:v;if(k==="cls")PC.stu="*";if(k==="doc"){const D=curDoc();if(D.blank)PC.blank=D.def;if(D.filter)PC.lf=D.filter.opts[0][0]}draw()};
+
+/* fees data */
+async function prFees(){
+  const tid=PC.term;if(!tid){toast("Choose a term first");return null}
+  if(typeof sb==="undefined")return null;
+  toast("Preparing...");
+  const[b,p,f]=await Promise.all([sb.from("student_balances").select("*").eq("term_id",tid),sb.from("payments").select("*").eq("term_id",tid),sb.from("fee_structures").select("*").eq("term_id",tid)]);
+  if(b.error||p.error||f.error){toast((b.error||p.error||f.error).message||"Could not load fees");return null}
+  return{bal:b.data||[],pays:p.data||[],items:f.data||[]};
+}
+const prRow=(s,D)=>{const it=D.items.filter(x=>!x.class_id||x.class_id===s.class_id),pa=D.pays.filter(x=>x.student_id===s.id),r=D.bal.find(x=>x.student_id===s.id);
+  const billed=r?+r.billed:it.reduce((a,x)=>a+ +x.amount,0),paid=r?+r.paid:pa.reduce((a,x)=>a+ +x.amount,0);return{it,pa,billed,paid,bal:r?+r.balance:billed-paid}};
+
+/* report card loader (uses the Report cards screen) */
+async function rcLoad(cid){
+  const sel=$("rccls"),ts=$("rctrm");if(!sel||!ts){toast("Report cards are not available here");return null}
+  if(!sel.options.length){const S=sid();sel.innerHTML=clOpts(classes.filter(c=>c.school_id===S))}
+  if(!ts.options.length)fillTermSel("rctrm",sid());
+  const o=[...sel.options].find(x=>clIds(cid).includes(x.value));if(!o)return null;
+  sel.value=o.value;ts.value=PC.term;if(ts.value!==PC.term){toast("That term is not available for report cards");return null}
+  await loadRC();return rcData&&rcData.cards?rcData:null}
+const uniqClasses=()=>{const seen=new Set(),out=[];prtCls().forEach(c=>{if(seen.has(c.id))return;clIds(c.id).forEach(i=>seen.add(i));out.push(c)});return out};
+
+/* jobs */
+const JOBS={
+classlist(){
+  const sch=sch0(),B=+PC.blank||0;
+  const groups=PC.cls==="*"?prtCls().map(c=>({c,P:pupils(c.id)})).filter(g=>g.P.length):[{c:prtCls().find(x=>x.id===PC.cls),P:prPupils()}];
+  if(!groups.length||!groups.some(g=>g.P.length))return toast("No active learners selected");
+  const bl=k=>Array.from({length:B},()=>k);
+  const html=groups.map((g,gi)=>{
+    const head=`<tr style="background:#eee"><th style="${B1};width:32px">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Student ID</th><th style="${B1}">Sex</th>${bl(`<th style="${B1};width:34px"></th>`).join("")}</tr>`;
+    const rows=g.P.map((s,i)=>`<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${prName(s)}</td><td style="${B1}">${esc(s.national_student_id||"")}</td><td style="${B1};text-align:center">${esc(s.gender?String(s.gender).charAt(0).toUpperCase():"")}</td>${bl(`<td style="${B1}">&nbsp;</td>`).join("")}</tr>`).join("");
+    return `<div style="${WRAP};${gi<groups.length-1?"page-break-after:always;break-after:page":""}">${prHead(sch,"Student list: "+(g.c?clLab(g.c):""))}<div style="text-align:center;font-size:11px;color:#444;margin-bottom:6px">${g.P.length} learner${g.P.length===1?"":"s"} · printed ${new Date().toLocaleDateString()}</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group">${head}</thead><tbody>${rows}</tbody></table></div>`}).join("");
+  go(html,"tbl")},
+async fees(){
+  const P=prPupils();if(!P.length)return toast("No active learners selected");
+  const D=await prFees();if(!D)return;
+  const sch=sch0(),T=termObj();let tb=0,tp=0,tl=0;
+  const rows=P.map((s,i)=>{const r=prRow(s,D);tb+=r.billed;tp+=r.paid;tl+=r.bal;return `<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${prName(s)}</td><td style="${B1}">${clName(s.class_id)}</td><td style="${B1};text-align:right">${money(r.billed)}</td><td style="${B1};text-align:right">${money(r.paid)}</td><td style="${B1};text-align:right"><b>${money(r.bal)}</b></td></tr>`}).join("");
+  go(`<div style="${WRAP}">${prHead(sch,"School fees · "+esc(T.name||""))}<table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1}">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Class</th><th style="${B1};text-align:right">Billed</th><th style="${B1};text-align:right">Paid</th><th style="${B1};text-align:right">Balance</th></tr></thead><tbody>${rows}<tr style="background:#eee"><td style="${B1}" colspan="3"><b>Total</b></td><td style="${B1};text-align:right"><b>${money(tb)}</b></td><td style="${B1};text-align:right"><b>${money(tp)}</b></td><td style="${B1};text-align:right"><b>${money(tl)}</b></td></tr></tbody></table><div style="font-size:10px;color:#555;margin-top:8px">Printed ${new Date().toLocaleDateString()}</div></div>`,"tbl")},
+async receipts(){
+  const P=prPupils();if(!P.length)return toast("No active learners selected");
+  const D=await prFees();if(!D)return;
+  const ids=new Map(P.map(s=>[s.id,s])),sch=sch0(),T=termObj();
+  const L=D.pays.filter(p=>ids.has(p.student_id)).sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||"")));
+  if(!L.length)return toast("No payments found for the learners selected");
+  go(L.map(p=>{const s=ids.get(p.student_id);return `<div style="page-break-inside:avoid;break-inside:avoid;margin-bottom:6mm">${receiptHTML({no:p.receipt_no||"",date:String(p.created_at||p.paid_at||p.payment_date||"").slice(0,10)||new Date().toLocaleDateString(),stu:(s.first_name||"")+" "+(s.last_name||"")+" ("+(s.national_student_id||"")+")",term:T.name||"",meth:p.method||"",ref:p.reference||"",amt:+p.amount},sch.receipt_header,sch.receipt_footer,sch.receipt_show_logo!==false,sch.receipt_show_stamp!==false)}</div>`}).join(""),"tbl");
+  toast(L.length+" receipt"+(L.length===1?"":"s")+" ready")},
+register(){
+  const sch=sch0(),days=+PC.blank||20;
+  const groups=PC.cls==="*"?prtCls().map(c=>({c,P:pupils(c.id)})).filter(g=>g.P.length):[{c:prtCls().find(x=>x.id===PC.cls),P:pupils(PC.cls)}];
+  if(!groups.length||!groups.some(g=>g.P.length))return toast("No active learners in the class");
+  const html=groups.map((g,gi)=>{
+    const head=`<tr style="background:#eee"><th style="${B1};width:28px">No.</th><th style="${B1};text-align:left">Name</th>${Array.from({length:days},(_,i)=>`<th style="${B1};width:22px;font-size:9px">${i+1}</th>`).join("")}</tr>`;
+    const rows=g.P.map((s,i)=>`<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1};white-space:nowrap">${prName(s)}</td>${Array.from({length:days},()=>`<td style="${B1}">&nbsp;</td>`).join("")}</tr>`).join("");
+    return `<div style="${WRAP};${gi<groups.length-1?"page-break-after:always;break-after:page":""}">${prHead(sch,"Attendance register: "+(g.c?clLab(g.c):""))}<div style="font-size:11px;margin-bottom:6px">Month: ____________ &nbsp; Term: ____________</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group">${head}</thead><tbody>${rows}</tbody></table></div>`}).join("");
+  go(html,"tbl")},
+async reportcards(){
+  if(!PC.term)return toast("Choose a term first");
+  toast("Preparing report cards...");
+  if(PC.cls!=="*"){
+    const d=await rcLoad(PC.cls);if(!d)return toast("Could not load the report cards");
+    if(PC.stu==="*"){if(!d.cards.length)return toast("No learners in this class");setPage("rc");return window.printCards("all")}
+    const i=d.cards.findIndex(c=>c.student&&c.student.id===PC.stu);if(i<0)return toast("That learner is not in this class");
+    setPage("rc");return window.printCards(i)}
+  let html="";
+  for(const c of uniqClasses()){const d=await rcLoad(c.id);if(!d||!d.cards.length)continue;const h=window.RCcardsHTML("all");if(h)html+=h}
+  if(!html)return toast("No report cards to print");
+  go(html,"rc")},
+async perf(){
+  if(!PC.term)return toast("Choose a term first");
+  toast("Preparing...");const sch=sch0(),T=termObj();
+  const cl=PC.cls==="*"?uniqClasses():[prtCls().find(x=>x.id===PC.cls)].filter(Boolean);let secs=[];
+  for(const c of cl){const d=await rcLoad(c.id);if(!d)continue;let cs=d.cards||[];if(PC.cls!=="*"&&PC.stu!=="*")cs=cs.filter(x=>x.student&&x.student.id===PC.stu);if(!cs.length)continue;
+    cs=cs.slice().sort((a,b)=>(a.rank==null?9999:a.rank)-(b.rank==null?9999:b.rank));secs.push({c,cs})}
+  if(!secs.length)return toast("No results to print");
+  go(secs.map((g,gi)=>`<div style="${WRAP};${gi<secs.length-1?"page-break-after:always;break-after:page":""}">${prHead(sch,"Class performance: "+clLab(g.c)+" · "+esc(T.name||""))}<table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1}">Pos.</th><th style="${B1};text-align:left">Name</th><th style="${B1}">Average</th><th style="${B1}">Grade</th></tr></thead><tbody>${g.cs.map(x=>{const s=x.student||{};return `<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${x.rank||""}</td><td style="${B1}">${prName(s)}</td><td style="${B1};text-align:center">${x.overall==null?"-":x.overall+"%"}</td><td style="${B1};text-align:center">${esc(x.overall_grade||"")}</td></tr>`}).join("")}</tbody></table></div>`).join(""),"tbl")},
+async statements(){
+  const P=prPupils();if(!P.length)return toast("No active learners selected");
+  const D=await prFees();if(!D)return;
+  const sch=sch0(),T=termObj();
+  const page=(s,i)=>{const r=prRow(s,D);
+    return `<div style="padding:10mm;font-family:Arial,sans-serif;color:#000;font-size:12px;${i<P.length-1?"page-break-after:always;break-after:page":""}">${prHead(sch,"Fee statement · "+esc(T.name||""))}<table style="width:100%;margin:6px 0"><tr><td><b>Learner:</b> ${prName(s)}</td><td><b>Class:</b> ${clName(s.class_id)}</td><td><b>Student ID:</b> ${esc(s.national_student_id||"")}</td></tr></table><b>Fees for the term</b><table style="width:100%;border-collapse:collapse;margin:4px 0 10px"><tr style="background:#eee"><th style="${B1};text-align:left">Item</th><th style="${B1};text-align:right">Amount</th></tr>${r.it.map(x=>`<tr><td style="${B1}">${esc(x.name)}</td><td style="${B1};text-align:right">${money(x.amount)}</td></tr>`).join("")||`<tr><td style="${B1}" colspan="2">No fee items for this class</td></tr>`}</table><b>Payments received</b><table style="width:100%;border-collapse:collapse;margin:4px 0 10px"><tr style="background:#eee"><th style="${B1};text-align:left">Date</th><th style="${B1};text-align:left">Method</th><th style="${B1};text-align:right">Amount</th></tr>${r.pa.map(x=>`<tr><td style="${B1}">${esc(String(x.paid_at||x.payment_date||x.created_at||"").slice(0,10))}</td><td style="${B1}">${esc(x.method||"")}</td><td style="${B1};text-align:right">${money(x.amount)}</td></tr>`).join("")||`<tr><td style="${B1}" colspan="3">No payments yet</td></tr>`}</table><table style="width:60%;margin-left:auto;border-collapse:collapse"><tr><td style="${B1}">Billed</td><td style="${B1};text-align:right">${money(r.billed)}</td></tr><tr><td style="${B1}">Paid</td><td style="${B1};text-align:right">${money(r.paid)}</td></tr><tr style="background:#eee"><td style="${B1}"><b>Balance</b></td><td style="${B1};text-align:right"><b>${money(r.bal)}</b></td></tr></table><div style="font-size:10px;color:#555;margin-top:10px">Printed ${new Date().toLocaleDateString()}</div>${typeof cardStamp==="function"?cardStamp():""}</div>`};
+  go(P.map(page).join(""),"tbl")},
+async reminders(){
+  const P0=prPupils();if(!P0.length)return toast("No active learners selected");
+  const D=await prFees();if(!D)return;
+  const P=P0.map(s=>({s,r:prRow(s,D)})).filter(x=>x.r.bal>0);
+  if(!P.length)return toast("Nobody has an outstanding balance for this term");
+  const sch=sch0(),T=termObj(),pg=setPage("none"),per=Math.max(1,Math.round(pg.H/95)),ht=((pg.H-12)/per-1).toFixed(1);
+  const note=x=>`<div style="padding:6mm 8mm;border-bottom:1px dashed #666;font-family:Arial,sans-serif;color:#000;font-size:12px;height:${ht}mm;box-sizing:border-box;page-break-inside:avoid;break-inside:avoid;overflow:hidden">${prHead(sch,"Fee reminder")}<p>Dear Parent or Guardian of <b>${prName(x.s)}</b> (${clName(x.s.class_id)}, ID ${esc(x.s.national_student_id||"")}),</p><p>Our records show an outstanding fee balance of <b>${money(x.r.bal)}</b> for <b>${esc(T.name||"this term")}</b> (billed ${money(x.r.billed)}, paid ${money(x.r.paid)}). Kindly clear the balance as soon as possible. If you have already paid, please bring your receipt to the school office.</p><p>Thank you.<br>${esc(sch.signatory_name||"The school administration")}${sch.signatory_title?", "+esc(sch.signatory_title):""}</p></div>`;
+  printHTML(`<div>${P.map(note).join("")}</div>`);
+  toast(P.length+" reminder"+(P.length===1?"":"s")+" ready")},
+staff(){
+  const L=(typeof staff!=="undefined"?staff:[]).slice().sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||"")));
+  if(!L.length)return toast("No staff to print");
+  const sch=sch0();
+  go(`<div style="${WRAP}">${prHead(sch,"Staff list")}<table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1};width:32px">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Role</th><th style="${B1};text-align:left">Phone</th></tr></thead><tbody>${L.map((x,i)=>`<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${esc(x.full_name||"")}</td><td style="${B1}">${esc(String(x.department||x.role||"").replace(/_/g," "))}</td><td style="${B1}">${esc(x.phone||"")}</td></tr>`).join("")}</tbody></table><div style="font-size:10px;color:#555;margin-top:8px">Printed ${new Date().toLocaleDateString()}</div></div>`,"tbl")}
+};
+
+/* timetable, library, boarding */
+const TC=B1+";height:13mm;text-align:center;font-size:11px";
+const todayS=()=>new Date().toISOString().slice(0,10);
+const d10=v=>esc(String(v||"").slice(0,10));
+const pageBreak=(i,n)=>i<n-1?"page-break-after:always;break-after:page":"";
+async function ttLoad(){const S=sid();
+  const[p,q]=await Promise.all([sb.from("timetable_periods").select("*").eq("school_id",S).order("start_time"),sb.from("timetable_slots").select("*").eq("school_id",S)]);
+  if(p.error||q.error){toast((p.error||q.error).message||"Could not load the timetable");return null}
+  if(!(p.data||[]).length){toast("No timetable periods are set up yet");return null}
+  return{P:p.data,S:q.data||[]}}
+const ttGridHTML=(D,cell)=>`<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr style="background:#eee"><th style="${B1};width:44px"></th>${D.P.map(p=>`<th style="${B1};font-size:11px">${esc(p.name)}<br><span style="font-weight:normal;font-size:9px">${hm(p.start_time)}-${hm(p.end_time)}</span></th>`).join("")}</tr>${TTD.map((dy,i)=>`<tr><td style="${B1};font-weight:bold">${esc(dy.slice(0,3))}</td>${D.P.map(p=>p.is_break?`<td style="${B1};text-align:center;background:#f3f3f3;font-size:10px">Break</td>`:cell(i+1,p)).join("")}</tr>`).join("")}</table>`;
+const subLab=id=>{const sj=subjects.find(y=>y.id===id);return sj?esc(sj.code||sj.name):""};
+async function brdData(){const S=sid();
+  const[d,a,e]=await Promise.all([sb.from("dormitories").select("*").eq("school_id",S).order("name"),sb.from("boarding_allocations").select("*").eq("school_id",S).eq("active",true),sb.from("boarding_exeats").select("*").eq("school_id",S).order("out_date",{ascending:false}).limit(500)]);
+  const bad=d.error||a.error||e.error;if(bad){toast(/relation|exist|schema/i.test(bad.message||"")?"Boarding is not set up yet":(bad.message||"Could not load boarding"));return null}
+  return{dorms:d.data||[],al:a.data||[],ex:e.data||[]}}
+const stuOf=id=>(typeof students!=="undefined"?students:[]).find(x=>x.id===id);
+const stuNm=id=>{const s=stuOf(id);return s?prName(s):"Learner"};
+const dormSecs=D=>{const dl=PC.dorm==="*"?D.dorms:D.dorms.filter(x=>x.id===PC.dorm);
+  return dl.map(dm=>({dm,R:D.al.filter(a=>a.dorm_id===dm.id).slice().sort((x,y)=>String(stuOf(x.student_id)?stuOf(x.student_id).last_name:"").localeCompare(String(stuOf(y.student_id)?stuOf(y.student_id).last_name:"")))}))};
+const dormHead=(sch,g,t)=>{const w=(typeof staff!=="undefined"?staff:[]).find(x=>x.id===g.dm.warden_id);return prHead(sch,t+": "+esc(g.dm.name||""))+`<div style="text-align:center;font-size:11px;color:#444;margin-bottom:6px">${esc(g.dm.kind||"")}${g.dm.capacity?" · "+g.R.length+" of "+esc(g.dm.capacity)+" beds":" · "+g.R.length+" boarders"}${w?" · Warden "+esc(w.full_name):""}</div>`};
+Object.assign(JOBS,{
+async ttclass(){const D=await ttLoad();if(!D)return;const sch=sch0();
+  const cl=(PC.cls==="*"?prtCls().filter(c=>D.S.some(x=>x.class_id===c.id)):prtCls().filter(c=>c.id===PC.cls));
+  if(!cl.length)return toast("No lessons have been placed in the timetable yet");
+  go(cl.map((c,i)=>`<div style="${WRAP};${pageBreak(i,cl.length)}">${prHead(sch,"Class timetable: "+clLab(c))}${ttGridHTML(D,(day,p)=>{const x=D.S.find(z=>z.class_id===c.id&&z.day===day&&z.period_id===p.id),t=x&&x.teacher_id&&staff.find(y=>y.id===x.teacher_id);return `<td style="${TC}">${x?`<b>${subLab(x.subject_id)}</b>${t?`<br><span style="font-size:9px">${esc(String(t.full_name||"").split(" ")[0])}</span>`:""}`:""}</td>`})}</div>`).join(""),"tbl")},
+async ttteacher(){const D=await ttLoad();if(!D)return;const sch=sch0();
+  const th=(PC.tch==="*"?teachers().filter(t=>D.S.some(x=>x.teacher_id===t.id)):teachers().filter(t=>t.id===PC.tch));
+  if(!th.length)return toast("No teacher has lessons in the timetable yet");
+  go(th.map((t,i)=>`<div style="${WRAP};${pageBreak(i,th.length)}">${prHead(sch,"Teacher timetable: "+esc(t.full_name||""))}${ttGridHTML(D,(day,p)=>{const x=D.S.find(z=>z.teacher_id===t.id&&z.day===day&&z.period_id===p.id),c=x&&classes.find(y=>y.id===x.class_id);return `<td style="${TC}">${x?`<b>${c?clLab(c):""}</b><br><span style="font-size:9px">${subLab(x.subject_id)}</span>`:""}</td>`})}</div>`).join(""),"tbl")},
+async libbooks(){const S=sid();
+  const[b,l]=await Promise.all([sb.from("library_books").select("*").eq("school_id",S).order("title").limit(3000),sb.from("library_loans").select("book_id,returned_on").eq("school_id",S).is("returned_on",null)]);
+  if(b.error)return toast(b.error.message||"The library is not available");
+  const L=(b.data||[]).filter(x=>x.status==="active");if(!L.length)return toast("No books in the library yet");
+  const out={};(l.data||[]).forEach(x=>out[x.book_id]=(out[x.book_id]||0)+1);
+  let tc=0,ta=0;
+  const rows=L.map((x,i)=>{const av=Math.max((+x.copies||0)-(out[x.id]||0),0);tc+=+x.copies||0;ta+=av;return `<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${esc(x.title||"")}</td><td style="${B1}">${esc(x.author||"")}</td><td style="${B1}">${esc(x.category||"")}</td><td style="${B1}">${esc(x.shelf||"")}</td><td style="${B1}">${esc(x.accession_no||"")}</td><td style="${B1};text-align:center">${x.copies||0}</td><td style="${B1};text-align:center">${av}</td></tr>`}).join("");
+  go(`<div style="${WRAP}">${prHead(sch0(),"Library catalogue")}<div style="text-align:center;font-size:11px;color:#444;margin-bottom:6px">${L.length} titles · ${tc} copies · ${ta} available · printed ${new Date().toLocaleDateString()}</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1}">No.</th><th style="${B1};text-align:left">Title</th><th style="${B1};text-align:left">Author</th><th style="${B1};text-align:left">Category</th><th style="${B1};text-align:left">Shelf</th><th style="${B1};text-align:left">Book no.</th><th style="${B1}">Copies</th><th style="${B1}">Available</th></tr></thead><tbody>${rows}</tbody></table></div>`,"tbl")},
+async libloans(){const S=sid();
+  const[b,l]=await Promise.all([sb.from("library_books").select("id,title").eq("school_id",S).limit(3000),sb.from("library_loans").select("*").eq("school_id",S).order("issued_on",{ascending:false}).limit(2000)]);
+  if(b.error||l.error)return toast((b.error||l.error).message||"The library is not available");
+  const t=todayS(),f=PC.lf||"open",over=x=>!x.returned_on&&x.due_on&&String(x.due_on).slice(0,10)<t;
+  const L=(l.data||[]).filter(x=>f==="all"||(f==="open"?!x.returned_on:f==="late"?over(x):!!x.returned_on));
+  if(!L.length)return toast("No loans match this choice");
+  const bk={};(b.data||[]).forEach(x=>bk[x.id]=x.title);
+  const who=x=>x.student_id?stuNm(x.student_id):esc(((typeof staff!=="undefined"?staff:[]).find(p=>p.id===x.staff_id)||{}).full_name||"Staff member");
+  const lab={open:"Books out now",late:"Overdue books",done:"Returned books",all:"All loans"}[f];
+  const rows=L.map((x,i)=>`<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${esc(bk[x.book_id]||"Book")}</td><td style="${B1}">${who(x)}</td><td style="${B1}">${d10(x.issued_on)}</td><td style="${B1}">${d10(x.due_on)}${over(x)?" <b>(late)</b>":""}</td><td style="${B1}">${d10(x.returned_on)}</td><td style="${B1};text-align:right">${+x.fine>0?(+x.fine).toLocaleString():""}</td></tr>`).join("");
+  go(`<div style="${WRAP}">${prHead(sch0(),"Library loans: "+lab)}<div style="text-align:center;font-size:11px;color:#444;margin-bottom:6px">${L.length} loan${L.length===1?"":"s"} · printed ${new Date().toLocaleDateString()}</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1}">No.</th><th style="${B1};text-align:left">Book</th><th style="${B1};text-align:left">Borrower</th><th style="${B1};text-align:left">Issued</th><th style="${B1};text-align:left">Due</th><th style="${B1};text-align:left">Returned</th><th style="${B1};text-align:right">Fine</th></tr></thead><tbody>${rows}</tbody></table></div>`,"tbl")},
+async brddorm(){const D=await brdData();if(!D)return;const sch=sch0(),G=dormSecs(D);
+  if(!G.length)return toast("No dormitories yet");
+  go(G.map((g,i)=>`<div style="${WRAP};${pageBreak(i,G.length)}">${dormHead(sch,g,"Dormitory list")}<table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1};width:32px">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Class</th><th style="${B1};text-align:left">Room</th><th style="${B1};text-align:left">Bed</th><th style="${B1};text-align:left">Type</th></tr></thead><tbody>${g.R.map((a,k)=>{const s=stuOf(a.student_id);return `<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${k+1}</td><td style="${B1}">${stuNm(a.student_id)}</td><td style="${B1}">${s?clName(s.class_id):""}</td><td style="${B1}">${esc(a.room||"")}</td><td style="${B1}">${esc(a.bed||"")}</td><td style="${B1}">${esc(a.boarder_type||"")}</td></tr>`}).join("")||`<tr><td style="${B1}" colspan="6">No boarders in this dormitory</td></tr>`}</tbody></table></div>`).join(""),"tbl")},
+async brdroll(){const D=await brdData();if(!D)return;const sch=sch0(),G=dormSecs(D),days=+PC.blank||7;
+  if(!G.length)return toast("No dormitories yet");
+  go(G.map((g,i)=>`<div style="${WRAP};${pageBreak(i,G.length)}">${dormHead(sch,g,"Boarding roll sheet")}<div style="font-size:11px;margin-bottom:6px">Week / month: ____________</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1};width:28px">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Room / bed</th>${Array.from({length:days},(_,k)=>`<th style="${B1};width:22px;font-size:9px">${k+1}</th>`).join("")}</tr></thead><tbody>${g.R.map((a,k)=>`<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${k+1}</td><td style="${B1};white-space:nowrap">${stuNm(a.student_id)}</td><td style="${B1}">${esc([a.room,a.bed].filter(Boolean).join(" / "))}</td>${Array.from({length:days},()=>`<td style="${B1}">&nbsp;</td>`).join("")}</tr>`).join("")||`<tr><td style="${B1}" colspan="${3+days}">No boarders in this dormitory</td></tr>`}</tbody></table></div>`).join(""),"tbl")},
+async brdexeat(){const D=await brdData();if(!D)return;
+  const L=D.ex.filter(x=>PC.lf==="all"||!x.returned_on);if(!L.length)return toast("No exeats match this choice");
+  go(`<div style="${WRAP}">${prHead(sch0(),"Exeat list: "+(PC.lf==="all"?"All exeats":"Out now"))}<div style="text-align:center;font-size:11px;color:#444;margin-bottom:6px">${L.length} exeat${L.length===1?"":"s"} · printed ${new Date().toLocaleDateString()}</div><table style="width:100%;border-collapse:collapse"><thead style="display:table-header-group"><tr style="background:#eee"><th style="${B1}">No.</th><th style="${B1};text-align:left">Name</th><th style="${B1};text-align:left">Class</th><th style="${B1};text-align:left">Out</th><th style="${B1};text-align:left">Expected back</th><th style="${B1};text-align:left">Returned</th><th style="${B1};text-align:left">Reason</th><th style="${B1};text-align:left">Picked by</th></tr></thead><tbody>${L.map((x,i)=>{const s=stuOf(x.student_id);return `<tr style="page-break-inside:avoid"><td style="${B1};text-align:center">${i+1}</td><td style="${B1}">${stuNm(x.student_id)}</td><td style="${B1}">${s?clName(s.class_id):""}</td><td style="${B1}">${d10(x.out_date)}</td><td style="${B1}">${d10(x.expected_return)}</td><td style="${B1}">${d10(x.returned_on)}</td><td style="${B1}">${esc(x.reason||"")}</td><td style="${B1}">${esc(x.picked_by||"")}</td></tr>`}).join("")}</tbody></table></div>`,"tbl")}
+});
+window.prtPrint=async function(){
+  const D=curDoc();if(!okDoc(D))return toast(D.name+" is on the "+LV[D.min]+" plan");
+  try{await JOBS[D.id]()}catch(e){console.error(e);toast("Could not prepare: "+(e&&e.message||e))}};
+const _at=applyTab;applyTab=function(){_at();const ok=prtCan();show("prtBox",ok&&tab==="prt");show("tabPrt",ok)};
+const _st=setTab;setTab=function(x){_st(x);if(tab==="prt")draw()};
+})();
+/* PRINT_CENTER_END */
+/* ACTIVITY_LOCK_START: Activity room is a Premium module. Hidden and blocked below Premium (platform super admin exempt). Screen only; the database rule is separate. */
+(function(){
+const ok=()=>{if(!acc||(me&&me.role==="super_admin"))return true;return acc.plan==="premium"&&(acc.modules||{}).activity_room!=="off"};
+const _at=applyTab;applyTab=function(){_at();if(!ok()){show("shBox",false);show("tabSh",false)}};
+const _st=setTab;setTab=function(x){if(x==="sh"&&!ok()){x="home";if(typeof toast==="function")toast("Activity room is part of the Premium plan.")}_st(x)};
+})();
+/* ACTIVITY_LOCK_END */
+/* AUDIT_FEED_START: Library, Visitors and Preps changes show in the Home feed, the bell and the Activity room. The database writes the log rows (audit triggers); this only words and groups them. */
+(function(){
+if(typeof ACT!=="undefined"){
+  ACT.library_books=["book",d=>d.title||"","books"];
+  ACT.library_loans=["library loan",d=>"","library loans"];
+  ACT.visitors=["visitor",d=>d.visitor_name||"","visitors"];
+  ACT.prep_sessions=["session",d=>d.title||"","sessions"];
+  ACT.prep_attendance=["prep attendance record",d=>"","prep attendance records"];
+}
+if(typeof ACTW!=="undefined"){
+  ACTW.library_books=["Library","lib"];ACTW.library_loans=["Library","lib"];ACTW.visitors=["Visitors","vis"];ACTW.prep_sessions=["Preps","prp"];ACTW.prep_attendance=["Preps","prp"];
+}
+if(typeof RM_CATS!=="undefined"){
+  RM_CATS.push(["lib","Library",["library_books","library_loans"],"#0e7490","lib"],["vis","Visitors",["visitors"],"#b45309","vis"],["prp","Preps",["prep_sessions","prep_attendance"],"#4f46e5","prp"]);
+}
+const sp=document.querySelector('svg[aria-hidden="true"]');
+[["i-lib","i-book"],["i-vis","i-door"],["i-prp","i-prep"]].forEach(([n,o])=>{const e=document.getElementById(o);if(sp&&e&&!document.getElementById(n))sp.insertAdjacentHTML("beforeend",'<symbol id="'+n+'" viewBox="'+(e.getAttribute("viewBox")||"0 0 24 24")+'">'+e.innerHTML+'</symbol>')});
+if(typeof actVerb==="function"){const _av=actVerb;actVerb=function(a){const t=a.table_name,o=a.action,c=(a.details||{})._changes||{};
+  if(t==="library_loans"){if(o==="INSERT")return"issued";if(o==="UPDATE"&&c.returned_on)return"received"}
+  if(t==="visitors"){if(o==="INSERT")return"signed in";if(o==="UPDATE"&&c.time_out)return"signed out"}
+  if(t==="prep_attendance"&&o==="INSERT")return"marked";
+  return _av(a)}}
+if(typeof fv==="function"){const _fv=fv;fv=function(k,v){
+  if(k==="book_id")return"A library book";if(k==="session_id")return"A prep session";
+  if((k==="issued_by"||k==="recorded_by")&&v)return(typeof actNames!=="undefined"&&actNames[v])||"A staff member";
+  return _fv(k,v)}}
+})();
+/* AUDIT_FEED_END */
+
+/* AUDIT_ROOM_START: older tables (boarding, timetable, subjects, staff, invoices, schools and more) are logged by the database audit triggers. Their entries show ONLY in the Activity room, not in the Home feed or the bell. This only words and groups them. */
+(function(){
+const ROOM_ONLY=new Set(["announcements","boarding_allocations","boarding_exeats","boarding_roll","class_subjects","dormitories","exam_types","grade_scales","invoices","profiles","staff_contacts","student_correction_requests","student_transfers","subjects","timetable_periods","timetable_slots","report_card_archive","schools","ds_links","ds_config","parent_release","parent_release_ov","platform_settings","password_resets"]);
+const n0=d=>"";
+if(typeof ACT!=="undefined"){
+  ACT.announcements=["announcement",d=>d.title||"","announcements"];
+  ACT.boarding_allocations=["boarding placement",d=>d.room?"room "+d.room:"","boarding placements"];
+  ACT.boarding_exeats=["boarding exeat",d=>d.reason||"","boarding exeats"];
+  ACT.boarding_roll=["boarding roll call record",n0,"boarding roll call records"];
+  ACT.class_subjects=["class subject",n0,"class subjects"];
+  ACT.dormitories=["dormitory",d=>d.name||"","dormitories"];
+  ACT.exam_types=["exam type",d=>d.name||"","exam types"];
+  ACT.grade_scales=["grade scale",d=>d.grade?"grade "+d.grade:"","grade scales"];
+  ACT.invoices=["invoice",d=>d.description?d.description+" (UGX "+Number(d.amount||0).toLocaleString()+")":"","invoices"];
+  ACT.profiles=["staff profile",d=>d.full_name||"","staff profiles"];
+  ACT.staff_contacts=["staff contact",d=>d.full_name||"","staff contacts"];
+  ACT.student_correction_requests=["learner correction request",d=>d.student_name||"","learner correction requests"];
+  ACT.student_transfers=["learner transfer",d=>d.student_name||"","learner transfers"];
+  ACT.subjects=["subject",d=>d.name||"","subjects"];
+  ACT.timetable_periods=["timetable period",d=>d.name||"","timetable periods"];
+  ACT.timetable_slots=["timetable slot",n0,"timetable slots"];
+  ACT.report_card_archive=["report card",d=>d.student_name||"","report cards"];
+  ACT.schools=["school record",d=>d.name||"","school records"];
+  ACT.ds_links=["student-data link",n0,"student-data links"];
+  ACT.ds_config=["data-sharing setting",n0,"data-sharing settings"];
+  ACT.parent_release=["parent release rule",n0,"parent release rules"];
+  ACT.parent_release_ov=["parent release exception",n0,"parent release exceptions"];
+  ACT.platform_settings=["platform setting",d=>d.key||"","platform settings"];
+  ACT.password_resets=["password reset request",n0,"password reset requests"];
+}
+if(typeof ACTW!=="undefined"){
+  ACTW.announcements=["Announcements","ann"];
+  ["boarding_allocations","boarding_exeats","boarding_roll","dormitories"].forEach(t=>ACTW[t]=["Boarding","brd"]);
+  ["class_subjects","subjects","exam_types","grade_scales"].forEach(t=>ACTW[t]=["Academic settings","set"]);
+  ACTW.invoices=["Fees","fee"];
+  ["profiles","staff_contacts"].forEach(t=>ACTW[t]=["Staff","tea"]);
+  ["student_correction_requests","student_transfers"].forEach(t=>ACTW[t]=["Learners","stu"]);
+  ["timetable_periods","timetable_slots"].forEach(t=>ACTW[t]=["Timetable","tt"]);
+  ACTW.report_card_archive=["Report cards","rc"];
+  ["schools","ds_links","ds_config","parent_release","parent_release_ov","platform_settings","password_resets"].forEach(t=>ACTW[t]=["Settings","set"]);
+}
+if(typeof RM_CATS!=="undefined"){
+  const f=RM_CATS.find(c=>c[0]==="fees"),r=RM_CATS.find(c=>c[0]==="res");
+  if(f&&!f[2].includes("invoices"))f[2].push("invoices");
+  if(r&&!r[2].includes("report_card_archive"))r[2].push("report_card_archive");
+  RM_CATS.push(
+    ["brd","Boarding",["boarding_allocations","boarding_exeats","boarding_roll","dormitories"],"#a21caf","bed"],
+    ["tt","Timetable",["timetable_periods","timetable_slots"],"#475569","cal"],
+    ["ann","Announcements",["announcements"],"#be123c","mail"],
+    ["acad","Subjects and exams",["subjects","class_subjects","exam_types","grade_scales"],"#0369a1","grade"],
+    ["staff","Staff",["profiles","staff_contacts"],"#854d0e","tea"],
+    ["corr","Transfers and corrections",["student_transfers","student_correction_requests"],"#9a3412","stu"],
+    ["sys","School and system",["schools","ds_links","ds_config","parent_release","parent_release_ov","platform_settings","password_resets"],"#334155","set"]
+  );
+}
+if(typeof actVerb==="function"){const _av2=actVerb;actVerb=function(a){const t=a.table_name,o=a.action,d=a.details||{},c=d._changes||{};
+  if(t==="announcements"&&o==="INSERT")return"posted";
+  if(t==="boarding_roll"&&o==="INSERT")return"marked";
+  if(t==="boarding_exeats"){if(o==="INSERT")return"recorded";if(o==="UPDATE"&&c.returned_on)return"closed"}
+  if(t==="invoices"&&o==="INSERT")return"raised";
+  if(t==="report_card_archive"){if(o==="INSERT")return"saved";if(o==="UPDATE"&&c.printed_at)return"printed"}
+  if(t==="student_transfers"&&o==="INSERT")return"recorded";
+  if(t==="student_correction_requests"){if(o==="INSERT")return"submitted";if(o==="UPDATE"&&c.status&&c.status.to)return String(c.status.to)}
+  if(t==="password_resets"){if(o==="INSERT")return"started";if(o==="UPDATE"&&c.used_at)return"completed"}
+  return _av2(a)}}
+/* Keep these entries out of the Home feed and the bell; the Activity room still gets them (copied into its own list first). */
+function hideRoomOnly(fn){return function(){const all=acts;try{
+  if(typeof ROOM!=="undefined"&&Array.isArray(ROOM.logs)){const have=new Set(ROOM.logs.map(x=>x.id));all.forEach(a=>{if(ROOM_ONLY.has(a.table_name)&&!have.has(a.id)){ROOM.logs.push(a);have.add(a.id)}})}
+  acts=all.filter(a=>!ROOM_ONLY.has(a.table_name));return fn.apply(this,arguments)}finally{acts=all}}}
+if(typeof drawActivity==="function")drawActivity=hideRoomOnly(drawActivity);
+if(typeof window.bellDraw==="function")window.bellDraw=hideRoomOnly(window.bellDraw);
+})();
+/* AUDIT_ROOM_END */
+
+
+
 /* PLAN_LOCK_START: plan, expiry and read-only lock. The database is the real enforcement (my_access, module_ok); this shapes the screens and explains why. */
 (function(){
 const NOTICE="Plan expired. Please contact TFG administering to renew your plan.";
