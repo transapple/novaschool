@@ -800,17 +800,6 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div data-t="ann" data-s="list" class="card"><h3>Announcements</h3><div id="anList"></div></div>
   </div>
 
-  <div id="lrnBox" class="hide">
-    <div data-t="lrn" data-s="new" class="card"><h3>New note or assignment</h3>
-      <select id="lrK" onchange="lrnKind()"><option value="note">Note</option><option value="assignment">Assignment</option></select>
-      <select id="lrCls" onchange="lrnSubj()"></select>
-      <select id="lrSub"></select>
-      <input id="lrT" maxlength="120" placeholder="Title">
-      <textarea id="lrB" maxlength="4000" rows="6" placeholder="Write the note or the assignment instructions" style="width:100%;box-sizing:border-box;margin-top:8px"></textarea>
-      <div id="lrDW" class="hide"><label class="mut" style="font-size:13px">Due date</label><input id="lrD" type="date"></div>
-      <button onclick="lrnPost()">Post</button><div id="lrE" class="err"></div></div>
-    <div data-t="lrn" data-s="list" class="card"><h3>Notes and assignments</h3><select id="lrFC" onchange="drawLrn()"></select><div id="lrList"></div></div>
-  </div>
 
   <div id="ttBox" class="hide">
     <div data-t="tt" data-s="class" class="card"><h3>Class timetable</h3><select id="ttClass" onchange="drawTT()"></select><div id="ttCG" class="ttw"></div></div>
@@ -822,11 +811,11 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <h3>Register student</h3>
     <div style="text-align:center;margin-bottom:12px"><div id="sPh" class="sav lg" style="cursor:pointer;margin:0 auto" onclick="regPhotoMenu()" role="button" aria-label="Add student photo"><svg class="ic" style="width:44px;height:44px"><use href="#i-user"/></svg></div><div class="mut" style="margin-top:4px">Tap the circle to add a photo (optional)</div></div>
     <input id="sCam" type="file" accept="image/*" capture="environment" class="hide" onchange="regPic(this)"><input id="sGal" type="file" accept="image/*" class="hide" onchange="regPic(this)">
-    <input id="fn" placeholder="Full name" autocomplete="off">
+    <input id="fn" placeholder="Full name" autocomplete="off" oninput="nameLive('fn')">
     <div class="mut" style="margin:4px 0">Date of birth</div>
     <div class="row" style="grid-template-columns:1fr 1fr 1.5fr"><input id="dd" inputmode="numeric" maxlength="2" placeholder="Day" oninput="dobNext(this,2,'dm')"><input id="dm" inputmode="numeric" maxlength="2" placeholder="Month" oninput="dobNext(this,2,'dy')"><input id="dy" inputmode="numeric" maxlength="4" placeholder="Year" oninput="dobNext(this,4,'')"></div>
     <div class="row"><select id="gen"><option value="male">Male</option><option value="female">Female</option></select><select id="cid"></select></div>
-    <input id="gn" placeholder="Parent / guardian name">
+    <input id="gn" placeholder="Parent / guardian name" oninput="nameLive('gn')">
     <select id="gRel" onchange="relPick('g')"><option value="">Relationship to the learner</option><option>Father</option><option>Mother</option><option>Parent</option><option>Guardian</option><option>Next of kin</option><option>Aunt</option><option>Uncle</option><option>Grandparent</option><option>Sibling</option><option value="__o">Other (write it)</option></select><input id="gRelO" placeholder="Write the relationship, e.g. Neighbour" maxlength="40" style="display:none">
     <input id="gp" type="tel" inputmode="tel" placeholder="Parent / guardian phone number">
     <button onclick="addStudent()">Save student</button>
@@ -851,9 +840,8 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div id="pnone" class="card hide"><h3>No learner linked yet</h3><p class="mut">No student is linked to your account yet. Give the school office the email you signed up with, then refresh this page.</p></div>
     <div id="pmain" class="hide">
       <div class="card"><h3>Learner</h3><select id="pkid" onchange="loadKid()"></select></div>
-      <div class="row" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px"><button class="alt" onclick="setP('ann')">Notices</button><button class="alt" onclick="setP('att')">Attendance</button><button class="alt" onclick="setP('rep')">Report card</button><button class="alt" onclick="setP('fee')">Fees</button><button class="alt" onclick="setP('lrn')">Learning</button></div>
+      <div class="row" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px"><button class="alt" onclick="setP('ann')">Notices</button><button class="alt" onclick="setP('att')">Attendance</button><button class="alt" onclick="setP('rep')">Report card</button><button class="alt" onclick="setP('fee')">Fees</button></div>
       <div id="pAnn" class="card hide"></div>
-      <div id="pLrn" class="card hide"></div>
       <div id="pAtt" class="card"></div>
       <div id="pRep" class="card hide"><select id="pterm" onchange="loadPCard()"></select><button class="alt" onclick="printCards(0)">Print / save as PDF</button><div id="pcard"></div></div>
       <div id="pFee" class="card hide"></div>
@@ -933,12 +921,12 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
     <div data-t="tea" data-s="list" id="reqBox" class="card hide"><h3>Join requests</h3><div id="reqList"></div></div>
     <div data-t="tea" data-s="add" id="adminTea" class="card hide">
       <h3>Add staff</h3>
-      <p class="mut">Add the staff member with their names, phone number, position or department, and subjects if they teach. They then create their own account by typing the same names and phone number: the app checks them and fills in the rest. No email is needed. Administrators can add any staff; Academics can add teachers only.</p>
-      <input id="stname" placeholder="Full names (at least two)" autocomplete="off">
-      <p class="mut" style="margin:8px 0 4px">Position or department (who they are)</p>
-      <select id="siam" onchange="staffSubOpts()"><option>Teacher</option><option>Academic</option><option>Administrator</option><option>Finance</option><option>HR</option><option>Boarding</option><option>Reception</option><option>ICT</option><option>Librarian</option><option>Support staff</option><option>Other</option></select>
-      <div id="ssubWrap"><p class="mut" style="margin:8px 0 4px">Subjects (required for teachers)</p><div id="ssubs"></div></div>
-      <input id="sphone" type="tel" inputmode="tel" placeholder="Phone number (required)">
+      <input id="stname" placeholder="Full names" autocomplete="off" oninput="nameLive('stname')">
+      <select id="sdep" onchange="staffDep()"></select>
+      <select id="spos" onchange="staffSubOpts()"></select>
+      <input type="hidden" id="siam" value="Teacher">
+      <div id="ssubWrap"><p class="mut" style="margin:8px 0 4px">Subjects</p><div id="ssubs"></div></div>
+      <input id="sphone" type="tel" inputmode="tel" placeholder="Phone number" oninput="phLive('sphone')">
       <button onclick="addStaff()">Add staff</button>
       <div id="sresult"></div>
       <details style="margin-top:12px"><summary class="mut">Already has an account? Attach it by email</summary>
@@ -951,7 +939,7 @@ body.nav-bottom .asave{bottom:76px}.asave .aprog{flex:1;font-size:13px;font-weig
   </div>
 </div>
 </main>
-<aside id="side" class="hide"><div class="sbrand"><span class="logo"><svg class="ic"><use href="#i-logo"/></svg></span><div class="tt"><b>My School</b><small id="sbSub">School Management</small></div></div><div class="grp">Overview</div><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Dashboard</button><button id="tabAn" data-t="an" class="hide" onclick="setTab('an')"><svg class="ic"><use href="#i-res"/></svg>Analytics</button><div class="grp">Learners</div><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button data-t="ann" onclick="setTab('ann')"><svg class="ic"><use href="#i-adm"/></svg>Announcements</button><div class="grp">Academics</div><button data-t="cls" onclick="setTab('cls')"><svg class="ic"><use href="#i-cls"/></svg>Classes</button><button data-t="tt" onclick="setTab('tt')"><svg class="ic"><use href="#i-att"/></svg>Timetable</button><button id="tabLrn" data-t="lrn" class="hide" onclick="setTab('lrn')"><svg class="ic"><use href="#i-rc"/></svg>Digital learning</button><button data-t="tea" onclick="setTab('tea')"><svg class="ic"><use href="#i-tea"/></svg>Teachers</button><button id="tabRes" data-t="res" onclick="setTab('res')"><svg class="ic"><use href="#i-res"/></svg>Results</button><button id="tabRC" data-t="rc" onclick="setTab('rc')"><svg class="ic"><use href="#i-rc"/></svg>Report cards</button><div class="grp">Finance</div><button id="tabFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><div class="grp">Administration</div><button id="tabSS" data-t="ss" onclick="setTab('ss')"><svg class="ic"><use href="#i-set"/></svg>School settings</button><button data-t="set" onclick="setTab('set')"><svg class="ic"><use href="#i-set"/></svg>Settings</button><button id="tabSch" data-t="sch" onclick="setTab('sch')"><svg class="ic"><use href="#i-sch"/></svg>Schools</button></aside><nav id="bnav"><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Home</button><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button id="bFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><button onclick="openSide()"><svg class="ic"><use href="#i-menu"/></svg>More</button></nav><div id="ov" onclick="closeSide()"></div>
+<aside id="side" class="hide"><div class="sbrand"><span class="logo"><svg class="ic"><use href="#i-logo"/></svg></span><div class="tt"><b>My School</b><small id="sbSub">School Management</small></div></div><div class="grp">Overview</div><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Dashboard</button><button id="tabAn" data-t="an" class="hide" onclick="setTab('an')"><svg class="ic"><use href="#i-res"/></svg>Analytics</button><div class="grp">Learners</div><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button data-t="ann" onclick="setTab('ann')"><svg class="ic"><use href="#i-adm"/></svg>Announcements</button><div class="grp">Academics</div><button data-t="cls" onclick="setTab('cls')"><svg class="ic"><use href="#i-cls"/></svg>Classes</button><button data-t="tt" onclick="setTab('tt')"><svg class="ic"><use href="#i-att"/></svg>Timetable</button><button data-t="tea" onclick="setTab('tea')"><svg class="ic"><use href="#i-tea"/></svg>Teachers</button><button id="tabRes" data-t="res" onclick="setTab('res')"><svg class="ic"><use href="#i-res"/></svg>Results</button><button id="tabRC" data-t="rc" onclick="setTab('rc')"><svg class="ic"><use href="#i-rc"/></svg>Report cards</button><div class="grp">Finance</div><button id="tabFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><div class="grp">Administration</div><button id="tabSS" data-t="ss" onclick="setTab('ss')"><svg class="ic"><use href="#i-set"/></svg>School settings</button><button data-t="set" onclick="setTab('set')"><svg class="ic"><use href="#i-set"/></svg>Settings</button><button id="tabSch" data-t="sch" onclick="setTab('sch')"><svg class="ic"><use href="#i-sch"/></svg>Schools</button></aside><nav id="bnav"><button data-t="home" onclick="setTab('home')"><svg class="ic"><use href="#i-home"/></svg>Home</button><button data-t="stu" onclick="setTab('stu')"><svg class="ic"><use href="#i-stu"/></svg>Students</button><button data-t="att" onclick="setTab('att')"><svg class="ic"><use href="#i-att"/></svg>Attendance</button><button id="bFee" data-t="fee" onclick="setTab('fee')"><svg class="ic"><use href="#i-fee"/></svg>Fees</button><button onclick="openSide()"><svg class="ic"><use href="#i-menu"/></svg>More</button></nav><div id="ov" onclick="closeSide()"></div>
 <div id="printArea"></div>
 <div id="guide" class="hide" style="position:fixed;inset:0;overflow:auto;background:var(--bg);z-index:10;padding:14px"><div style="max-width:720px;margin:0 auto">
   <div class="row" style="align-items:center"><h2 style="margin:0">User guide</h2><button onclick="closeGuide()">Close</button></div>
@@ -1159,7 +1147,7 @@ function stuCorr(i){const s=students.find(x=>x.id===i);if(!s)return;if(stuInacti
   <div id="cErr" class="err"></div><div class="brow"><button class="pri" id="cSend" onclick="corrSend('${i}')">Submit correction</button><button class="alt" onclick="closeModal()">Cancel</button></div>`)}
 async function corrSend(i){const s=students.find(x=>x.id===i);if(!s)return;const g=id=>$(id).value.trim(),err=m=>{$("cErr").textContent=m;$("cSend").disabled=false};
   const ch={},nm=((s.first_name||"")+" "+(s.last_name||"")).trim().replace(/\s+/g," "),nn=g("cFn").replace(/\s+/g," ");
-  if(nn!==nm){if(nn.split(" ").filter(Boolean).length<2)return err("Enter the full name (at least two names).");ch.full_name=nn}
+  if(nn!==nm){const nb=nameBad(nn);if(nb)return err(nb);ch.full_name=nn}
   if(g("cDob")!==String(s.date_of_birth||"").slice(0,10))ch.date_of_birth=g("cDob")||null;
   if($("cGen").value!==(s.gender||""))ch.gender=$("cGen").value==="female"?"Female":"Male";
   if(!Object.keys(ch).length)return err("Change at least one detail first.");
@@ -1202,7 +1190,7 @@ async function addStudent(){
   const school_id=me.role==="super_admin"?$("sch").value:me.school_id;
   if(!school_id){$("serr").textContent="Create or select a school first.";return}
   const nm=$("fn").value.trim().replace(/\s+/g," ").split(" ");
-  if(nm.length<2){$("serr").textContent="Enter the full name (at least two names).";return}
+  if(!nameCheck("fn"))return;{const gv=$("gn").value.trim();if(gv&&gv.length<NAMEMIN){fmsg("gn","Names must be at least "+NAMEMIN+" characters");return}fmsg("gn","")}
   const dobv=dobValue();
   if(!dobv){$("serr").textContent="Enter a valid date of birth: day, month and year (for example 07, 03, 2015).";return}
   {const w=$("cid").value?clFullMsg($("cid").value):"";if(w&&!confirm(w)){$("serr").textContent="Choose another class or stream.";return}}
@@ -1214,7 +1202,7 @@ async function addStudent(){
   $("serr").textContent=note;regBlob=null;$("sPh").innerHTML='<svg class="ic" style="width:44px;height:44px"><use href="#i-user"/></svg>';
   ["fn","gn","gp","dd","dm","dy","gRel","gRelO"].forEach(i=>$(i).value="");$("gRelO").style.display="none";loadStudents()
 }
-const SUBS={stu:[["list","Students"],["add","Register"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],lrn:[["list","Learning"],["new","New","st"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
+const SUBS={stu:[["list","Students"],["add","Register"],["transfer","Transfers","ad"],["trash","Trash","ad"]],cls:[["list","Classes"]],att:[["stu","Students"]],fee:[["hist","Payment history"],["struct","Fee structure"],["health","Fees Health"],["status","Payment Status"],["remind","Reminders"]],res:[["scores","Scores"],["new","New test"],["report","Report"]],tea:[["list","Staff"],["add","Add staff","st"]],ss:[["terms","Terms"],["subjects","Subjects"]],tt:[["class","Classes"],["teacher","Teachers"],["periods","Periods","tt"]],ann:[["list","Announcements"],["new","New","ad"]],an:[["school","School"],["district","District","sa"],["national","National","sa"]]};
 let subs={};
 function subList(){return(SUBS[tab]||[]).filter(x=>!x[2]||(x[2]==="sa"?(!!me&&me.role==="super_admin"):x[2]==="st"?perm.st:perm.ad))}
 function curSub(){const l=subList();return l.length?(l.find(x=>x[0]===subs[tab])||l[0])[0]:null}
@@ -1384,14 +1372,14 @@ function renderHome(){drawLogo();const h=$("hero");if(h){const hr=new Date().get
   const r=$("recent");if(r)r.innerHTML=students.length?`<div class="tw"><table class="dt"><tbody>${students.slice(0,5).map(x=>`<tr><td class="id">${esc(x.national_student_id)}</td><td><b>${esc(x.first_name)} ${esc(x.last_name)}</b></td><td>${esc(classes.find(c=>c.id===x.class_id)?.name||x.class_level||"")}</td></tr>`).join("")}</tbody></table></div>`:'<p class="mut">No registrations yet.</p>'}
 function closeSide(){$("side").classList.remove("open");$("ov").classList.remove("on")}
 function openSide(){$("side").classList.add("open");$("ov").classList.add("on")}
-function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadTr()}if(t==="ann")loadAnn();if(t==="lrn")loadLrn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
+function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab();window.scrollTo(0,0);if(t==="att")loadAtt();if(t==="fee"){loadFin();loadFeeX()}if(t==="res")loadRes();if(t==="rc")loadRCsel();if(t==="tt")loadTT();if(t==="stu"&&perm.ad){loadTr()}if(t==="ann")loadAnn();if(t==="an")loadAn();if(t==="set")setView(null);if(t==="ss"){loadTerms();loadOrg()}}
 /* ACCESS MATRIX: every department and every "I am". One place decides what each person sees and may change.
    tabs = what they can open (null = everything). Flags: res = write Results and Report cards, tt = write Timetable, fee = open Fees,
-   fs = change fee structure, st = Attendance and Digital learning, acr = see Academic settings, acadW = Academic settings pages they may CHANGE.
+   fs = change fee structure, st = Attendance, acr = see Academic settings, acadW = Academic settings pages they may CHANGE.
    Anything not granted is read only or hidden. School settings, Analytics and Teachers and staff admin are for Administrators only.
    ADMINISTRATORS  Head teacher, Deputy head teacher, Assistant head teacher, Other : everything.
                    Support staff : Home and Settings only.
-   ACADEMICS       Teacher, Other : Students, Attendance, Announcements, Classes, Digital learning, Settings; WRITE Results and Report cards;
+   ACADEMICS       Teacher, Other : Students, Attendance, Announcements, Classes, Settings; WRITE Results and Report cards;
                    Timetable and Academic settings read only.
                    Director of Studies : as Teacher, and also WRITE Timetable, Subjects, Exam types, Grades (not Terms or Classes).
    FINANCE         Bursar, Accountant : Students (view), Fees, change fee structure.
@@ -1404,7 +1392,7 @@ function setTab(t){if(!canTab(t))t="home";tab=t;closeSide();closePops();applyTab
                    Boarding, Reception, Librarian : Students, Announcements.
                    ICT, Support staff, Other : Home and Settings only.
    Everyone also has Settings: Preferences, Menu style and their own Account. */
-const T_ACAD=["home","stu","att","ann","cls","tt","lrn","res","rc","set"],T_FIN=["home","stu","fee","set"],T_FINS=["home","stu","fee","set"];
+const T_ACAD=["home","stu","att","ann","cls","tt","res","rc","set"],T_FIN=["home","stu","fee","set"],T_FINS=["home","stu","fee","set"];
 const ACC={
   admin:{tabs:null},
   support:{tabs:["home","set"]},
@@ -1430,7 +1418,7 @@ const accP=()=>ACC[accKind()]||{};
 function accPerm(){const A=accP(),r=me&&me.role,ad=r==="super_admin"||accKind()==="admin";
   const view=["super_admin","school_admin","teacher","bursar"].includes(r)||(r==="staff"&&!!A.tabs&&A.tabs.some(t=>t!=="home"&&t!=="set"));
   return{ad,st:ad||!!A.st,view,fee:ad||!!A.fee,res:ad||!!A.res,acr:ad||!!A.acr,tt:ad||!!A.tt,fs:ad||!!A.fs}}
-const ALLTABS=["home","an","stu","att","ann","cls","tt","lrn","tea","res","rc","fee","ss","set","sch"];
+const ALLTABS=["home","an","stu","att","ann","cls","tt","tea","res","rc","fee","ss","set","sch"];
 const isDOS=()=>!!me&&me.role==="teacher"&&/director of studies|\bdos\b/i.test(me.department||"");
 const isSupAdmin=()=>!!me&&me.role==="school_admin"&&/support staff/i.test(me.department||"");
 /* who may change each Academic settings page: administrators everything; the Director of Studies subjects, exam types and grades; other teachers read only */
@@ -1443,7 +1431,7 @@ function applyTab(){
   
   document.querySelectorAll("#side button[data-t],#bnav button[data-t]").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));applySub();renderHome();drawActivity();show("actBox",!!perm.ad&&cfg.feed);show("setBox",tab==="set");show("ssBox",false);show("tabSS",false);show("bFee",perm.fee);
   show("stuBox",perm.ad&&tab==="stu");show("listBox",perm.view&&tab==="stu");show("trashBox",perm.ad&&tab==="stu");
-  show("classBox",perm.view&&tab==="cls");show("attBox",!!perm.st&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("teachBox",perm.view&&tab==="tea");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("lrnBox",perm.st&&tab==="lrn");show("tabLrn",perm.st);show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);
+  show("classBox",perm.view&&tab==="cls");show("attBox",!!perm.st&&tab==="att");show("feeBox",perm.fee&&tab==="fee");show("feeFab",!!(perm.fee&&tab==="fee")||setFabOn());show("resBox",perm.res&&tab==="res");show("rcBox",perm.res&&tab==="rc");show("linkBox",perm.ad&&tab==="stu");show("pcBox",perm.ad&&tab==="stu");show("transferBox",perm.ad&&tab==="stu");show("tabRC",perm.res);show("tabFee",perm.fee);show("tabRes",perm.res);show("teachBox",perm.view&&tab==="tea");show("ttBox",perm.view&&tab==="tt");show("annBox",perm.view&&tab==="ann");show("anBox",perm.ad&&tab==="an");show("tabAn",perm.ad);
   show("adminCls",perm.ad);show("adminTea",perm.st);ALLTABS.forEach(t=>{if(!canTab(t))document.querySelectorAll('[onclick*="setTab(\''+t+'\')"],[data-t="'+t+'"]:is(button,a)').forEach(e=>e.classList.add("hide"))});staffRoleOpts();applyAccess();
 }
 /* AUTH_START: sign in and create account with the school ID given by the platform admin. Layout untouched: this is a full-screen overlay only. */
@@ -1553,7 +1541,7 @@ async function staffFind(){
   if(!SCODE.test(code))return fail("Enter your school ID first.");
   const sid=((F.sfMatch&&F.sfMatch.staff_id)||F.sfId||"").trim().toUpperCase(),nm=(F.sfName||"").trim().replace(/\s+/g," ");
   if(!/^STF[0-9]{4}[A-Z]$/.test(sid))return fail("We could not match your names and phone number yet. Check them, or open I have a Staff ID.");
-  if(nm.split(" ").length<2)return fail("Enter your full names (at least two names).");
+  {const nb=nameBad(nm);if(nb)return fail(nb)}
   if(!F.sfIam)return fail("Choose what you are under I am.");
   const ph=(F.sfPh||"").trim();if(!/^[+0-9 ()-]{7,}$/.test(ph))return fail("Enter your phone number.");
   authBusy=true;if($("aFind"))$("aFind").disabled=true;if($("aErr"))$("aErr").textContent="Checking...";
@@ -1633,7 +1621,7 @@ async function authGo(){
     if(!authBlob){const p=document.querySelector("#auth .aph");if(p)p.scrollIntoView({block:"center",behavior:"smooth"});return fail("A profile picture is required. Tap the circle to add your photo.")}
     const un0=(F.user||"").trim().toLowerCase();if(!/^[a-z0-9._]{3,20}$/.test(un0)){const u=$("aUser");if(u){u.scrollIntoView({block:"center",behavior:"smooth"});u.focus()}return fail("A username is required: 3 to 20 letters, numbers, dots or underscores.")}
     if(!role)return fail("Choose who you are: academics, finance, administrators or parent.");
-    if(!(F.name||"").trim())return fail("Enter your full name.");
+    {const nb=nameBad(F.name);if(nb)return fail(nb)}
     if(!F.gender)return fail("Choose your gender.");
     if(!/^[+0-9 ()-]{7,}$/.test((F.phone||"").trim()))return fail("Enter a valid phone number.");
     const un=(F.user||"").trim().toLowerCase();
@@ -1722,7 +1710,7 @@ async function rsVerify(){
   if(rsBusy)return;rsKeep();const F=rsF,fail=m=>{rsMsg=m;rsBusy=false;if($("rErr"))$("rErr").textContent=m;if($("rGo"))$("rGo").disabled=false};
   const code=(F.s||"").trim().toUpperCase(),opts=ROLEOPTS[F.dept||"school_admin"]||[],role=opts.includes(F.role)?F.role:opts[0],iam=role==="Other"&&(F.dept||"school_admin")!=="staff"?(F.other||"").trim():role;
   if(!SCODE.test(code))return fail("Enter your school ID: TFG, then 5 digits and 2 letters.");
-  if(!(F.name||"").trim())return fail("Enter your full name.");
+  {const nb=nameBad(F.name);if(nb)return fail(nb)}
   if(!(F.user||"").trim())return fail("Enter your username.");
   if(!iam)return fail("Describe who you are.");
   if(!/^[+0-9 ()-]{7,}$/.test((F.phone||"").trim()))return fail("Enter your phone number.");
@@ -1752,7 +1740,7 @@ async function rsSet(){
 /* RESET_END */
 /* AUTH_END */
 /* ACCESS_START: platform access control (school status, modules, billing). Enforced by the database; this only shapes the screens. */
-const TABMOD={stu:"students",att:"attendance",cls:"classes",tea:"staff",res:"results",rc:"report_cards",fee:"fees",tt:"classes",ann:"portal",lrn:"portal"};
+const TABMOD={stu:"students",att:"attendance",cls:"classes",tea:"staff",res:"results",rc:"report_cards",fee:"fees",tt:"classes",ann:"portal"};
 const lvl=m=>acc&&acc.modules?(acc.modules[m]||"full"):"full";
 const _alert=window.alert.bind(window);
 window.alert=m=>_alert(acc&&/row-level security|plan does not allow/i.test(String(m))?"Your school plan does not allow this action"+(acc.read_only?" (billing is overdue, so the account is read-only).":" (this section is view only)."):m);
@@ -1844,17 +1832,31 @@ function staffGroups(reg,pend){
     const x=r.x;return `<div class="st" style="display:flex;gap:10px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(x.full_name)}</b> · <span class="mut">Not registered yet</span><div class="mut">${esc([x.phone,x.email].filter(Boolean).join(" · "))}</div>${(x.subject_ids||[]).length?`<div class="mut">Subjects: ${esc((x.subject_ids||[]).map(i=>(subjects.find(s=>s.id===i)||{}).name).filter(Boolean).join(", "))}</div>`:""}<div class="id">${esc(x.staff_id||"")}</div></div>${canRm?`<button class="alt" style="width:auto;margin:0" onclick="rmStaffContact('${x.id}')">Remove</button>`:""}</div>`}).join("")).join("")}
 async function ins(table,row){const{error}=await sb.from(table).insert(row);if(error)return alert(error.message);loadOrg()}
 function addClass(){ins("classes",{school_id:sid(),name:$("cn").value,stream:$("cs").value||null,academic_year:new Date().getFullYear(),class_teacher_id:$("cteacher").value||null});$("cn").value=""}
-function staffRoleOpts(){if(!me)return;const only=me.role==="teacher";for(const id of ["srole","siam"]){const r=$(id);if(!r)continue;[...r.options].forEach(o=>{const v=o.value||o.text,bad=only&&v!=="teacher"&&v!=="Teacher";o.hidden=bad;o.disabled=bad});if(only)r.value=id==="siam"?"Teacher":"teacher"}}
-function staffSubOpts(){const w=$("ssubWrap"),b=$("ssubs"),r=$("siam");if(!w||!b||!r||!me)return;w.style.display=["Teacher","Academic"].includes(r.value)?"":"none";
+const STAFFPOS={Academics:[["Teacher","Teacher"],["Director of Studies","Academic"]],Administration:[["Administrator","Administrator"],["Head Teacher","Administrator"],["Deputy Head Teacher","Administrator"]],Finance:[["Bursar","Finance"],["Accountant","Finance"]],HR:[["HR Officer","HR"]],Boarding:[["Warden","Boarding"],["Matron","Boarding"]],Reception:[["Receptionist","Reception"]],ICT:[["ICT Officer","ICT"]],Library:[["Librarian","Librarian"]],Support:[["Support staff","Support staff"]],Other:[["Other","Other"]]};
+const NAMEMIN=8;
+(function(){const st=document.createElement("style");st.textContent=".fmsg{color:#c0392b;font-size:13px;margin:-4px 0 8px}.fmsg:empty{display:none}";document.head.appendChild(st)})();
+function fmsg(id,msg){const el=$(id);if(!el)return;let m=document.getElementById(id+"_m");if(!m){m=document.createElement("div");m.id=id+"_m";m.className="fmsg";el.insertAdjacentElement("afterend",m)}m.textContent=msg||""}
+function nameBad(v){v=(v||"").trim().replace(/\s+/g," ");if(!v)return"Enter the full names";if(v.length<NAMEMIN)return"Names must be at least "+NAMEMIN+" characters";if(v.split(" ").length<2)return"Enter at least two names";return""}
+function nameCheck(id){const m=nameBad($(id).value);fmsg(id,m);return!m}
+function nameLive(id){const v=($(id).value||"").trim();if(!v){fmsg(id,"");return}const m=v.length<NAMEMIN?"Names must be at least "+NAMEMIN+" characters":"";fmsg(id,m)}
+function phLive(id){const v=($(id).value||"").trim();fmsg(id,!v||/^[+0-9 ()-]{7,}$/.test(v)?"":"Enter a valid phone number")}
+function staffFillPos(){const d=$("sdep"),p=$("spos");if(!d||!p)return;p.innerHTML=(STAFFPOS[d.value]||[]).map(x=>`<option value="${x[0]}" data-iam="${x[1]}">${x[0]}</option>`).join("")}
+function staffSync(){const d=$("sdep"),p=$("spos"),a=$("siam");if(!d||!p||!a)return;if(!d.options.length)d.innerHTML=Object.keys(STAFFPOS).map(k=>`<option value="${k}">${k}</option>`).join("");if(!p.options.length)staffFillPos();a.value=(p.selectedOptions[0]||{dataset:{}}).dataset.iam||"Other"}
+function staffDep(){staffFillPos();staffSubOpts()}
+function staffRoleOpts(){if(!me)return;const only=me.role==="teacher",r=$("srole");if(r){[...r.options].forEach(o=>{const v=o.value||o.text,bad=only&&v!=="teacher";o.hidden=bad;o.disabled=bad});if(only)r.value="teacher"}
+  try{staffSync()}catch(e){}const d=$("sdep"),p=$("spos");if(d&&p&&only){[...d.options].forEach(o=>{const bad=o.value!=="Academics";o.hidden=bad;o.disabled=bad});d.value="Academics";staffFillPos();[...p.options].forEach(o=>{const bad=o.value!=="Teacher";o.hidden=bad;o.disabled=bad});p.value="Teacher";staffSubOpts()}}
+function staffSubOpts(){try{staffSync()}catch(e){}const w=$("ssubWrap"),b=$("ssubs"),r=$("siam");if(!w||!b||!r||!me)return;w.style.display=($("sdep").value==="Academics"&&$("spos").value==="Teacher")?"":"none";
   const keep=new Set([...document.querySelectorAll(".ssub:checked")].map(i=>i.value)),ss=subjects.filter(x=>x.school_id===sid());
-  b.innerHTML=ss.map(x=>`<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="ssub" value="${x.id}"${keep.has(x.id)?" checked":""} style="width:auto;margin:0"> ${esc(x.name)} (${esc(x.code)})</label>`).join("")||'<p class="mut">No subjects yet. Add them in Settings, Academic settings, Subjects.</p>'}
+  b.innerHTML=ss.map(x=>`<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="ssub" onchange="fmsg('ssubs','')" value="${x.id}"${keep.has(x.id)?" checked":""} style="width:auto;margin:0"> ${esc(x.name)} (${esc(x.code)})</label>`).join("")||'<p class="mut">No subjects yet. Add them in Settings, Academic settings, Subjects.</p>'}
 function copyText(t){try{navigator.clipboard.writeText(t).then(()=>toast("Copied"),()=>toast(t))}catch(e){toast(t)}}
-async function addStaff(){const nm=$("stname").value.trim().replace(/\s+/g," "),ph=$("sphone").value.trim(),ia=$("siam").value,subs=["Teacher","Academic"].includes(ia)?[...document.querySelectorAll(".ssub:checked")].map(i=>i.value):[];
-  if(nm.split(" ").length<2)return alert("Enter the full names (at least two names).");
-  if(ia==="Teacher"&&!subs.length)return alert("Choose at least one subject this teacher teaches.");
-  if(!/^[+0-9 ()-]{7,}$/.test(ph))return alert("Enter the staff member's phone number.");
+async function addStaff(){const nm=$("stname").value.trim().replace(/\s+/g," "),ph=$("sphone").value.trim(),ia=$("siam").value,isT=$("sdep").value==="Academics"&&$("spos").value==="Teacher",subs=isT?[...document.querySelectorAll(".ssub:checked")].map(i=>i.value):[];
+  let bad=false;
+  if(!nameCheck("stname"))bad=true;
+  if(isT&&!subs.length){fmsg("ssubs","Choose at least one subject");bad=true}else fmsg("ssubs","");
+  if(!ph){fmsg("sphone","Phone number needed");bad=true}else if(!/^[+0-9 ()-]{7,}$/.test(ph)){fmsg("sphone","Enter a valid phone number");bad=true}else fmsg("sphone","");
+  if(bad)return;
   const{data,error}=await sb.rpc("add_staff_record",{p_name:nm,p_i_am:ia,p_phone:ph||null,p_school:me.role==="super_admin"?$("sch").value:null,p_subjects:subs.length?subs:null});if(error)return alert(error.message);
-  $("stname").value="";$("sphone").value="";document.querySelectorAll(".ssub").forEach(i=>i.checked=false);
+  $("stname").value="";$("sphone").value="";fmsg("stname","");fmsg("sphone","");fmsg("ssubs","");document.querySelectorAll(".ssub").forEach(i=>i.checked=false);
   $("sresult").innerHTML=`<div class="st" style="margin-top:10px"><b>${esc(data.full_name)}</b> · ${esc(data.i_am)}<div class="mut">Tell the staff member to create their account with these names and phone number. Staff ID (backup):</div><div class="id">${esc(data.staff_id)}</div><button class="alt" style="width:auto" onclick="copyText('${esc(data.staff_id)}')">Copy Staff ID</button></div>`;
   toast("Staff added ("+data.staff_id+")");loadOrg()}
 async function attachStaff(){const em=$("semail").value.trim();if(!em)return alert("Enter the email of the existing account.");
@@ -2692,32 +2694,9 @@ async function loadPAnn(){const r=await sb.rpc("portal_announcements",{p_student
   $("pAnn").innerHTML='<h3>Notices from the school</h3>'+(pAnnD.map(a=>annCard(a,false)).join("")||'<p class="mut">No notices yet.</p>')}
 /* ANNOUNCEMENTS_END */
 
-/* LEARNING_START */
-let lrL=[];
-const lrCard=(a,del)=>'<div class="st"><b>'+esc(a.title)+'</b> <span class="tag">'+(a.kind==="assignment"?"Assignment":"Note")+'</span> <span class="tag">'+esc(a.subject||"")+'</span>'+(a.class_name?' <span class="tag">'+esc(a.class_name)+'</span>':"")+'<div class="mut">'+esc(String(a.created_at).slice(0,10))+(a.author?" · "+esc(a.author):"")+(a.kind==="assignment"&&a.due_date?" · Due "+esc(a.due_date):"")+'</div><div style="white-space:pre-wrap;margin-top:4px">'+esc(a.body)+'</div>'+(del?'<button class="alt" style="width:auto;margin-top:6px" onclick="lrnDel(\''+a.id+'\')">Delete</button>':"")+'</div>';
-function lrnMine(){const S=sid();return assigns.filter(a=>a.school_id===S&&(perm.ad||(me&&a.teacher_id===me.id)))}
-async function loadLrn(){if(!me||!perm.st)return;const S=sid(),r=await sb.from("learning_items").select("*").order("created_at",{ascending:false}).limit(200);lrL=(r.data||[]).filter(x=>x.school_id===S);
-  const m=lrnMine(),ids=[...new Set(m.map(a=>a.class_id))],cs=clSch().filter(c=>ids.includes(c.id)).sort(clCmp);
-  $("lrCls").innerHTML=cs.length?cs.map(c=>'<option value="'+c.id+'">'+esc(cname(c))+'</option>').join(""):'<option value="">No class linked to you</option>';
-  const f=$("lrFC"),keep=f.value;f.innerHTML='<option value="">All classes</option>'+clSch().slice().sort(clCmp).map(c=>'<option value="'+c.id+'">'+esc(cname(c))+'</option>').join("");f.value=keep;
-  lrnSubj();lrnKind();drawLrn()}
-function lrnSubj(){const c=$("lrCls").value,m=lrnMine().filter(a=>a.class_id===c),ids=[...new Set(m.map(a=>a.subject_id))];
-  $("lrSub").innerHTML=ids.length?ids.map(i=>{const x=subjects.find(z=>z.id===i);return '<option value="'+i+'">'+esc(x?x.name+(x.code?" ("+x.code+")":""):"Subject")+'</option>'}).join(""):'<option value="">No subject linked</option>'}
-function lrnKind(){show("lrDW",$("lrK").value==="assignment")}
-function drawLrn(){const e=$("lrList");if(!e)return;const f=$("lrFC").value;
-  e.innerHTML=lrL.filter(a=>!f||a.class_id===f).map(a=>{const k=classes.find(z=>z.id===a.class_id),s=subjects.find(z=>z.id===a.subject_id);return lrCard({...a,class_name:k?cname(k):"",subject:s?s.name:"",author:a.created_by&&clTeach(a.created_by)!=="None"?clTeach(a.created_by):""},perm.ad||(me&&a.created_by===me.id))}).join("")||'<p class="mut">Nothing posted yet.</p>'}
-async function lrnPost(){const e=$("lrE"),t=gv("lrT"),b=gv("lrB"),c=$("lrCls").value,sj=$("lrSub").value,k=$("lrK").value,d=$("lrD").value;e.textContent="";
-  if(!c||!sj){e.textContent="Choose a class and a subject linked to you.";return}if(!t){e.textContent="Enter a title.";return}if(!b){e.textContent="Write the note or the instructions.";return}
-  const r=await sb.from("learning_items").insert({school_id:sid(),class_id:c,subject_id:sj,kind:k,title:t,body:b,due_date:k==="assignment"&&d?d:null});
-  if(r.error){e.textContent=r.error.message;return}$("lrT").value="";$("lrB").value="";$("lrD").value="";toast(k==="assignment"?"Assignment posted":"Note posted");setSub("list");loadLrn()}
-async function lrnDel(id){if(!confirm("Delete this item?"))return;const r=await sb.from("learning_items").delete().eq("id",id);if(r.error)return alert(r.error.message);toast("Deleted");loadLrn()}
-let pLrnD=[];
-async function loadPLrn(){const r=await sb.rpc("portal_learning",{p_student:$("pkid").value});pLrnD=r.data||[];
-  $("pLrn").innerHTML='<h3>Learning from your teachers</h3>'+(pLrnD.map(a=>lrCard({...a,class_name:""},false)).join("")||'<p class="mut">No notes or assignments yet.</p>')}
-/* LEARNING_END */
 
 /* BACKUP_START */
-function pgBackup(){return '<div class="card"><p class="mut">Download one file with every record of your school: learners, classes, attendance, fees and payments, results, staff and parent accounts, notices, learning items, timetable and the activity log. Keep the file safe, because it holds personal details of learners and guardians. Photos, logos and stamps are not inside the file, only their web links. You can download a backup once every two minutes.</p><button id="bkBtn" onclick="bkRun()">Download backup</button><div id="bkMsg" class="mut" style="margin-top:8px"></div></div>'}
+function pgBackup(){return '<div class="card"><p class="mut">Download one file with every record of your school: learners, classes, attendance, fees and payments, results, staff and parent accounts, notices, timetable and the activity log. Keep the file safe, because it holds personal details of learners and guardians. Photos, logos and stamps are not inside the file, only their web links. You can download a backup once every two minutes.</p><button id="bkBtn" onclick="bkRun()">Download backup</button><div id="bkMsg" class="mut" style="margin-top:8px"></div></div>'}
 async function bkRun(){const m=$("bkMsg"),b=$("bkBtn");if(!m)return;m.style.color="";m.textContent="Preparing your backup...";if(b)b.disabled=true;
   try{const r=await sb.rpc("export_school_data",{p_school:sid()});if(r.error)throw r.error;
     const d=r.data,sc=(schRow()||{}).school_code||"school",day=new Date().toISOString().slice(0,10),
@@ -3015,19 +2994,7 @@ const GUIDE=[
 "Administrators can download a backup file of the whole school at any time.",
 "- 1. Open Settings, School settings, then Data backup.",
 "- 2. Tap Download backup and wait a few seconds. A file named backup, your school code and the date is saved to your device.",
-"The file holds learners, classes, attendance, fees and payments, results, staff and parent accounts, notices, learning items, timetable, transfers and the activity log. It is a JSON file for safekeeping and for moving data to another system. It cannot be opened back into the app yet. Photos, logos and stamps are not inside the file, only their web links. The file has personal details of learners and guardians, so keep it private. You can download once every two minutes, and each download is recorded for the platform administrator."
-]
-},
-{
-"t": "Digital learning (notes and assignments)",
-"r": "all",
-"b": [
-"Teachers post notes and assignments for a class and subject they teach. Administrators can post for any class and subject linked in Settings. Parents and students read them under Learning in their portal.",
-"- 1. Open Digital learning in the side menu and tap the New tab.",
-"- 2. Choose Note or Assignment, the class and the subject. Only classes and subjects linked to you are listed.",
-"- 3. Type a title and the message. For an assignment you can also pick a due date.",
-"- 4. Tap Post. Tap Delete under an item to remove it. Teachers can delete only their own items.",
-"A parent or student sees the items for the learner's own class only. Posting needs the subject to be linked to the class and, for a teacher, the teacher to be set for that subject in Settings, Academic settings, Subjects. Students cannot hand in work through the app yet, and files cannot be attached."
+"The file holds learners, classes, attendance, fees and payments, results, staff and parent accounts, notices, timetable, transfers and the activity log. It is a JSON file for safekeeping and for moving data to another system. It cannot be opened back into the app yet. Photos, logos and stamps are not inside the file, only their web links. The file has personal details of learners and guardians, so keep it private. You can download once every two minutes, and each download is recorded for the platform administrator."
 ]
 },
 {
@@ -3296,7 +3263,7 @@ const GUIDE=[
 "t": "What is coming next",
 "r": "all",
 "b": [
-"Planned: SMS and WhatsApp notices and absence alerts to parents, handing in work and file attachments for digital learning, offline mode and connections to national systems such as EMIS. This guide is updated with every new feature."
+"Planned: SMS and WhatsApp notices and absence alerts to parents, offline mode and connections to national systems such as EMIS. This guide is updated with every new feature."
 ]
 }
 ,
@@ -3355,9 +3322,9 @@ async function loadPortal(){
 async function loadKid(){
   const{data,error}=await sb.rpc("portal_student",{p_student:$("pkid").value});
   if(error)return alert(error.message);
-  pd=data;{const pc=curTermOf(pd.terms||[]);$("pterm").innerHTML=(pd.terms||[]).map(t=>`<option value="${t.id}">${esc(t.name)} ${t.academic_year}${pc&&pc.id===t.id?" (current)":""}</option>`).join("");if(pc)$("pterm").value=pc.id}drawPortal();loadPAnn();loadPLrn();setP(ptab);loadPCard();
+  pd=data;{const pc=curTermOf(pd.terms||[]);$("pterm").innerHTML=(pd.terms||[]).map(t=>`<option value="${t.id}">${esc(t.name)} ${t.academic_year}${pc&&pc.id===t.id?" (current)":""}</option>`).join("");if(pc)$("pterm").value=pc.id}drawPortal();loadPAnn();setP(ptab);loadPCard();
 }
-function setP(t){ptab=t;show("pLrn",t==="lrn");show("pAnn",t==="ann");show("pAtt",t==="att");show("pRep",t==="rep");show("pFee",t==="fee")}
+function setP(t){ptab=t;show("pAnn",t==="ann");show("pAtt",t==="att");show("pRep",t==="rep");show("pFee",t==="fee")}
 function drawPortal(){
   const a=pd.attendance,s=a.summary,tn=id=>{const t=pd.terms.find(x=>x.id===id);return t?`${t.name} ${t.academic_year}`:""};
   $("pAtt").innerHTML=`<h3>Attendance (last 60 days)</h3><p>${s.total?`Attended ${s.present+s.late} of ${s.total} days (${Math.round((s.present+s.late)/s.total*100)}%) · Present ${s.present} · Late ${s.late} · Absent ${s.absent} · Excused ${s.excused}`:"No attendance recorded yet."}</p>`+a.recent.map(r=>`<div class="st">${ICON[r.status]||""} ${esc(r.date)} <span class="mut">${esc(r.status)}</span></div>`).join("");
@@ -4837,7 +4804,7 @@ async function load(force){
   if(!me||!libCan())return;
   if(!force&&Date.now()-L.t<15000){draw();return}
   L.t=Date.now();const S=sid();if(!S)return;
-  const r=await Promise.all([sb.from("library_books").select("*").eq("school_id",S).order("title").limit(3000),sb.from("library_loans").select("*").eq("school_id",S).order("issued_on",{ascending:false}).limit(2000),sb.from("profiles").select("id,full_name").eq("school_id",S).in("role",["school_admin","teacher","bursar","staff"]).order("full_name")]);
+  const r=await Promise.all([sb.from("library_books").select("*").eq("school_id",S).order("title").limit(3000),sb.from("library_loans").select("*").eq("school_id",S).order("issued_on",{ascending:false}).limit(2000),sb.from("profiles").select("id,full_name,photo_url").eq("school_id",S).in("role",["school_admin","teacher","bursar","staff"]).order("full_name")]);
   if(r[0].error){L.ok=false;L.err=r[0].error.message}else{L.ok=true;L.books=r[0].data||[];L.loans=(r[1].data)||[];L.staff=r[2].data||[]}
   draw();
 }
@@ -4886,26 +4853,26 @@ window.libIssue=function(bid){
   <div class="w" id="lbClsW"><label>Class</label><select id="lbCls" onchange="libPick()"><option value="">Choose a class...</option>${cs.map(c=>`<option value="${c.id}">${esc(c.name+(c.stream?" "+c.stream:""))}</option>`).join("")}</select></div>
   <div class="w"><input id="lbSQ" type="search" placeholder="Type a name to find" oninput="libPick()"></div>
   <div class="w"><div id="lbP" class="lbpick"></div></div>
-  <div><label>Issue date</label><input id="lbI" type="date" value="${todayIso()}" max="${todayIso()}" onchange="libDur()"></div>
+  <div><label>Issue date</label><input id="lbI" type="date" value="${todayIso()}" max="${todayIso()}" oninput="libDur()" onchange="libDur()"></div>
   <div><label>Days to keep</label><input id="lbN" type="number" min="1" value="14" oninput="libDur()"></div>
-  <div class="w"><label>Return date</label><input id="lbD" type="date" value="${dAdd(14)}" onchange="libDue()"></div>
+  <div class="w"><label>Return date</label><input id="lbD" type="date" value="${dAdd(14)}" oninput="libDue()" onchange="libDue()"></div>
   <p class="mut w" id="lbSum" style="margin:0"></p>
   <div><label>Borrowing charge (UGX)</label><input id="lbC" type="number" min="0" value="0"></div>
   <div><label>Late penalty per day (UGX)</label><input id="lbPen" type="number" min="0" value="0"></div></div>
   <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" onclick="libIssueGo('${bid}')">Issue book</button><button onclick="closeModal()">Cancel</button></div></div>`);libPick();libDur();
 };
 window.libDur=function(){const i=$("lbI").value||todayIso(),n=parseInt($("lbN").value,10);if(!(n>=1)){$("lbSum").textContent="";return}$("lbD").value=dFrom(i,n);libSum()};
-window.libDue=function(){const i=$("lbI").value||todayIso(),d=$("lbD").value;if(!d)return;const n=dDiff(i,d);if(n>=0)$("lbN").value=n;libSum()};
+window.libDue=function(){const i=$("lbI").value||todayIso(),d=$("lbD").value;if(!d)return;const n=dDiff(i,d);$("lbN").value=n>=0?n:"";libSum()};
 function libSum(){const i=$("lbI").value,d=$("lbD").value,e=$("lbSum");if(!e||!i||!d)return;const n=dDiff(i,d);e.textContent=n<0?"The return date is before the issue date.":"Keeps the book "+n+" day"+(n===1?"":"s")+", back on "+fd(d)+".";}
 window.libPick=function(){
   const k=$("lbBK").value,q=($("lbSQ").value||"").toLowerCase(),box=$("lbP");if(!box)return;
   $("lbClsW").style.display=k==="s"?"":"none";
   let src;
   if(k==="s"){const c=$("lbCls").value;if(!c){box.innerHTML='<p class="mut" style="padding:12px;margin:0">Choose a class first.</p>';return}
-    src=(typeof students!=="undefined"?students:[]).filter(s=>s.class_id===c&&(!s.status||s.status==="active")).slice().sort((a,b)=>lfn(a).localeCompare(lfn(b))).map(s=>({id:s.id,n:lfn(s)}))}
-  else src=L.staff.slice().sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||""))).map(p=>({id:p.id,n:p.full_name||"Staff"}));
+    src=(typeof students!=="undefined"?students:[]).filter(s=>s.class_id===c&&(!s.status||s.status==="active")).slice().sort((a,b)=>lfn(a).localeCompare(lfn(b))).map(s=>({id:s.id,n:lfn(s),u:s.photo_url}))}
+  else src=L.staff.slice().sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||""))).map(p=>({id:p.id,n:p.full_name||"Staff",u:p.photo_url}));
   const cur=(box.querySelector("input:checked")||{}).value,list=src.filter(x=>!q||x.n.toLowerCase().includes(q));
-  box.innerHTML=list.length?list.map(x=>`<label class="lbrow"><input type="radio" name="lbPick" value="${x.id}" ${x.id===cur?"checked":""}><span>${esc(x.n)}</span></label>`).join(""):'<p class="mut" style="padding:12px;margin:0">No names found.</p>';
+  box.innerHTML=list.length?list.map(x=>`<label class="lbrow"><input type="radio" name="lbPick" value="${x.id}" ${x.id===cur?"checked":""}>${avImg(x.u,x.n,40)}<span>${esc(x.n)}</span></label>`).join(""):'<p class="mut" style="padding:12px;margin:0">No names found.</p>';
 };
 window.libIssueGo=async function(bid){
   const k=$("lbBK").value,r=document.querySelector('input[name="lbPick"]:checked'),v=r&&r.value,iss=$("lbI").value,due=$("lbD").value;
@@ -4922,7 +4889,7 @@ window.libReturnGo=async function(id){
   const {error}=await sb.rpc("library_return",{p_loan:id,p_fine:parseFloat($("lbF").value)||0,p_note:$("lbO").value});
   if(error)return alert(error.message);closeModal();toast("Book received");load(true);
 };
-const lst=document.createElement("style");lst.textContent=`#libBox .lr[data-bid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.lbm .lbpick{max-height:240px;overflow:auto;border:1px solid var(--bd);border-radius:12px}.lbm .lbrow{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-top:1px solid var(--bd);margin:0;cursor:pointer;font-weight:500}.lbm .lbrow:first-child{border-top:0}.lbm .lbrow input{width:auto;margin:0;flex:none}.lbm .lbrow span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lbm .lbrow:has(input:checked){background:var(--bd)}`;document.head.appendChild(lst);
+const lst=document.createElement("style");lst.textContent=`#libBox .lr[data-bid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.lbm .lbpick{max-height:282px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;border:1px solid var(--bd);border-radius:12px}.lbm .lbrow{display:flex;align-items:center;gap:10px;height:56px;padding:0 12px;border-top:1px solid var(--bd);margin:0;cursor:pointer;font-weight:500}.lbm .lbrow:first-child{border-top:0}.lbm .lbrow input{width:auto;margin:0;flex:none}.lbm .lbrow span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lbm .lbrow:has(input:checked){background:var(--bd)}`;document.head.appendChild(lst);
 (function(){let t=null,sx=0,sy=0;const clr=()=>{if(t){clearTimeout(t);t=null}},row=e=>e.target&&e.target.closest&&e.target.closest("#libBox .lr[data-bid]");
   const start=(e,x,y)=>{const r=row(e);if(!r||!libW())return;sx=x;sy=y;clr();t=setTimeout(()=>{t=null;libMenu(r.dataset.bid)},550)};
   document.addEventListener("touchstart",e=>{const p=e.touches[0];start(e,p.clientX,p.clientY)},{passive:true});
