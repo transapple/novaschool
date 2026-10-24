@@ -1424,6 +1424,8 @@ function accPerm(){const A=accP(),r=me&&me.role,ad=r==="super_admin"||accKind()=
   return{ad,st:ad||!!A.st,view,fee:ad||!!A.fee,res:ad||!!A.res,acr:ad||!!A.acr,tt:ad||!!A.tt,fs:ad||!!A.fs}}
 const ALLTABS=["home","an","stu","att","ann","cls","tt","tea","res","rc","fee","ss","set","sch"];
 const isDOS=()=>!!me&&me.role==="teacher"&&/director of studies|\bdos\b/i.test(me.department||"");
+const isTch=()=>!!me&&accKind()==="teacher";
+const rcOwn=()=>{try{const k=classes.find(x=>x.id===$("rccls").value);return !!k&&k.class_teacher_id===me.id}catch(e){return false}};
 const isSupAdmin=()=>!!me&&me.role==="school_admin"&&/support staff/i.test(me.department||"");
 /* who may change each Academic settings page: administrators everything; the Director of Studies subjects, exam types and grades; other teachers read only */
 const AW=a=>!!me&&(!!perm.ad||(accP().acadW||[]).includes(a));
@@ -2293,7 +2295,7 @@ function drawReport(){
 let rcData=null,rcCur=0;
 function loadRCsel(){
   const S=sid();let cs=classes.filter(c=>c.school_id===S);
-  if(me.role==="teacher")cs=cs.filter(c=>c.class_teacher_id===me.id);
+  if(me.role==="teacher"&&!isTch())cs=cs.filter(c=>c.class_teacher_id===me.id);
   $("rccls").innerHTML=clOpts(cs);fillTermSel("rctrm",S);
   loadRC();
 }
@@ -2314,6 +2316,7 @@ function drawRC(){
     <div class="rcg"><button class="alt" onclick="viewRC(${i})">Preview</button><button onclick="saveRC(${i})">Save comments</button></div><div id="rm${i}" class="err"></div></div>`}).join(""):'<p class="mut">No students in this class.</p>';
 }
 async function saveRC(i){
+  if(isTch()&&!rcOwn()){toast("Only the class teacher of this class can write its comments.");return}
   const c=rcData.cards[i],row={student_id:c.student.id,term_id:$("rctrm").value,class_teacher_comment:$("ct"+i).value};
   if(perm.ad)row.head_comment=$("hc"+i).value;
   const{error}=await sb.from("report_comments").upsert(row,{onConflict:"student_id,term_id"});
@@ -4187,7 +4190,7 @@ window.histLoad=async function(){const av=HV.filter(v=>perm[v[2]]);if(!av.length
 const st=document.createElement("style");st.textContent="#mdl .mbox:has(.hv){width:96vw;max-width:760px}#mdl .hv .hvp{overflow:auto;max-height:68vh;margin-top:10px}#mdl .hv .xc{width:700px;min-width:700px}#mdl .hv .xc.pr{width:540px;min-width:540px}#histBox details>summary::-webkit-details-marker{display:none}#hTabs{scrollbar-width:none}";document.head.appendChild(st);
 $("tabRC").insertAdjacentHTML("afterend",'<button id="tabHist" data-t="hist" class="hide" onclick="setTab(\'hist\')"><svg class="ic"><use href="#i-rc"/></svg>History</button>');
 $("rcBox").insertAdjacentHTML("afterend",'<div id="histBox" class="hide"><div class="card mkc"><div class="mkhd"><div class="ic">&#128220;</div><div><b>History</b><small>Everything saved by term. Report cards are saved when printed or downloaded.</small></div></div><div class="mkpad"><div class="row"><select id="hTerm" onchange="histSet()"></select><select id="hCls" onchange="histSet()"></select></div><input id="hQ" placeholder="Search learner name" oninput="histSet()" style="margin-top:8px"><div id="hTabs" style="display:flex;gap:8px;overflow-x:auto;margin-top:10px"></div></div></div><div id="hOut"></div></div>');
-const _a=applyTab;applyTab=function(){_a();show("histBox",!!perm.view&&tab==="hist");show("tabHist",!!perm.view)};
+const _a=applyTab;applyTab=function(){_a();show("histBox",!!perm.view&&!isTch()&&tab==="hist");show("tabHist",!!perm.view&&!isTch())};
 const _s=setTab;setTab=function(x){_s(x);if(x==="hist")histLoad()};
 })();
 
@@ -4199,7 +4202,7 @@ const grades=()=>{const S=(schRow()||{}).id,r=gradeScale.filter(x=>!S||x.school_
 const ovr=c=>{c.ov=c.ov||{};c.ov.rows=c.ov.rows||{};return c.ov};
 function sel(el){try{const r=document.createRange();r.selectNodeContents(el);const g=getSelection();g.removeAllRanges();g.addRange(r)}catch(x){}}
 function apply(){const p=$("rcPreview");if(!p)return;const x=p.querySelector(".xc");if(x)x.classList.toggle("rce",ST.on);
-  p.querySelectorAll("[data-e]").forEach(el=>{const f=el.dataset.e,ok=ST.on&&!(f==="hc"&&!$("hc"+rcCur));if(ok){el.setAttribute("contenteditable","true");el.setAttribute("inputmode",f==="mid"||f==="eot"||f==="av"?"decimal":"text");el.setAttribute("enterkeyhint","done")}else{el.removeAttribute("contenteditable");el.removeAttribute("inputmode")}})}
+  p.querySelectorAll("[data-e]").forEach(el=>{const f=el.dataset.e,ok=ST.on&&!(f==="hc"&&!$("hc"+rcCur))&&(!isTch()||(f==="ct"&&rcOwn()));if(ok){el.setAttribute("contenteditable","true");el.setAttribute("inputmode",f==="mid"||f==="eot"||f==="av"?"decimal":"text");el.setAttribute("enterkeyhint","done")}else{el.removeAttribute("contenteditable");el.removeAttribute("inputmode")}})}
 function btn(){const b=$("rcEdit");if(!b)return;b.textContent=ST.on?"Lock card":"Edit card";b.className=ST.on?"":"alt"}
 function rerender(nf){const p=$("rcPreview");if(!p||rcCur==null)return;const sx=p.scrollLeft;p.innerHTML=cardHTML(rcCur);p.scrollLeft=sx;apply();
   if(nf)setTimeout(()=>{const t=[...p.querySelectorAll("[data-e]")].find(z=>z.dataset.e===nf.e&&(nf.r==null||z.dataset.r===nf.r));if(t){t.focus();sel(t)}},0)}
@@ -4208,7 +4211,7 @@ async function persist(){const c=card();if(!c)return;const{error}=await sb.from(
 function setCom(f,raw){const t=$((f==="ct"?"ct":"hc")+rcCur),c=card();if(!t||!c)return;t.value=raw;c.comments=Object.assign({},c.comments||{},f==="ct"?{class_teacher:raw}:{head:raw});
   const row={student_id:c.student.id,term_id:$("rctrm").value};if(f==="ct")row.class_teacher_comment=raw;else row.head_comment=raw;
   sb.from("report_comments").upsert(row,{onConflict:"student_id,term_id"}).then(r=>{if(r.error)toast("Comment not saved: "+r.error.message)})}
-function commit(el,next){if(!ST.on)return;const f=el.dataset.e,c=card();if(!c)return;const raw=el.textContent.trim();if(raw===String(el._old||"").trim())return;
+function commit(el,next){if(!ST.on)return;const f=el.dataset.e,c=card();if(!c)return;if(isTch()&&!(f==="ct"&&rcOwn()))return;const raw=el.textContent.trim();if(raw===String(el._old||"").trim())return;
   if(f==="ct"||f==="hc"){setCom(f,raw);return}
   const o=ovr(c),key=el.dataset.r,row=(o.rows[key]=o.rows[key]||{});
   if(f==="mid"||f==="eot"){const mx=+el.dataset.mx||0;
@@ -4856,9 +4859,9 @@ function draw(){
   if(L.ok===null){d.innerHTML='<div class="lp">Loading the library…</div>';return}
   if(L.ok===false){d.innerHTML=`<div class="lh"><span class="lv">LIBRARY</span><h2>Library is not available yet</h2><p>It may not be switched on for your school's plan, or it is still being set up.</p></div><div class="lp"><p class="mut">${esc(L.err)}</p><button onclick="libReload()">Try again</button></div>`;return}
   const open=L.loans.filter(x=>!x.returned_on),over=open.filter(isOver),active=L.books.filter(b=>b.status==="active");
-  const head=`<div class="lh"><span class="lv">LIBRARY</span><h2>Books and borrowing</h2><p>${esc((typeof schRow==="function"&&schRow()||{}).name||"Your school")}</p><div class="ls"><div><b>${active.length}</b><span>Titles</span></div><div><b>${open.length}</b><span>Out now</span></div><div><b>${over.length}</b><span>Overdue</span></div></div></div>`;
-  const nav=`<div class="lt">${[["books","Books"],["loans","Loans"]].map(([k,l])=>`<button class="${L.view===k?"on":""}" onclick="libGo('${k}')">${l}${k==="loans"&&over.length?` (${over.length} late)`:""}</button>`).join("")}</div>`;
-  d.innerHTML=head+nav+(L.view==="books"?bodyBooks():bodyLoans());
+  const head=`<div class="lh"><span class="lv">LIBRARY</span><h2>Books and borrowing</h2><p>${esc((typeof schRow==="function"&&schRow()||{}).name||"Your school")}</p>${isTch()?"":`<div class="ls"><div><b>${active.length}</b><span>Titles</span></div><div><b>${open.length}</b><span>Out now</span></div><div><b>${over.length}</b><span>Overdue</span></div></div>`}</div>`;
+  const nav=isTch()?"":`<div class="lt">${[["books","Books"],["loans","Loans"]].map(([k,l])=>`<button class="${L.view===k?"on":""}" onclick="libGo('${k}')">${l}${k==="loans"&&over.length?` (${over.length} late)`:""}</button>`).join("")}</div>`;
+  d.innerHTML=head+nav+(L.view==="books"||isTch()?bodyBooks():bodyLoans());
 }
 function bodyBooks(){
   const q=L.q.trim().toLowerCase(),list=L.books.filter(b=>!q||[b.title,b.author,b.accession_no,b.isbn,b.category,b.shelf].some(v=>String(v||"").toLowerCase().includes(q)));
@@ -5035,7 +5038,7 @@ window.visOut=async function(id){
 const KIND={prep:"Prep",extra_lesson:"Extra lesson",remedial:"Remedial",holiday:"Holiday lesson"};
 const DAYN=["","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const P={rows:[],roster:[],slots:[],cls:[],sub:[],staff:[],t:0,ok:null,err:"",view:"students",day:ymd(new Date())};
-const prpW=()=>!!me&&(!!perm.ad||me.role==="teacher"||(me.role==="staff"&&/boarding|warden|matron|patron/i.test(me.department||"")));
+const prpW=()=>!!me&&(!!perm.ad||(me.role==="teacher"&&!isTch())||(me.role==="staff"&&/boarding|warden|matron|patron/i.test(me.department||"")));
 const prpCan=()=>!!me&&(!!perm.view||prpW());
 const cName=id=>{const c=P.cls.find(x=>x.id===id);return c?esc(c.name+(c.stream?" "+c.stream:"")):""};
 const stuAll=()=>typeof students!=="undefined"?students:[];
@@ -5196,7 +5199,7 @@ const DOCS=[
 ];
 const planOk=()=>{if(!acc||(me&&me.role==="super_admin"))return true;return(acc.modules||{}).print_center!=="off"};
 const lvl=()=>{if(!acc||(me&&me.role==="super_admin"))return"full";return acc.print_level||(acc.plan==="premium"?"full":acc.plan==="standard"?"standard":"basic")};
-const prtCan=()=>!!me&&!!perm.view&&planOk();
+const prtCan=()=>!!me&&!!perm.view&&planOk()&&!isTch();
 const okDoc=D=>RK[lvl()]>=RK[D.min];
 const curDoc=()=>DOCS.find(x=>x.id===PC.doc)||DOCS[0];
 const prtCls=()=>{const S=sid();return(typeof classes!=="undefined"?classes:[]).filter(c=>!S||!c.school_id||c.school_id===S).slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{numeric:true}))};
@@ -5646,5 +5649,117 @@ const _bd=window.brdDraw;window.brdDraw=function(){_bd.apply(this,arguments);brd
 const _sv2=window.setView;window.setView=function(sec,pg){const r=_sv2.apply(this,arguments);try{if(sec==="brd"&&pg==="dorms")brdLoad(true);if(sec==="prp"&&pg==="tt")pLoad(true)}catch(e){}return r};
 /* SETTINGS_BRD_PRP_END */
 
+</script>
+
+<script>
+/* SETTINGS_REORG_START: Settings hub regrouped. Every setup page is reachable again:
+   School setup, Timetable and lessons, Fees, Boarding, People, This device. */
+(function(){
+ const T=(i,c,t,sub,f,b,w)=>`<button class="stl${w?" wide":""}" onclick="${f}"><span class="chip ${c}">${sIc(i)}</span><span class="tx"><b>${t}</b>${sub?`<small>${sub}</small>`:""}</span>${b?`<span class="bdg2">${b}</span>`:""}</button>`;
+ const n=(x,one,many)=>x+" "+(x===1?one:many);
+ const safe=f=>{try{return f()||""}catch(e){return ""}};
+ const L=t=>`<div class="sglbl">${t}</div>`;
+ const G=a=>a.length?`<div class="stg">${a.join("")}</div>`:"";
+ const termSum=()=>safe(()=>{const c=curTermOf(terms||[]);return c?(c.name+" "+(c.academic_year||"")).trim():"Set the three terms"});
+ const acadSum=()=>safe(()=>[termSum(),(classes||[]).length?n(classes.length,"class","classes"):"",(subjects||[]).length?n(subjects.length,"subject","subjects"):""].filter(Boolean).join(" \u00B7 "))||"Terms, classes, subjects, exams, grades";
+ const schSum=()=>safe(()=>{const r=schRow();return (r&&r.name?r.name+" \u00B7 ":"")+"Brand, contact, stamps, receipts"});
+ const navSum=()=>safe(()=>(typeof cfg!=="undefined"&&cfg.nav==="bottom")?"Bottom bar":"Side menu");
+ const okB=()=>safe(()=>stOk("brd")), okP=()=>safe(()=>stOk("prp"));
+
+ SEC.reg=["Registration","Add teachers and other staff to the school."];
+ SEC.brd=["Boarding","Dormitories, hostels and boarders."];
+ SEC.prp=["Preps & extra lessons","Preps and extra lessons timetable."];
+ PGT.prp.tt=["Preps & extra lessons timetable","Weekly timetable for preps and extra lessons."];
+ PGT.reg.staff=["Add staff","Register teachers and other staff."];
+
+ hubHTML=function(){
+  let h=`<div class="shead"><h2>Settings</h2><p class="mut">${perm.ad?"Everything you set up for the school, grouped in one place.":"Your account and how the app looks on this device."}</p></div>`;
+  if(perm.ad)h+=L("School setup")+G([T("stu","c1","Academic settings",acadSum(),"setView('acad')","",1),T("sch","c5","School settings",schSum(),"setView('school')","",1)]);
+  else if(perm.acr&&!isTch())h+=L("School setup")+G([T("stu","c1","Academic settings",acadSum()+" (view only)","setView('acad')","",1)]);
+  const tl=[];
+  if(perm.acr&&!isTch())tl.push(T("cal","c1","Timetable periods","Lesson times and breaks","setView('acad','periods')"));
+  if(okP())tl.push(T("prep","c2","Preps & extra lessons","Preps and extra lessons timetable","setView('prp')"));
+  if(tl.length)h+=L("Timetable and lessons")+G(tl);
+  if(perm.acr&&!isTch())h+=L("Fees")+G([T("fee","c2","Fee structure","Fee items for each class","setView('acad','fees')")]);
+  if(okB())h+=L("Boarding")+G([T("bed","c5","Dormitories","Add and edit dormitories and hostels","setView('brd','dorms')"),T("home","c3","Boarders and hostel","Allocate and track boarders","setTab('brd')")]);
+  const pp=[];
+  if(perm.ad)pp.push(T("tea","c3","Registration","Add teachers and staff","setView('reg')"));
+  pp.push(T("user","c3","Account",perm.ad?(REQS.length?n(REQS.length,"request","requests")+" waiting":"Profile, people, posts"):"Your profile","setView('acct')",REQS.length||""));
+  h+=L(perm.ad?"People":"You")+G(pp);
+  const dv=[];
+  if(!perm.ad)dv.push(T("set","c2","Preferences","Theme, text size and home screen","setView('school','prefs')"));
+  dv.push(T("sliders","c4","Menu style",navSum(),"setView('school','nav')"));
+  h+=L("This device")+G(dv);
+  return h};
+
+ secHTML=function(sec){
+  if((sec==="school"&&!perm.ad)||(sec==="acad"&&!perm.acr)||(sec==="reg"&&!perm.st)||(sec==="brd"&&!okB())||(sec==="prp"&&!okP()))return hubHTML();
+  const t=SEC[sec];if(!t)return hubHTML();
+  let h=BK("Settings","setView(null)")+`<div class="shead"><h2>${t[0]}</h2><p class="mut">${t[1]}</p></div>`;
+  if(sec==="acad")h+=L("Academic")+G([
+   T("cal","c1","Terms",termSum(),"setView('acad','terms')"),
+   T("stu","c3","Classes",(classes||[]).length?n(classes.length,"class","classes"):"Add your classes","setView('acad','classes')"),
+   T("book","c2","Subjects",(subjects||[]).length?n(subjects.length,"subject","subjects"):"Names and codes","setView('acad','subjects')"),
+   T("exam","c5","Exam types",(exTypes||[]).length?n(exTypes.length,"type","types"):"Tests your school gives","setView('acad','exam')"),
+   T("grade","c4","Grades","How marks become grades","setView('acad','grades')")])
+   +L("Timetable and fees")+G([
+   T("cal","c1","Timetable periods","Lesson times and breaks","setView('acad','periods')"),
+   T("fee","c2","Fee structure","Fee items for each class","setView('acad','fees')")]);
+  if(sec==="reg")h+=G([T("tea","c1","Add staff","Teachers and other staff","setView('reg','staff')")]);
+  if(sec==="brd")h+=G([T("bed","c5","Dormitories","Add and edit dormitories and hostels","setView('brd','dorms')"),T("home","c3","Boarders and hostel","Open the Boarding page","setTab('brd')")]);
+  if(sec==="prp")h+=G([T("prep","c2","Preps & extra lessons timetable","Weekly preps and extra lessons","setView('prp','tt')",""),T("cal","c1","Timetable periods","Lesson times and breaks","setView('acad','periods')")]);
+  if(sec==="school")h+=L("Identity")+G([
+   T("set","c0","Overview","Your school at a glance","setView('school','overview')"),
+   T("brand","c1","Brand","Picture and colour","setView('school','brand')"),
+   T("target","c5","Mission","Motto, vision, values","setView('school','mission')"),
+   T("mail","c3","Contact","Phones, email, address","setView('school','contact')")])
+   +L("Official papers")+G([
+   T("stamp","c5","Stamps","Stamp and signature","setView('school','stamps')"),
+   T("rcpt","c2","Receipts","What fee receipts show","setView('school','rcpt')")])
+   +L("Data and device")+G([
+   T("set","c0","Data backup","Download all records","setView('school','backup')"),
+   T("sliders","c4","Preferences","Theme and home screen","setView('school','prefs')")]);
+  if(sec==="acct"){h+=selfCard();if(perm.ad)h+=L("People and access")+G([
+   T("bell","c4","Pending registrations",REQS.length?n(REQS.length,"person","people")+" waiting":"No one waiting","setView('acct','pending')",REQS.length||""),
+   T("tea","c3","Manage accounts",(ACCS||[]).length?n(ACCS.length,"account","accounts"):"Everyone in your school","setView('acct','manage')"),
+   T("dept","c1","Departments","Who holds each post","setView('acct','depts')"),
+   T("set","c0","Registration controls","Who may sign up","setView('acct','reg')")])}
+  return h};
+})();
+/* SETTINGS_REORG_END */
+</script>
+
+<script>
+/* TEACHER_RULES_START: a plain Teacher sees Library (books, read only), Timetable, Preps, Announcements, Classes (read only),
+   Results (record marks and read the class report, no New test), Report cards (read all, write comments only),
+   and Settings = Preferences, Menu style and own Account. No Print center, no History. */
+(function(){
+ const BLOCK=["prt","hist"];
+ if(typeof ACC!=="undefined"&&ACC.teacher&&ACC.teacher.tabs){ACC.teacher.tabs=ACC.teacher.tabs.filter(t=>t!=="prt");["lib","prp"].forEach(t=>{if(!ACC.teacher.tabs.includes(t))ACC.teacher.tabs.push(t)})}
+ const _sl=subList;subList=function(){let l=_sl.apply(this,arguments);if(isTch()&&tab==="res")l=l.filter(x=>x[0]!=="new");return l};
+ const _st=setTab;setTab=function(x){if(isTch()&&BLOCK.includes(x))x="home";return _st.call(this,x)};
+ const _aa=window.addAssess;window.addAssess=function(){if(isTch()){toast("Teachers cannot create new tests.");return}return _aa.apply(this,arguments)};
+ const _sv=window.setView;window.setView=function(sec,pg){if(isTch()&&sec&&!(sec==="acct"||(sec==="school"&&(pg==="prefs"||pg==="nav")))){sec=null;pg=null}return _sv.call(this,sec,pg)};
+ const _at=applyTab;applyTab=function(){_at.apply(this,arguments);try{
+  if(isTch()){["ntCard","tabPrt","prtBox","tabHist","histBox"].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display="none"});
+   document.querySelectorAll('[onclick*="setTab(\'prt\')"],[onclick*="setTab(\'hist\')"]').forEach(e=>e.style.display="none")}
+ }catch(x){}};
+ if(me&&isTch()&&BLOCK.includes(tab))setTab("home");
+})();
+/* TEACHER_RULES_END */
+</script>
+
+<script>
+/* TEACHER_RC_START: a Teacher reads every class's report cards; only the class teacher of that very class writes the class teacher's comment */
+(function(){
+ const fix=()=>{if(!isTch())return;const own=rcOwn();
+  document.querySelectorAll("#rclist .rcs").forEach(r=>{
+   r.querySelectorAll("textarea").forEach(t=>{if(!own||!/^ct\d+$/.test(t.id)){t.readOnly=true;t.placeholder=own?"":"No comment yet"}});
+   if(!own)r.querySelectorAll("button").forEach(b=>{if(/saveRC/.test(b.getAttribute("onclick")||""))b.remove()})});
+  if(!own){const e=document.getElementById("rcEdit");if(e)e.remove()}};
+ const _d=drawRC;drawRC=function(){const r=_d.apply(this,arguments);try{fix()}catch(e){}return r};
+ const _v=viewRC;viewRC=function(){const r=_v.apply(this,arguments);try{fix()}catch(e){}return r};
+})();
+/* TEACHER_RC_END */
 </script>
 </body></html>
