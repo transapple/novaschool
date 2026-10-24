@@ -1306,24 +1306,26 @@ function bellDraw(open){const mine=me&&me.id,seen=+(()=>{try{return localStorage
   if(open||!$("npop").classList.contains("hide")){$("npop").innerHTML='<div class="ph"><b>Notifications</b></div>'+(acts.length?acts.slice(0,12).map(a=>{const[noun,fn]=ACT[a.table_name]||[a.table_name,()=>""],nm=actNames[a.user_id]||"A user",d=new Date(a.created_at),det=fn(a.details||{});
     return `<div class="ar"><span class="av">${esc(nm.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase())}</span><div class="at"><b>${esc(nm)}</b> ${actVerb(a)} ${noun}${det?": "+esc(det):""}<div class="tm">${ago(d.getTime())} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div></div></div>`}).join(""):'<p class="mut" style="padding:14px">No notifications yet.</p>')}}
 /* ---- Activity feed (from audit_logs; admins only; live through Supabase realtime) ---- */
-let acts=[],actNames={},actPics={},actRoles={},actSub=false;
+let acts=[],actNames={},actPics={},actRoles={},actSch={},actErr="",actSub=false;
+/* Only people of that same school count: rows with no user (system, TFG Admin, AI changes) or from someone outside the school are never shown */
+const actOk=a=>!!a&&!!a.user_id&&!!actSch[a.user_id]&&actSch[a.user_id]===a.school_id;
 const ACT={students:["student",d=>`${d.first_name||""} ${d.last_name||""}`.trim(),"students"],classes:["class",d=>d.name,"classes"],teaching_assignments:["teaching assignment",d=>"","teaching assignments"],terms:["term",d=>d.name,"terms"],fee_structures:["fee item",d=>d.name,"fee items"],payments:["payment",d=>"UGX "+Number(d.amount||0).toLocaleString()+(d.receipt_no?" ("+d.receipt_no+")":""),"payments"],assessments:["assessment",d=>d.name,"assessments"],results:["score",d=>"","scores"],report_comments:["report comment",d=>"","report comments"],guardian_students:["parent link",d=>"","parent links"],admission_applications:["admission application",d=>`${d.first_name||""} ${d.last_name||""}`.trim(),"admission applications"],attendance:["attendance record",d=>"","attendance records"],staff_attendance:["staff attendance record",d=>"","staff attendance records"]};
 function actVerb(a){const t=a.table_name,o=a.action,d=a.details||{};
   if(t==="payments"&&o==="INSERT")return"recorded";if((t==="attendance"||t==="staff_attendance")&&o==="INSERT")return"marked";
   if(t==="admission_applications"&&o==="UPDATE"&&(d.status==="approved"||d.status==="rejected"))return d.status;
   return o==="INSERT"?"added":o==="UPDATE"?"updated":"removed"}
 async function ensureNames(rows){const ids=[...new Set(rows.map(a=>a.user_id).filter(x=>x&&actRoles[x]===undefined))];
-  if(!ids.length)return;const{data}=await sb.from("profiles").select("id,full_name,photo_url,role,department").in("id",ids);(data||[]).forEach(p=>{actNames[p.id]=p.full_name;actPics[p.id]=p.photo_url||"";actRoles[p.id]=p.department||String(p.role||"").replace(/_/g," ")||""});ids.forEach(i=>{if(actRoles[i]===undefined)actRoles[i]=""})}
+  if(!ids.length)return;const{data}=await sb.from("profiles").select("id,full_name,photo_url,role,department,school_id").in("id",ids);(data||[]).forEach(p=>{actNames[p.id]=p.full_name;actSch[p.id]=p.school_id||"";actPics[p.id]=p.photo_url||"";actRoles[p.id]=p.department||String(p.role||"").replace(/_/g," ")||""});ids.forEach(i=>{if(actRoles[i]===undefined)actRoles[i]=""})}
 async function whoInfo(uid){await ensureNames([{user_id:uid}])}
-async function loadActivity(){const{data}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(80);
-  acts=data||[];await ensureNames(acts);drawActivity()}
+async function loadActivity(){try{const{data,error}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(200);if(error)throw error;const r=data||[];await ensureNames(r);acts=r.filter(actOk);actErr=""}catch(e){actErr=(e&&e.message)||"unknown error"}drawActivity()}
+setInterval(()=>{try{if(perm&&perm.ad)loadActivity()}catch(e){}},60000);
 function subAct(){if(actSub)return;actSub=true;
-  sb.channel("act").on("postgres_changes",{event:"INSERT",schema:"public",table:"audit_logs"},async p=>{acts.unshift(p.new);await ensureNames([p.new]);drawActivity()}).subscribe()}
+  sb.channel("act").on("postgres_changes",{event:"INSERT",schema:"public",table:"audit_logs"},async p=>{await ensureNames([p.new]);if(actOk(p.new))acts.unshift(p.new);drawActivity()}).subscribe()}
 function ago(t){const m=Math.floor((Date.now()-t)/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.floor(m/60)+" h ago":Math.floor(m/1440)+" d ago"}
 function drawActivity(){bellDraw();const e=$("act");if(!e)return;const S=$("sch").value,g=[];
   acts.filter(a=>!S||a.school_id===S).forEach(a=>{const t=new Date(a.created_at).getTime(),v=actVerb(a),l=g[g.length-1];
     if(l&&l.uid===a.user_id&&l.tb===a.table_name&&l.v===v&&Math.abs(l.t-t)<120000){l.n++;l.t0=t}else g.push({uid:a.user_id,tb:a.table_name,v,t,t0:t,n:1,d:a.details||{}})});
-  if(!g.length){e.innerHTML='<p class="mut">No activity yet.</p>';return}
+  if(!g.length){e.innerHTML='<p class="mut">'+(actErr?"Could not load activity: "+esc(actErr):"No activity yet.")+'</p>';return}
   e.innerHTML=g.slice(0,25).map(x=>{const[noun,fn,pl]=ACT[x.tb]||[x.tb,()=>"",x.tb],nm=actNames[x.uid]||"A user",d=new Date(x.t),det=x.n>1?"":fn(x.d),
     txt=x.n>1?`${x.v} ${x.n} ${pl}`:`${x.v} ${noun}${det?": "+esc(det):""}`,ini=nm.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(),
     today=d.toDateString()===new Date().toDateString();
@@ -3408,7 +3410,7 @@ function actTxt(x,pl,noun,det){if(x.tb==="attendance"){const c=classes.find(z=>z
 drawActivity=function(){bellDraw();const e=$("act");if(!e)return;const S=$("sch").value;actG=[];
   acts.filter(a=>!S||a.school_id===S).forEach(a=>{const t=new Date(a.created_at).getTime(),v=actVerb(a),l=actG[actG.length-1];
     if(l&&l.uid===a.user_id&&l.tb===a.table_name&&l.v===v&&Math.abs(l.t-t)<120000&&(a.table_name!=="attendance"||(l.d||{}).class_id===(a.details||{}).class_id)){l.n++;l.logs.push(a)}else actG.push({uid:a.user_id,tb:a.table_name,v,t,n:1,d:a.details||{},logs:[a]})});
-  if(!actG.length){e.innerHTML='<p class="mut">No activity yet.</p>';return}
+  if(!actG.length){e.innerHTML='<p class="mut">'+(actErr?"Could not load activity: "+esc(actErr):"No activity yet.")+'</p>';return}
   e.innerHTML=actG.slice(0,25).map((x,k)=>{const[noun,fn,pl]=ACT[x.tb]||[x.tb,()=>"",x.tb],nm=actNames[x.uid]||"A user",d=new Date(x.t),det=x.n>1?"":fn(x.d),ini=nm.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(),today=d.toDateString()===new Date().toDateString();
     return `<div class="ar" style="cursor:pointer" onclick="actOpen(${k})">${actPics[x.uid]?`<img class="av" src="${esc(actPics[x.uid])}" alt="" onerror="this.outerHTML='<span class=&quot;av&quot;>${esc(ini)}</span>'">`:`<span class="av">${esc(ini)}</span>`}<div class="at"><b>${esc(nm)}</b>${x.tb==="attendance"&&actRoles[x.uid]?` <span class="mut">· ${esc(actRoles[x.uid])}</span>`:""} ${actTxt(x,pl,noun,det)}<div class="tm">${x.tb==="attendance"?"Attendance taken · ":""}${ago(x.t)} · ${d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})}${today?"":" · "+d.toLocaleDateString(undefined,{day:"numeric",month:"short"})}</div></div><span class="mut" style="align-self:center">›</span></div>`}).join("")};
 /* dashboard */
@@ -3493,7 +3495,7 @@ function rmDay(t){const d=new Date(t),n=new Date(),y=new Date(Date.now()-864e5);
 function roomOpen(k){actG=ROOM.groups;actOpen(k)}
 function roomSet(k,v){ROOM[k]=v;if(k!=="lim")ROOM.lim=40;drawRoom()}
 async function roomLoad(){if(!perm.ad||typeof sb==="undefined")return;if(Date.now()-ROOM.t<20000){drawRoom();return}ROOM.t=Date.now();
-  try{const{data}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(500);ROOM.logs=data||[];await ensureNames(ROOM.logs)}catch(e){}
+  try{const{data}=await sb.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(500);ROOM.logs=data||[];await ensureNames(ROOM.logs);ROOM.logs=ROOM.logs.filter(actOk)}catch(e){}
   drawRoom();
   const S=sid(),q=async(t,n,o)=>{try{let r=sb.from(t).select("*");if(S&&o!==1)r=r.eq("school_id",S);const x=await r.order("created_at",{ascending:false}).limit(n);return x.error?[]:(x.data||[])}catch(e){return[]}};
   const[ann,pro,tr]=await Promise.all([q("announcements",6),Promise.resolve([]),q("student_transfers",6,1)]);
@@ -4110,7 +4112,7 @@ async function vAtt(){const t=T(),m=stuMap(),ids=new Set(students.filter(s=>!H.c
   return sec(L.length+" learners")+L.map(x=>{const d=x.o.present+x.o.late+x.o.absent,r=d?Math.round((x.o.present+x.o.late)/d*100):null;return row(E(x.name),`Present ${x.o.present} · Late ${x.o.late} · Absent ${x.o.absent} · Excused ${x.o.excused}`,`<b style="color:${r!=null&&r<75?"#c0392b":"var(--pri)"}">${r==null?"—":r+"%"}</b>`)}).join("")}
 async function vAct(){const t=T();let q=sb.from("audit_logs").select("id,action,table_name,details,user_id,created_at").eq("school_id",sid()).order("created_at",{ascending:false}).limit(200);
   if(t.start_date)q=q.gte("created_at",t.start_date);if(t.end_date)q=q.lt("created_at",new Date(Date.parse(t.end_date)+864e5).toISOString().slice(0,10));
-  const{data,error}=await q;if(error)throw error;
+  const{data:_d,error}=await q;if(error)throw error;await ensureNames(_d||[]);const data=(_d||[]).filter(actOk);
   const AC={INSERT:"Added",UPDATE:"Updated",DELETE:"Removed",PRINT:"Printed"},who=id=>((staff||[]).find(x=>x.id===id)||{}).full_name||"Staff";
   const L=(data||[]).filter(r=>okQ(who(r.user_id)+" "+r.table_name+" "+r.action+" "+JSON.stringify(r.details||{})));
   if(!L.length)return none("No activity recorded in this term.");
